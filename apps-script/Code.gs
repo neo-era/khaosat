@@ -529,31 +529,51 @@ function migrateTaikhoan() {
     const isHashed = /^[0-9a-f]{64}$/.test(pwd);
     if (!isHashed && pwd) {
       const newHash = hashPassword(pwd);
-      sheet.getRange(r + 1, idxHash + 1).setValue(newHash);
-      result.migrated_users.push(username + ' (plaintext "' + pwd + '" → hash)');
+      try {
+        sheet.getRange(r + 1, idxHash + 1).setValue(newHash);
+        result.migrated_users.push(username + ' (plaintext "' + pwd + '" → hash)');
+      } catch (e) {
+        result.skipped.push(username + ' (lỗi ghi hash: ' + e.message + ')');
+      }
     } else if (isHashed) {
       result.skipped.push(username + ' (đã hash)');
     }
     // Set active = TRUE nếu cột vừa thêm (lúc thêm cell sẽ rỗng)
     if (result.added_active) {
-      sheet.getRange(r + 1, idxActive + 1).setValue(true);
+      try {
+        sheet.getRange(r + 1, idxActive + 1).setValue(true);
+      } catch (e) {
+        Logger.log('setValue active row ' + (r + 1) + ' failed: ' + e.message);
+      }
     }
   }
 
-  // Apply checkbox validation cho cột active
+  // Apply checkbox validation cho cột active (có thể fail nếu sheet có column type — wrap try/catch)
   if (idxActive >= 0 && data.length > 1) {
-    const cbRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-    sheet.getRange(2, idxActive + 1, data.length - 1, 1).setDataValidation(cbRule);
+    try {
+      const cbRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      sheet.getRange(2, idxActive + 1, data.length - 1, 1).setDataValidation(cbRule);
+    } catch (e) {
+      Logger.log('setDataValidation active failed (có thể do column type đã set sẵn): ' + e.message);
+      result.warnings = result.warnings || [];
+      result.warnings.push('Không set được checkbox cho cột active. Anh tự set bằng tay: chọn cột active → Format → Data validation → Checkbox.');
+    }
   }
-  // Apply dropdown cho cột role
+  // Apply dropdown cho cột role (cũng có thể fail)
   const idxRole = header.indexOf('role');
   if (idxRole >= 0 && data.length > 1) {
-    const roleRule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(['admin', 'user', 'user1', 'demo'], true)
-      .setAllowInvalid(false).build();
-    sheet.getRange(2, idxRole + 1, data.length - 1, 1).setDataValidation(roleRule);
+    try {
+      const roleRule = SpreadsheetApp.newDataValidation()
+        .requireValueInList(['admin', 'user', 'user1', 'demo'], true)
+        .setAllowInvalid(false).build();
+      sheet.getRange(2, idxRole + 1, data.length - 1, 1).setDataValidation(roleRule);
+    } catch (e) {
+      Logger.log('setDataValidation role failed (có thể do column type đã set sẵn): ' + e.message);
+      result.warnings = result.warnings || [];
+      result.warnings.push('Không set được dropdown cho cột role. Anh tự set bằng tay: chọn cột role → Data → Data validation → Dropdown từ list [admin, user, user1, demo].');
+    }
   }
-  sheet.setFrozenRows(1);
+  try { sheet.setFrozenRows(1); } catch (e) { Logger.log('setFrozenRows failed: ' + e.message); }
 
   Logger.log(JSON.stringify(result, null, 2));
   return result;

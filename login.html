@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <title>Đăng nhập — Khảo sát SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-b from-blue-50 to-blue-100 min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-sm">
+    <!-- Logo + tên app -->
+    <div class="text-center mb-6">
+      <div class="text-6xl mb-2">💡</div>
+      <h1 class="text-3xl font-bold text-blue-900 tracking-wide">SAPULICO</h1>
+      <p class="text-sm text-gray-600 mt-1">Khảo sát chiếu sáng đô thị</p>
+    </div>
+
+    <!-- Card form -->
+    <form id="login-form" class="bg-white rounded-xl shadow-xl p-6 space-y-4" novalidate>
+      <div>
+        <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Tên đăng nhập</label>
+        <input
+          id="username" name="username" type="text"
+          autofocus autocapitalize="off" autocorrect="off" spellcheck="false"
+          autocomplete="username" required
+          class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style="min-height:44px">
+      </div>
+
+      <div>
+        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+        <input
+          id="password" name="password" type="password"
+          autocomplete="current-password" required
+          class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style="min-height:44px">
+      </div>
+
+      <div class="flex items-center">
+        <input id="remember" type="checkbox" checked class="w-5 h-5 rounded border-gray-300 text-blue-700 focus:ring-blue-500 mr-2">
+        <label for="remember" class="text-sm text-gray-700 select-none">Nhớ đăng nhập (8 tiếng)</label>
+      </div>
+
+      <div id="error-msg" class="hidden text-red-700 text-sm bg-red-50 border border-red-200 rounded-lg p-3"></div>
+
+      <button id="submit-btn" type="submit"
+        class="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+        style="min-height:44px">
+        Đăng nhập
+      </button>
+    </form>
+
+    <!-- Help -->
+    <p class="text-center text-xs text-gray-500 mt-4">
+      Quên mật khẩu? Liên hệ quản trị viên.
+    </p>
+    <p class="text-center text-xs text-gray-400 mt-1">
+      v1.0 — SAPULICO 2026
+    </p>
+  </div>
+
+  <script type="module">
+    import { login, getCurrentUser, defaultHomeFor } from './js/auth.js';
+
+    // Nếu đã đăng nhập (token còn hạn) → redirect ngay theo role
+    const existing = getCurrentUser();
+    if (existing) {
+      location.replace(defaultHomeFor(existing.role));
+    } else {
+      initLoginForm();
+    }
+
+    function initLoginForm() {
+      const form = document.getElementById('login-form');
+      const btn = document.getElementById('submit-btn');
+      const errEl = document.getElementById('error-msg');
+      const usernameEl = document.getElementById('username');
+      const passwordEl = document.getElementById('password');
+      const rememberEl = document.getElementById('remember');
+
+      // Local lockout sau 5 fails / 5 phút (server cũng có rate limit riêng)
+      const FAIL_KEY = 'login_fail_local';
+      const MAX_FAILS = 5;
+      const LOCKOUT_MS = 5 * 60 * 1000;
+      let countdownTimer = null;
+
+      function getFailState() {
+        try {
+          const s = localStorage.getItem(FAIL_KEY);
+          return s ? JSON.parse(s) : { count: 0, lastAt: 0 };
+        } catch { return { count: 0, lastAt: 0 }; }
+      }
+      function setFailState(st) {
+        try { localStorage.setItem(FAIL_KEY, JSON.stringify(st)); } catch {}
+      }
+      function clearFailState() {
+        localStorage.removeItem(FAIL_KEY);
+      }
+      function getLockoutRemain() {
+        const s = getFailState();
+        if (s.count < MAX_FAILS) return 0;
+        const remain = LOCKOUT_MS - (Date.now() - s.lastAt);
+        if (remain <= 0) { clearFailState(); return 0; }
+        return remain;
+      }
+      function showError(msg) {
+        errEl.textContent = msg;
+        errEl.classList.remove('hidden');
+      }
+      function hideError() {
+        errEl.textContent = '';
+        errEl.classList.add('hidden');
+      }
+
+      function startLockoutCountdown(remainMs) {
+        if (countdownTimer) clearInterval(countdownTimer);
+        btn.disabled = true;
+        let left = remainMs;
+        const tick = () => {
+          const sec = Math.max(0, Math.ceil(left / 1000));
+          if (sec <= 0) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+            btn.disabled = false;
+            btn.textContent = 'Đăng nhập';
+            hideError();
+            clearFailState();
+            return;
+          }
+          const m = Math.floor(sec / 60);
+          const s = sec % 60;
+          btn.textContent = `🔒 Khoá ${m}:${String(s).padStart(2, '0')}`;
+          showError(`Sai 5 lần. Vui lòng đợi ${m}:${String(s).padStart(2, '0')} rồi thử lại.`);
+          left -= 1000;
+        };
+        tick();
+        countdownTimer = setInterval(tick, 1000);
+      }
+
+      // Áp dụng lockout nếu đang trong khoảng khoá (từ lần trước)
+      const initial = getLockoutRemain();
+      if (initial > 0) startLockoutCountdown(initial);
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (getLockoutRemain() > 0) return;
+        hideError();
+
+        const username = usernameEl.value.trim();
+        const password = passwordEl.value;
+        const remember = rememberEl.checked;
+
+        if (!username || !password) {
+          showError('Nhập tên đăng nhập và mật khẩu');
+          return;
+        }
+
+        btn.disabled = true;
+        const origText = btn.textContent;
+        btn.textContent = '⏳ Đang đăng nhập...';
+
+        try {
+          const user = await login(username, password, remember);
+          clearFailState();
+          location.replace(defaultHomeFor(user.role));
+        } catch (err) {
+          const msg = String(err.message || err);
+          // Cập nhật fail count
+          const st = getFailState();
+          st.count = (st.count || 0) + 1;
+          st.lastAt = Date.now();
+          setFailState(st);
+
+          showError(msg);
+
+          if (st.count >= MAX_FAILS) {
+            startLockoutCountdown(LOCKOUT_MS);
+          } else {
+            btn.disabled = false;
+            btn.textContent = origText;
+            passwordEl.value = '';
+            passwordEl.focus();
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

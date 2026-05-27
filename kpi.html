@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>KPI tháng — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-5xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">📊 KPI tháng</span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[150px] truncate"></span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-3 py-4 pb-24">
+
+    <!-- Filter bar -->
+    <div class="bg-white rounded-lg shadow-sm p-3 mb-3 flex flex-wrap items-center gap-2">
+      <label class="text-sm text-gray-700">Tháng:</label>
+      <select id="month-select" class="px-3 py-2 border rounded-lg" style="min-height:44px"></select>
+      <button id="btn-load" class="bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" style="min-height:44px">🔄 Tải KPI</button>
+      <button id="btn-export" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📥 Xuất CSV</button>
+    </div>
+
+    <div id="summary" class="text-xs text-gray-600 mb-2"></div>
+    <div id="loading" class="hidden text-center py-8 text-gray-500">
+      <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-700 rounded-full"></div>
+      <p class="mt-2 text-sm">Đang tải KPI tháng (có thể 3-5 giây)...</p>
+    </div>
+
+    <!-- Bảng KPI -->
+    <div class="bg-white rounded-lg shadow-sm overflow-x-auto">
+      <table class="w-full text-sm min-w-[800px]">
+        <thead class="bg-gray-100 border-b">
+          <tr>
+            <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700 cursor-pointer" data-sort="username">User</th>
+            <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700 cursor-pointer" data-sort="full_name">Họ tên</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700 cursor-pointer" data-sort="count">Số bản</th>
+            <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700 cursor-pointer" data-sort="frequency" title="Trọng số 40%">Tần suất</th>
+            <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700 cursor-pointer" data-sort="quality" title="Trọng số 30%">Chất lượng</th>
+            <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700 cursor-pointer" data-sort="diversity" title="Trọng số 15%">Đa dạng</th>
+            <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700 cursor-pointer" data-sort="completeness" title="Trọng số 10%">Đầy đủ</th>
+            <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700 cursor-pointer" data-sort="stability" title="Trọng số 5%">Ổn định</th>
+            <th class="px-2 py-2 text-right text-xs font-bold text-gray-800 cursor-pointer" data-sort="total">Tổng</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700 cursor-pointer" data-sort="grade">Xếp loại</th>
+          </tr>
+        </thead>
+        <tbody id="kpi-tbody"></tbody>
+      </table>
+    </div>
+
+    <p class="text-xs text-gray-500 mt-3">
+      💡 Bấm hàng để xem chi tiết KTV (biểu đồ ngày + phân loại bản ghi). Bấm tên cột để sort.
+    </p>
+  </main>
+
+  <!-- Modal chi tiết -->
+  <div id="detail-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2">
+    <div class="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between p-3 border-b">
+        <span id="detail-title" class="font-semibold text-gray-800 truncate"></span>
+        <button id="detail-close" class="text-2xl w-10 h-10 hover:bg-gray-100 rounded">✕</button>
+      </div>
+      <div id="detail-body" class="p-3 overflow-y-auto flex-1"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initKpi, sortBy } from './js/kpi.js';
+
+    const user = requireAuth('kpi');
+    document.getElementById('header-user').textContent = user.full_name;
+
+    // Sort headers
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.onclick = () => sortBy(th.dataset.sort);
+    });
+
+    // Close detail modal
+    document.getElementById('detail-close').onclick = () => {
+      document.getElementById('detail-modal').classList.add('hidden');
+    };
+    document.getElementById('detail-modal').onclick = (e) => {
+      if (e.target.id === 'detail-modal') {
+        document.getElementById('detail-modal').classList.add('hidden');
+      }
+    };
+
+    initKpi();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

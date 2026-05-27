@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Khảo sát chiếu sáng SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Sticky header -->
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-4xl mx-auto px-3 py-2 flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-1 min-w-0">
+        <span class="text-2xl">💡</span>
+        <h1 class="text-lg font-bold text-blue-900 tracking-wide">SAPULICO</h1>
+      </div>
+      <span id="online-dot" class="w-2.5 h-2.5 rounded-full bg-green-500" title="Online"></span>
+      <a id="queue-badge" href="#"
+         class="hidden text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium"
+         title="Bản ghi chờ đồng bộ">📥 0</a>
+      <button id="menu-toggle"
+              class="text-2xl w-11 h-11 flex items-center justify-center rounded hover:bg-gray-100"
+              aria-label="Mở menu">☰</button>
+    </div>
+    <div class="max-w-4xl mx-auto px-3 pb-2 flex items-center gap-2 text-xs text-gray-600 border-t border-gray-100 pt-1">
+      <span id="user-name" class="truncate flex-1"></span>
+      <span id="role-badge" class="px-2 py-0.5 rounded-full font-medium"></span>
+    </div>
+  </header>
+
+  <!-- Menu dropdown -->
+  <div id="menu-backdrop" class="hidden fixed inset-0 bg-black/30 z-50"></div>
+  <nav id="menu-panel" class="hidden fixed top-0 right-0 bottom-0 w-72 max-w-[85vw] bg-white shadow-xl z-50 overflow-y-auto">
+    <div class="p-4 border-b flex items-center justify-between">
+      <span class="font-semibold text-gray-800">Menu</span>
+      <button id="menu-close" class="text-2xl w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded">✕</button>
+    </div>
+    <ul class="py-2">
+      <li><a href="index.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🏠</span> Trang chủ</a></li>
+      <li><a href="recent.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🕐</span> Khảo sát hôm nay</a></li>
+      <li class="menu-admin hidden"><a href="kpi.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📊</span> Xem KPI</a></li>
+      <li class="menu-admin hidden"><a href="manage.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🗂️</span> Quản lý bản ghi</a></li>
+      <li class="menu-admin hidden"><a href="report.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📈</span> Báo cáo tổng hợp</a></li>
+      <li class="border-t mt-2"><button id="menu-logout" class="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-red-50 text-red-700" style="min-height:44px"><span class="text-xl">↪</span> Đăng xuất</button></li>
+    </ul>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-3 py-4">
+    <div id="demo-banner" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 mb-4 text-sm rounded">
+      ⚠️ <strong>Chế độ XEM THỬ</strong> — tài khoản demo không lưu được dữ liệu. Liên hệ quản trị để được cấp tài khoản chính thức.
+    </div>
+
+    <h2 class="text-base font-semibold text-gray-700 mb-3">Chọn loại khảo sát:</h2>
+    <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"></div>
+  </main>
+
+  <footer class="text-center text-xs text-gray-400 py-6">
+    v1.0 — SAPULICO 2026
+  </footer>
+
+  <script type="module">
+    import { requireAuth, logout, hasPermission } from './js/auth.js';
+    import { SCHEMAS, SCHEMA_KEYS } from './js/schemas.js';
+    import { getQueue } from './js/storage.js';
+    import { syncQueue } from './js/api.js';
+    import { escapeHtml, showToast } from './js/utils.js';
+
+    const user = requireAuth();
+
+    // ===== Header: user info + role badge =====
+    const ROLE_DISPLAY = { admin: 'Quản lý', user: 'Quản lý', user1: 'KTV', demo: 'Demo' };
+    const ROLE_COLOR = {
+      admin: 'bg-purple-100 text-purple-800',
+      user:  'bg-purple-100 text-purple-800',
+      user1: 'bg-green-100 text-green-800',
+      demo:  'bg-yellow-100 text-yellow-800'
+    };
+    document.getElementById('user-name').textContent = user.full_name + ' · @' + user.username;
+    const badge = document.getElementById('role-badge');
+    badge.textContent = ROLE_DISPLAY[user.role] || user.role;
+    badge.className = 'px-2 py-0.5 rounded-full font-medium ' + (ROLE_COLOR[user.role] || 'bg-gray-100 text-gray-700');
+
+    // Banner demo
+    if (user.role === 'demo') {
+      document.getElementById('demo-banner').classList.remove('hidden');
+    }
+
+    // ===== Menu permission: hiện link admin nếu có quyền =====
+    if (hasPermission('kpi') || hasPermission('manage') || hasPermission('report')) {
+      document.querySelectorAll('.menu-admin').forEach(el => el.classList.remove('hidden'));
+    }
+
+    // ===== Menu open/close =====
+    const menuPanel = document.getElementById('menu-panel');
+    const menuBackdrop = document.getElementById('menu-backdrop');
+    function openMenu() {
+      menuPanel.classList.remove('hidden');
+      menuBackdrop.classList.remove('hidden');
+    }
+    function closeMenu() {
+      menuPanel.classList.add('hidden');
+      menuBackdrop.classList.add('hidden');
+    }
+    document.getElementById('menu-toggle').onclick = openMenu;
+    document.getElementById('menu-close').onclick = closeMenu;
+    menuBackdrop.onclick = closeMenu;
+    document.getElementById('menu-logout').onclick = () => {
+      if (confirm('Đăng xuất khỏi tài khoản ' + user.username + '?')) logout();
+    };
+
+    // ===== Render grid 15 thẻ =====
+    const grid = document.getElementById('grid');
+    for (const key of SCHEMA_KEYS) {
+      const s = SCHEMAS[key];
+      const card = document.createElement('a');
+      card.href = 'form.html?type=' + encodeURIComponent(key);
+      card.className = 'bg-white rounded-xl shadow-sm hover:shadow-md active:scale-95 transition p-4 flex flex-col items-center justify-center text-center gap-2';
+      card.style.minHeight = '120px';
+      const icon = document.createElement('div');
+      icon.className = 'text-4xl';
+      icon.textContent = s.icon || '📋';
+      const name = document.createElement('div');
+      name.className = 'text-xs font-medium text-gray-700 leading-tight';
+      name.textContent = s.name;
+      card.appendChild(icon);
+      card.appendChild(name);
+      grid.appendChild(card);
+    }
+
+    // ===== Online/offline indicator =====
+    const onlineDot = document.getElementById('online-dot');
+    function updateOnline() {
+      if (navigator.onLine) {
+        onlineDot.className = 'w-2.5 h-2.5 rounded-full bg-green-500';
+        onlineDot.title = 'Online';
+      } else {
+        onlineDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+        onlineDot.title = 'Offline — bản ghi sẽ lưu vào hàng chờ';
+      }
+    }
+    window.addEventListener('online', () => { updateOnline(); trySync(); });
+    window.addEventListener('offline', updateOnline);
+    updateOnline();
+
+    // ===== Queue badge =====
+    const queueBadge = document.getElementById('queue-badge');
+    function updateQueueBadge() {
+      const n = getQueue().length;
+      if (n > 0) {
+        queueBadge.textContent = '📥 ' + n;
+        queueBadge.classList.remove('hidden');
+      } else {
+        queueBadge.classList.add('hidden');
+      }
+    }
+    updateQueueBadge();
+    setInterval(updateQueueBadge, 5000);
+
+    // ===== Auto-sync queue khi online =====
+    async function trySync() {
+      if (!navigator.onLine) return;
+      const before = getQueue().length;
+      if (before === 0) return;
+      try {
+        const res = await syncQueue();
+        updateQueueBadge();
+        if (res.success > 0) {
+          showToast('✅ Đã đồng bộ ' + res.success + ' bản ghi', 'success');
+        }
+        if (res.failed > 0) {
+          showToast('⚠️ ' + res.failed + ' bản ghi còn lỗi, sẽ retry sau', 'warning');
+        }
+      } catch (e) {
+        // silent
+      }
+    }
+    // Chạy nền khi load page
+    trySync();
+
+    // ===== Đăng ký service worker =====
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {
+        // im lặng — sẽ tạo ở B14
+      });
+    }
+  </script>
+</body>
+</html>

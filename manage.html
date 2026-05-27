@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Quản lý bản ghi — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-6xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">🗂️ Quản lý bản ghi</span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[150px] truncate"></span>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-3 py-4 pb-24">
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow-sm p-3 mb-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <select id="filter-type" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+          <option value="">📋 Tất cả loại</option>
+        </select>
+        <select id="filter-user" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+          <option value="">👤 Tất cả KTV</option>
+        </select>
+        <select id="filter-status" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+          <option value="active">✅ Đang hoạt động</option>
+          <option value="deleted">🗑️ Đã xoá</option>
+          <option value="all">📦 Tất cả</option>
+        </select>
+        <input id="filter-from" type="date" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+        <input id="filter-to" type="date" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+      </div>
+      <div class="flex gap-2 mt-2">
+        <input id="filter-search" type="text" placeholder="🔍 Tìm trong tuyến đường, ghi chú, vị trí..." class="flex-1 px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+        <button id="btn-search" class="bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" style="min-height:44px">Tìm</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between mb-2">
+      <span id="result-count" class="text-xs text-gray-600"></span>
+    </div>
+
+    <div id="loading" class="hidden text-center py-8 text-gray-500">
+      <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-700 rounded-full"></div>
+      <p class="mt-2 text-sm">Đang tải bản ghi...</p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm overflow-x-auto">
+      <table class="w-full text-sm min-w-[800px]">
+        <thead class="bg-gray-100 border-b">
+          <tr>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">STT</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Loại</th>
+            <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700">Tuyến đường / Vị trí</th>
+            <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700">KTV</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Ngày</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Ảnh</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Trạng thái</th>
+            <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="result-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="pagination" class="flex justify-center gap-1 mt-3 flex-wrap"></div>
+  </main>
+
+  <!-- Modal chi tiết -->
+  <div id="detail-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2">
+    <div class="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between p-3 border-b">
+        <span id="detail-title" class="font-semibold text-gray-800 truncate"></span>
+        <button id="detail-close" class="text-2xl w-10 h-10 hover:bg-gray-100 rounded">✕</button>
+      </div>
+      <div id="detail-body" class="p-3 overflow-y-auto flex-1"></div>
+    </div>
+  </div>
+
+  <!-- Lightbox ảnh -->
+  <div id="lightbox" class="hidden fixed inset-0 bg-black/90 z-50 overflow-y-auto p-3">
+    <button id="lightbox-close" class="fixed top-2 right-2 text-white text-3xl w-10 h-10 bg-black/50 rounded-full">✕</button>
+    <div id="lightbox-grid" class="max-w-3xl mx-auto space-y-3 pt-12"></div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initManage } from './js/manage.js';
+
+    const user = requireAuth('manage');
+    document.getElementById('header-user').textContent = user.full_name;
+
+    // Đóng modal
+    document.getElementById('detail-close').onclick = () => document.getElementById('detail-modal').classList.add('hidden');
+    document.getElementById('detail-modal').onclick = (e) => {
+      if (e.target.id === 'detail-modal') document.getElementById('detail-modal').classList.add('hidden');
+    };
+    document.getElementById('lightbox-close').onclick = () => document.getElementById('lightbox').classList.add('hidden');
+
+    // Lấy danh sách user để filter (TODO: gọi endpoint riêng, tạm dùng list từ taikhoan)
+    // Hiện tại pass mảng rỗng → user filter empty (chỉ default "tất cả")
+    // Có thể mở rộng sau bằng endpoint apiUsers()
+    initManage([]);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

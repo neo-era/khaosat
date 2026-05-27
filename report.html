@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Báo cáo tổng hợp — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-6xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">📈 Báo cáo tổng hợp</span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[150px] truncate"></span>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-3 py-4 pb-24">
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow-sm p-3 mb-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Loại khảo sát</label>
+          <select id="filter-types" multiple size="3" class="w-full px-2 py-1 border rounded text-sm"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Trạng thái</label>
+          <select id="filter-status" class="w-full px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+            <option value="active">Đang hoạt động</option>
+            <option value="deleted">Đã xoá</option>
+            <option value="all">Tất cả</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Group by</label>
+          <select id="filter-group" class="w-full px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+            <option value="day">Ngày</option>
+            <option value="week">Tuần</option>
+            <option value="month" selected>Tháng</option>
+            <option value="quarter">Quý</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Khoảng thời gian</label>
+          <div class="flex gap-1">
+            <input id="filter-from" type="date" class="flex-1 px-2 py-2 border rounded text-sm" style="min-height:44px">
+            <input id="filter-to" type="date" class="flex-1 px-2 py-2 border rounded text-sm" style="min-height:44px">
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-1 mb-2">
+        <button data-preset="this-month" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Tháng này</button>
+        <button data-preset="last-month" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Tháng trước</button>
+        <button data-preset="this-quarter" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Quý này</button>
+        <button data-preset="this-year" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Năm nay</button>
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-load" class="bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" style="min-height:44px">🔄 Tải báo cáo</button>
+        <button id="btn-export" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📥 Xuất CSV</button>
+      </div>
+    </div>
+
+    <div id="loading" class="hidden text-center py-8 text-gray-500">
+      <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-700 rounded-full"></div>
+      <p class="mt-2 text-sm">Đang tổng hợp báo cáo (3-8 giây)...</p>
+    </div>
+
+    <!-- Area A: Bảng tổng quan -->
+    <section class="mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-2">📊 Tổng quan theo loại khảo sát</h2>
+      <div class="bg-white rounded-lg shadow-sm overflow-x-auto" id="areaA"></div>
+    </section>
+
+    <!-- Area B: Biểu đồ cột chồng -->
+    <section class="mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-2">📉 Phân bố theo thời gian (cột chồng theo loại)</h2>
+      <div class="bg-white rounded-lg shadow-sm p-3" id="areaB"></div>
+    </section>
+
+    <!-- Area C: Pivot KTV × Loại -->
+    <section class="mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-2">🔢 Pivot KTV × Loại</h2>
+      <div class="bg-white rounded-lg shadow-sm overflow-x-auto" id="areaC"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initReport } from './js/report.js';
+
+    const user = requireAuth('report');
+    document.getElementById('header-user').textContent = user.full_name;
+
+    initReport();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
