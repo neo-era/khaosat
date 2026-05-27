@@ -161,11 +161,14 @@ const PHAN_QUYEN_DEFAULTS = [
 
 /** Fallback nếu sheet phan quyen lỗi (đồng bộ với PHAN_QUYEN_DEFAULTS). */
 const DEFAULT_PERMISSIONS = {
-  admin:  { submit: true,  delete: true,  kpi: true,  manage: true,  report: true  },
-  user:   { submit: true,  delete: true,  kpi: true,  manage: true,  report: true  },
-  user1:  { submit: true,  delete: false, kpi: false, manage: false, report: false },
-  demo:   { submit: false, delete: false, kpi: false, manage: false, report: false }
+  admin:  { submit: true,  delete: true,  kpi: true,  manage: true,  report: true,  edit: true,  users_manage: true,  schedule_write: true,  notify_admin: true,  map: true  },
+  user:   { submit: true,  delete: true,  kpi: true,  manage: true,  report: true,  edit: true,  users_manage: false, schedule_write: true,  notify_admin: true,  map: true  },
+  user1:  { submit: true,  delete: false, kpi: false, manage: false, report: false, edit: false, users_manage: false, schedule_write: false, notify_admin: false, map: true  },
+  demo:   { submit: false, delete: false, kpi: false, manage: false, report: false, edit: false, users_manage: false, schedule_write: false, notify_admin: false, map: false }
 };
+
+/** Danh sách 5 action mới của v1.1+ (cần thêm cột trong sheet phan quyen). */
+const NEW_PERMISSIONS_V11 = ['edit', 'users_manage', 'schedule_write', 'notify_admin', 'map'];
 
 // =====================================================================
 // UTILITIES
@@ -335,7 +338,9 @@ function getPermissions() {
     const header = data[0].map(String);
     const idxRole = header.indexOf('vaiTro');
     if (idxRole < 0) throw new Error('missing vaiTro col');
-    const actions = ['submit', 'delete', 'kpi', 'manage', 'report'];
+    // 10 action: 5 cũ + 5 mới v1.1+
+    const actions = ['submit', 'delete', 'kpi', 'manage', 'report',
+                     'edit', 'users_manage', 'schedule_write', 'notify_admin', 'map'];
     const perms = {};
     for (let i = 1; i < data.length; i++) {
       const role = String(data[i][idxRole] || '').trim();
@@ -343,7 +348,12 @@ function getPermissions() {
       perms[role] = {};
       actions.forEach(a => {
         const idx = header.indexOf(a);
-        perms[role][a] = idx >= 0 && data[i][idx] === true;
+        // Nếu cột không tồn tại → fallback default cho action đó
+        if (idx < 0) {
+          perms[role][a] = !!(DEFAULT_PERMISSIONS[role] && DEFAULT_PERMISSIONS[role][a]);
+        } else {
+          perms[role][a] = data[i][idx] === true;
+        }
       });
     }
     cache.put('permissions', JSON.stringify(perms), 60);
@@ -352,6 +362,82 @@ function getPermissions() {
     Logger.log('getPermissions fallback to default: ' + err);
     return DEFAULT_PERMISSIONS;
   }
+}
+
+/** Xoá cache permissions để force reload từ sheet ngay lập tức. */
+function clearPermissionsCache() {
+  CacheService.getScriptCache().remove('permissions');
+  Logger.log('Đã xoá cache permissions. Request kế tiếp sẽ đọc sheet phan quyen mới.');
+  return { ok: true };
+}
+
+/**
+ * Mở rộng sheet `phan quyen` với 5 cột v1.1+: edit, users_manage, schedule_write, notify_admin, map.
+ * Chèn TRƯỚC cột moTa (nếu có). Set giá trị mặc định theo DEFAULT_PERMISSIONS.
+ * Idempotent: chạy lại an toàn, bỏ qua cột đã có.
+ * Admin chạy 1 lần khi triển khai v1.1+.
+ */
+function extendPhanQuyenSheet() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName('phan quyen');
+  if (!sheet) throw new Error('Sheet `phan quyen` không tồn tại. Chạy initSheets() trước.');
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) throw new Error('Sheet phan quyen rỗng. Chạy initSheets() trước.');
+
+  let header = data[0].map(String);
+  const idxMoTa = header.indexOf('moTa');
+  const result = { added_cols: [], skipped_cols: [], updated_values: 0 };
+
+  // Thêm các cột còn thiếu (chèn TRƯỚC moTa nếu có)
+  for (const action of NEW_PERMISSIONS_V11) {
+    if (header.indexOf(action) >= 0) {
+      result.skipped_cols.push(action);
+      continue;
+    }
+    // Insert column trước moTa, hoặc cuối nếu không có moTa
+    const insertAt = (idxMoTa >= 0 ? header.indexOf('moTa') + 1 : header.length + 1);
+    sheet.insertColumnBefore(insertAt);
+    sheet.getRange(1, insertAt).setValue(action);
+    // Re-read header sau khi insert
+    header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    result.added_cols.push(action);
+  }
+
+  // Set giá trị mặc định cho mỗi role (chỉ ghi nếu cell rỗng — KHÔNG ghi đè giá trị admin đã set)
+  const idxRole = header.indexOf('vaiTro');
+  const lastRow = sheet.getLastRow();
+  for (let r = 2; r <= lastRow; r++) {
+    const role = String(sheet.getRange(r, idxRole + 1).getValue() || '').trim();
+    if (!role || !DEFAULT_PERMISSIONS[role]) continue;
+    for (const action of NEW_PERMISSIONS_V11) {
+      const idxA = header.indexOf(action);
+      if (idxA < 0) continue;
+      const cell = sheet.getRange(r, idxA + 1);
+      if (cell.getValue() === '' || cell.getValue() === null) {
+        cell.setValue(DEFAULT_PERMISSIONS[role][action] === true);
+        result.updated_values++;
+      }
+    }
+  }
+
+  // Apply checkbox validation cho 5 cột mới (try/catch vì có thể fail nếu sheet có column type)
+  for (const action of NEW_PERMISSIONS_V11) {
+    const idxA = header.indexOf(action);
+    if (idxA < 0) continue;
+    try {
+      const rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      sheet.getRange(2, idxA + 1, lastRow - 1, 1).setDataValidation(rule);
+    } catch (e) {
+      Logger.log('Không set checkbox cho cột ' + action + ': ' + e.message);
+    }
+  }
+
+  // Xoá cache để verify hiệu lực ngay
+  clearPermissionsCache();
+
+  Logger.log(JSON.stringify(result, null, 2));
+  return Object.assign({ ok: true }, result);
 }
 
 function can(role, action) {
@@ -633,6 +719,9 @@ function doPost(e) {
       case 'restore': return jsonResponse(handleRestore(body));
       case 'kpi':     return jsonResponse(handleKpi(body));
       case 'report':  return jsonResponse(handleReport(body));
+      case 'users':   return jsonResponse(handleUsers(body));
+      case 'reset_password': return jsonResponse(handleResetPassword(body));
+      case 'update':  return jsonResponse(handleUpdate(body));
       default:        return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -728,6 +817,7 @@ function handleList(body) {
   const auth = verifyToken(body.token);
   const type = body.type;
   const usernameFilter = body.username;
+  const sttFilter = body.stt !== undefined && body.stt !== null && body.stt !== '' ? String(body.stt) : null;
   const from = body.from ? new Date(body.from) : null;
   const to = body.to ? new Date(body.to) : null;
   const includeDeleted = !!body.includeDeleted;
@@ -743,6 +833,7 @@ function handleList(body) {
   types.forEach(t => {
     const rows = readSheetRows(t, true);
     rows.forEach(row => {
+      if (sttFilter && String(row['STT']) !== sttFilter) return;
       if (usernameTarget && String(row['Username']) !== String(usernameTarget)) return;
       const submittedAt = row['Submitted At'] ? new Date(row['Submitted At']) : null;
       if (from && (!submittedAt || submittedAt < from)) return;
@@ -794,6 +885,67 @@ function handleDelete(body) {
   return { ok: true, photos: photoResults };
 }
 
+/**
+ * action=update — sửa bản ghi đã submit.
+ * Body: { token, type, stt, data, photos? }
+ * Permission: edit.
+ * KHÔNG ghi đè: STT, Submitted At, Username, Người khảo sát (giữ KTV gốc), Deleted At, Deleted By.
+ * Ghi đè được: các field business + Ảnh (URLs) nếu photos được truyền (mảng URLs).
+ */
+function handleUpdate(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'edit')) return { ok: false, error: 'forbidden' };
+
+  const type = body.type;
+  const stt = body.stt;
+  const sheetName = SHEET_MAP[type];
+  if (!sheetName) return { ok: false, error: 'Loại không hợp lệ' };
+  if (!stt && stt !== 0) return { ok: false, error: 'Thiếu STT' };
+  const sheet = getSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return { ok: false, error: 'Sheet không tồn tại' };
+
+  const found = findRowByStt(sheet, stt);
+  if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };
+  const { rowIndex, header } = found;
+
+  const dataIn = body.data || {};
+  const photos = Array.isArray(body.photos) ? body.photos : null;  // null = không update photos
+
+  // Protected fields (server-managed) — KHÔNG ghi đè dù client gửi
+  const PROTECTED = ['STT', 'Submitted At', 'Username', 'Người khảo sát',
+                     'ngày khảo sát', 'Ngày khảo sát', 'Deleted At', 'Deleted By'];
+
+  const changes = [];
+  header.forEach((label, j) => {
+    if (PROTECTED.indexOf(label) >= 0) return;
+
+    let newVal;
+    if (label === 'Ảnh (URLs)') {
+      if (photos === null) return;  // client không gửi photos → giữ nguyên
+      newVal = photos.join('|');
+    } else if (label === 'User Agent') {
+      // Append edit marker, không ghi đè hoàn toàn
+      const existing = sheet.getRange(rowIndex, j + 1).getValue();
+      newVal = String(existing || '') + ' [edit:' + auth.username + '@' + nowVnString() + ']';
+    } else if (dataIn[label] !== undefined) {
+      newVal = dataIn[label];
+    } else {
+      return;
+    }
+
+    const oldVal = sheet.getRange(rowIndex, j + 1).getValue();
+    if (String(oldVal) !== String(newVal)) {
+      sheet.getRange(rowIndex, j + 1).setValue(newVal);
+      changes.push(label);
+    }
+  });
+
+  appendAuditLog('update', auth.username, sheetName, stt,
+    changes.length > 0 ? 'fields: ' + changes.join(', ') : 'no change');
+
+  return { ok: true, stt: stt, changes: changes };
+}
+
 function handleRestore(body) {
   const auth = verifyToken(body.token);
   if (!can(auth.role, 'delete')) return { ok: false, error: 'forbidden' };
@@ -818,7 +970,9 @@ function handleRestore(body) {
 
 function handleKpi(body) {
   const auth = verifyToken(body.token);
-  if (!can(auth.role, 'kpi')) return { ok: false, error: 'forbidden' };
+  // KPI cá nhân: nếu không có quyền 'kpi' → chỉ trả KPI của chính user. Demo: không có gì để xem.
+  const fullAccess = can(auth.role, 'kpi');
+  if (auth.role === 'demo') return { ok: false, error: 'Tài khoản demo không có KPI' };
   const month = String(body.month || '').trim();  // YYYY-MM
   if (!/^\d{4}-\d{2}$/.test(month)) return { ok: false, error: 'month phải dạng YYYY-MM' };
 
@@ -918,7 +1072,89 @@ function handleKpi(body) {
   });
 
   results.sort((a, b) => b.total - a.total);
-  return { ok: true, month: month, results: results, targets: targets };
+  // Nếu không có quyền 'kpi' → chỉ trả KPI của chính user (filter ở server, defense in depth)
+  const filtered = fullAccess ? results : results.filter(r => r.username === auth.username);
+  return { ok: true, month: month, results: filtered, targets: targets, scope: fullAccess ? 'all' : 'self' };
+}
+
+/**
+ * action=reset_password — admin/role có quyền users_manage đổi mật khẩu user.
+ * Body: { token, username, new_password }
+ * Validate: new_password ≥ 8 ký tự, không trùng username.
+ */
+function handleResetPassword(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'users_manage')) return { ok: false, error: 'forbidden' };
+
+  const target = String(body.username || '').trim();
+  const newPwd = String(body.new_password || '');
+
+  if (!target) return { ok: false, error: 'Thiếu username cần reset' };
+  if (newPwd.length < 8) return { ok: false, error: 'Mật khẩu phải ≥ 8 ký tự' };
+  if (newPwd.toLowerCase() === target.toLowerCase()) {
+    return { ok: false, error: 'Mật khẩu không được trùng username' };
+  }
+
+  // Tìm row của target user
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: false, error: 'Sheet taikhoan rỗng' };
+
+  const header = data[0].map(String);
+  const idxU = header.indexOf('username');
+  const idxHash = header.indexOf('password_hash');
+  if (idxU < 0 || idxHash < 0) return { ok: false, error: 'Sheet thiếu cột username/password_hash' };
+
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idxU]).trim() === target) {
+      rowIdx = i + 1;  // 1-based
+      break;
+    }
+  }
+  if (rowIdx < 0) return { ok: false, error: 'Không tìm thấy user: ' + target };
+
+  // Hash + ghi đè (KHÔNG log password — chỉ log username + người thực hiện)
+  const newHash = hashPassword(newPwd);
+  sheet.getRange(rowIdx, idxHash + 1).setValue(newHash);
+
+  appendAuditLog('reset_password', auth.username, 'taikhoan', target, 'pwd reset by ' + auth.username);
+
+  return { ok: true, message: 'Đã reset mật khẩu cho ' + target };
+}
+
+/**
+ * action=users — trả danh sách user active để frontend populate dropdown filter.
+ * Yêu cầu permission `manage` HOẶC `report`.
+ */
+function handleUsers(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'manage') && !can(auth.role, 'report')) {
+    return { ok: false, error: 'forbidden' };
+  }
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, users: [] };
+  const header = data[0].map(String);
+  const idxU = header.indexOf('username');
+  const idxN = header.indexOf('full_name');
+  const idxR = header.indexOf('role');
+  const idxA = header.indexOf('active');
+  const users = [];
+  for (let i = 1; i < data.length; i++) {
+    const active = idxA >= 0 ? data[i][idxA] === true : true;
+    if (!active) continue;
+    const u = String(data[i][idxU] || '').trim();
+    if (!u) continue;
+    users.push({
+      username: u,
+      full_name: String(data[i][idxN] || ''),
+      role: String(data[i][idxR] || '')
+    });
+  }
+  return { ok: true, users: users };
 }
 
 function handleReport(body) {

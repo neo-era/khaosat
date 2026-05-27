@@ -6,10 +6,10 @@ import { apiLogin } from './api.js';
 import { saveToken, getToken, clearToken } from './storage.js';
 
 export const PERMISSIONS = {
-  admin:  { submit: true,  delete: true,  kpi: true,  manage: true,  report: true  },
-  user:   { submit: true,  delete: true,  kpi: true,  manage: true,  report: true  },
-  user1:  { submit: true,  delete: false, kpi: false, manage: false, report: false },
-  demo:   { submit: false, delete: false, kpi: false, manage: false, report: false }
+  admin:  { submit: true,  delete: true,  kpi: true,  manage: true,  report: true,  edit: true,  users_manage: true,  schedule_write: true,  notify_admin: true,  map: true  },
+  user:   { submit: true,  delete: true,  kpi: true,  manage: true,  report: true,  edit: true,  users_manage: false, schedule_write: true,  notify_admin: true,  map: true  },
+  user1:  { submit: true,  delete: false, kpi: false, manage: false, report: false, edit: false, users_manage: false, schedule_write: false, notify_admin: false, map: true  },
+  demo:   { submit: false, delete: false, kpi: false, manage: false, report: false, edit: false, users_manage: false, schedule_write: false, notify_admin: false, map: false }
 };
 
 export function can(role, action) {

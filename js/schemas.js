@@ -28,7 +28,7 @@ export const SCHEMAS = {
       { label: 'kinh độ',                key: 'lng',          type: 'gps_lng' },
       { label: 'vĩ độ',                  key: 'lat',          type: 'gps_lat' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
-      { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'text',     required: false, hint: 'Vd: BV-2026-001' },
+      { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
       { label: 'Vị trí',                 key: 'vi_tri',       type: 'text',     required: false },
       { label: 'Tên hẻm',                key: 'ten_hem',      type: 'text',     required: false },
@@ -64,7 +64,7 @@ export const SCHEMAS = {
       { label: 'kinh độ',                key: 'lng',          type: 'gps_lng' },
       { label: 'vĩ độ',                  key: 'lat',          type: 'gps_lat' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
-      { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'text',     required: false, hint: 'Vd: BV-2026-001' },
+      { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false }
     ]
   },
@@ -88,7 +88,7 @@ export const SCHEMAS = {
       { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
       { label: 'ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
-      { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'text',     required: false, hint: 'Vd: BV-2026-001' },
+      { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
       { label: 'link',                   key: 'link_gmap',    type: 'link_gmap' }
     ]

@@ -829,4 +829,427 @@ KHÔNG sửa rộng — chỉ fix phần lệch.
 
 ---
 
-**Hết.** Lưu file này dài hạn. Để onboard người mới hoặc redo dự án, chỉ cần `CLAUDE.md` + `PROMPTS.md` + file Excel gốc.
+**Hết phần v1.0.** Lưu file này dài hạn. Để onboard người mới hoặc redo dự án, chỉ cần `CLAUDE.md` + `PROMPTS.md` + file Excel gốc.
+
+---
+---
+
+# PHẦN II — Bộ PROMPT v1.1+ (16 tính năng bổ sung)
+
+> Tham chiếu **CLAUDE.md mục 22** (Roadmap). Chạy lần lượt theo thứ tự. Mỗi prompt là 1 message, đợi báo cáo + "ok" rồi sang prompt tiếp.
+
+## Chuẩn bị chung — Mở rộng sheet `phan quyen`
+
+### PROMPT v1.1.0 — Setup permissions cho v1.1+ (chạy 1 lần)
+
+```
+Trước khi code các tính năng v1.1+, mở rộng sheet `phan quyen` để thêm 4 quyền mới: edit / users_manage / schedule_write / notify_admin / map.
+
+YÊU CẦU:
+1. Mở Google Sheets `khao-sat-ke-hoach`, sheet `phan quyen`. Thêm 4 cột mới (cuối, trước cột moTa):
+   - edit, users_manage, schedule_write, notify_admin, map
+2. Cập nhật giá trị 4 dòng theo bảng mục 22 CLAUDE.md:
+   - admin: edit=TRUE, users_manage=TRUE, schedule_write=TRUE, notify_admin=TRUE, map=TRUE
+   - user:  edit=TRUE, users_manage=FALSE, schedule_write=TRUE, notify_admin=TRUE, map=TRUE
+   - user1: edit=FALSE, users_manage=FALSE, schedule_write=FALSE, notify_admin=FALSE, map=TRUE
+   - demo:  edit=FALSE, users_manage=FALSE, schedule_write=FALSE, notify_admin=FALSE, map=FALSE
+   Đặt checkbox validation cho 5 cột mới.
+3. Sửa file `js/auth.js` — extend PERMISSIONS map default:
+   - admin/user thêm: { edit:true, users_manage:(admin only true; user false), schedule_write:true, notify_admin:true, map:true }
+   - user1 thêm: { edit:false, users_manage:false, schedule_write:false, notify_admin:false, map:true }
+   - demo thêm: { edit:false, users_manage:false, schedule_write:false, notify_admin:false, map:false }
+4. Sửa apps-script/Code.gs DEFAULT_PERMISSIONS — đồng bộ với auth.js.
+
+Verify:
+- Cache 60s sẽ tự refresh, hoặc xoá cache (chạy `CacheService.getScriptCache().remove('permissions')` từ Apps Script).
+- Test login admin xem hasPermission('edit') = true; user1 = false.
+
+KHÔNG code tính năng nào trong prompt này, chỉ setup phân quyền.
+
+Báo cáo "Đã setup phân quyền v1.1+" và chờ "ok v1.1.1".
+```
+
+---
+
+## Phase v1.1 — Easy wins (6 tính năng)
+
+### PROMPT v1.1.1 — 22.1 Bản vẽ → upload ảnh
+
+```
+Đọc CLAUDE.md mục 22.1. Đổi field "Bản vẽ" của 3 schema (tang_cuong_den, ngam_hoa, thay_den) từ text sang upload ảnh.
+
+CHI TIẾT:
+1. Sửa js/schemas.js: field key `ban_ve` ở 3 schema — đổi `type: 'text'` thành `type: 'image_url'`. Đổi hint sang "Chụp ảnh bản vẽ thiết kế nếu có".
+2. Sửa js/form-renderer.js:
+   a. renderField thêm case 'image_url':
+      - input file accept="image/*" capture="environment" (1 file thôi).
+      - Khi chọn → upload Cloudinary qua uploadImage(file, 'banve/' + schemaKey).
+      - Hiện thumbnail + tên file + nút "Thay ảnh".
+      - Lưu URL vào state riêng (state.imageUrls[key] = url).
+   b. collectFormData: nếu field type 'image_url', data[label] = state.imageUrls[field.key] || ''.
+   c. validateForm: nếu required và URL rỗng → báo thiếu.
+3. KHÔNG sửa Code.gs (server vẫn ghi cell text = URL).
+4. Sau test: 3 form mở ra, Bản vẽ giờ là nút "Chụp" thay vì ô text. Upload xong → thumbnail. Submit → URL vào cột Bản vẽ Google Sheets.
+
+Báo cáo + chờ "ok v1.1.2".
+```
+
+### PROMPT v1.1.2 — 22.2 Filter KTV trong manage.html
+
+```
+Đọc CLAUDE.md mục 22.2. Thêm endpoint users + load dropdown KTV.
+
+CHI TIẾT:
+1. Sửa apps-script/Code.gs: thêm action 'users'.
+   handleUsers(body):
+     - verifyToken.
+     - Yêu cầu can(role, 'manage') HOẶC can(role, 'report'). Reject nếu không.
+     - Đọc sheet taikhoan, filter active=TRUE, return [{username, full_name, role}].
+2. Sửa js/api.js: thêm export async function apiUsers() { return postJson({action:'users', token:requireToken()}); }
+3. Sửa manage.html script: thay vì initManage([]) → const u = await apiUsers(); initManage(u.users || []).
+4. Sửa report.html: thêm dropdown filter KTV (multi-select), gọi apiUsers() khi init.
+5. Sửa js/report.js: thêm filter usernames vào loadReport().
+
+Verify: manage.html dropdown KTV có user1, ndan, ndthang... admin/user thấy đủ; user1 không vào được manage nên không cần test.
+
+Báo cáo + chờ "ok v1.1.3".
+```
+
+### PROMPT v1.1.3 — 22.3 KPI cá nhân cho KTV (my-kpi.html)
+
+```
+Đọc CLAUDE.md mục 22.3. Tạo trang KPI cá nhân — bất kỳ role nào cũng xem được KPI của chính mình.
+
+CHI TIẾT:
+1. Sửa apps-script/Code.gs handleKpi:
+   - Nếu can(role, 'kpi') = TRUE → trả all KTV như cũ.
+   - Nếu KHÔNG có quyền → filter results.find(r => r.username === auth.username), trả mảng 1 phần tử (hoặc rỗng nếu KTV chưa có data tháng đó).
+   - KHÔNG reject như trước.
+2. Tạo my-kpi.html: copy từ kpi.html, đổi tiêu đề "🎯 KPI của tôi". requireAuth() (không check 'kpi'). Bỏ phần admin (sort/export — chỉ giữ tóm tắt + biểu đồ).
+3. Tạo js/my-kpi.js: gọi apiKpi(month), lấy result[0] (chính mình), render summary 5 chỉ tiêu + biểu đồ ngày + phân loại.
+4. Sửa index.html menu: thêm "🎯 KPI của tôi" → my-kpi.html (không có class menu-admin, hiện cho mọi role có quyền submit). Đổi label menu cũ "Xem KPI" sang "📊 KPI tổng" (admin).
+
+Verify:
+- user1 mở my-kpi.html → thấy KPI của mình tháng này.
+- admin mở my-kpi.html → thấy KPI của admin (số bản thường = 0).
+- admin vẫn vào được kpi.html (bảng all).
+
+Báo cáo + chờ "ok v1.1.4".
+```
+
+### PROMPT v1.1.4 — 22.4 Reset password (sẽ tích hợp vào v1.1.10 nếu làm cùng users.html — hoặc làm riêng giờ)
+
+```
+Đọc CLAUDE.md mục 22.4. Thêm endpoint reset_password + dialog đơn giản trong index.html (admin only).
+
+CHI TIẾT:
+1. Sửa apps-script/Code.gs: thêm action 'reset_password'.
+   handleResetPassword(body):
+     - verifyToken.
+     - Yêu cầu can(role, 'users_manage') (admin only).
+     - Validate body.new_password ≥ 8 ký tự, không trùng body.username.
+     - Tìm user trong sheet taikhoan. Hash mới = hashPassword(new_password). Ghi đè cột password_hash.
+     - appendAuditLog('reset_password', auth.username, 'taikhoan', body.username, 'pwd reset').
+     - Return {ok: true}.
+2. Sửa js/api.js: thêm apiResetPassword(username, new_password).
+3. Tạm thời (sẽ refactor khi làm v1.1.10): thêm vào index.html menu admin dropdown 1 mục "🔑 Reset password user" → mở dialog prompt 2 lần (username + mật khẩu mới) → call apiResetPassword.
+
+Verify: admin reset pwd cho user1 → user1 login bằng pwd cũ FAIL → login pwd mới OK.
+
+Báo cáo + chờ "ok v1.1.5".
+```
+
+### PROMPT v1.1.5 — 22.5 Sửa bản ghi (Edit)
+
+```
+Đọc CLAUDE.md mục 22.5. Thêm chức năng sửa bản ghi đã submit.
+
+CHI TIẾT:
+1. Sửa apps-script/Code.gs: thêm action 'update'.
+   handleUpdate(body):
+     - verifyToken + can(role, 'edit').
+     - Tìm row theo (type, stt).
+     - Đọc header, map body.data[label]. KHÔNG ghi đè: STT, Submitted At, Username, Người khảo sát (giữ KTV gốc), Deleted At, Deleted By.
+     - Cho phép ghi đè: tất cả field business + Ảnh (URLs) (nếu body.photos được truyền).
+     - appendAuditLog('update', auth.username, sheetName, stt, 'edited').
+2. Sửa js/api.js: apiUpdate(type, stt, data, photos).
+3. Sửa js/manage.js: thêm nút "✏️ Sửa" trong cột Thao tác (cạnh "Xoá"). Click → window.location = 'form.html?type=' + type + '&edit=' + stt.
+4. Sửa js/form-renderer.js:
+   - Đọc URL ?edit=STT. Nếu có → mode edit:
+     * Gọi apiList({type, ...}) tìm row có STT=edit_id (hoặc thêm filter stt vào endpoint list).
+     * Pre-fill toàn bộ field từ data theo label.
+     * Đổi text nút "💾 Lưu" thành "💾 Cập nhật".
+     * Hiển thị banner "Đang sửa bản ghi STT #N (KTV gốc: X)".
+   - handleSubmit: nếu edit mode → gọi apiUpdate(schemaKey, stt, data, photos) thay vì apiSubmit. Success → toast "Đã cập nhật STT #N" → redirect manage.html.
+
+Verify:
+- admin/user click "Sửa" trong manage → mở form với data sẵn → sửa Số đèn → Lưu → quay lại manage thấy STT giữ nguyên + Số đèn đổi.
+- Sửa thử với role user1 (không có permission edit) → nút Sửa ẩn (hoặc click thì server reject).
+- Người khảo sát không bị đổi (giữ KTV gốc).
+
+Báo cáo + chờ "ok v1.1.6".
+```
+
+### PROMPT v1.1.6 — 22.6 Xuất Excel + PDF
+
+```
+Đọc CLAUDE.md mục 22.6. Thêm export Excel + PDF cho kpi.html và report.html.
+
+CHI TIẾT:
+1. Thêm thư viện CDN vào kpi.html + report.html (trong <head> sau Tailwind):
+   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.7.1/dist/jspdf.plugin.autotable.min.js"></script>
+2. Sửa kpi.html + report.html: thêm 2 nút "📊 Excel" + "📄 PDF" cạnh nút CSV.
+3. Sửa js/kpi.js:
+   - exportXlsx(): XLSX.utils.aoa_to_sheet → XLSX.utils.book_new → XLSX.writeFile(wb, 'kpi-' + month + '.xlsx').
+   - exportPdf(): new window.jspdf.jsPDF('p','mm','a4') → autoTable header SAPULICO + tên tháng + bảng → doc.save().
+4. Sửa js/report.js tương tự cho 3 vùng (Excel 3 sheet, PDF landscape).
+
+Verify: nút Excel tải file .xlsx Excel mở đúng tiếng Việt; PDF mở đúng layout.
+
+Báo cáo + chờ "ok v1.2.1".
+```
+
+---
+
+## Phase v1.2 — Medium (5 tính năng)
+
+### PROMPT v1.2.1 — 22.7 Reverse geocoding (hẻm/tuyến từ GPS)
+
+```
+Đọc CLAUDE.md mục 22.7. Tự suggest Hẻm + Tuyến đường từ tọa độ GPS qua Nominatim.
+
+CHI TIẾT:
+1. Sửa js/gps.js: thêm export async function reverseGeocode(lat, lng):
+   - Cache trong Map() module-scope, key = lat.toFixed(4) + ',' + lng.toFixed(4), TTL 60s.
+   - fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&zoom=18&accept-language=vi', { headers: {'User-Agent': 'khaosat-sapulico/1.1'}}).
+   - Throttle: nếu request cuối < 1s thì await delay đến đủ 1s.
+   - Return {road, suburb, neighbourhood, raw} từ json.address.
+2. Sửa js/form-renderer.js refreshGps():
+   - Sau khi gps.status = 'ok', gọi reverseGeocode(state.gps.lat, state.gps.lng) async.
+   - Nếu thành công + field 'Tuyến đường' đang rỗng → set value = res.road + ' (gợi ý GPS)' (đậm). Cho phép KTV sửa hoặc xoá hint.
+   - Tương tự field 'Hẻm' (chỉ schema tang_cuong_den có).
+   - Hiện nút "🗺️ Cập nhật từ GPS" cạnh GPS block để KTV gọi lại thủ công.
+
+Verify: mở form, GPS lấy được → ngay sau Tuyến đường tự điền tên đường gần nhất.
+
+Báo cáo + chờ "ok v1.2.2".
+```
+
+### PROMPT v1.2.2 — 22.8 Bản đồ vị trí GPS (map.html)
+
+```
+Đọc CLAUDE.md mục 22.8. Tạo trang bản đồ.
+
+CHI TIẾT:
+1. Tạo map.html:
+   - Header sticky giống manage.
+   - Filter bar: loại / KTV / từ-đến / trạng thái.
+   - <div id="map" class="h-[80vh]">.
+   - Thêm CDN Leaflet + markercluster trong <head>.
+2. Tạo js/map.js:
+   - initMap: L.map('map').setView([10.7769, 106.7009], 11) với tile OSM.
+   - loadMarkers(filter): gọi apiList → lọc row có lat/lng → tạo cluster group, mỗi marker icon theo loại KS (dùng L.divIcon với emoji).
+   - Popup marker: HTML ngắn (icon + STT + Tuyến + KTV) + nút "Mở chi tiết" → modal.
+3. Sửa index.html menu: thêm "🗺️ Bản đồ KS" → map.html (cho mọi role có map permission). Thêm class menu-permission-map.
+
+Verify: map render markers cho data có GPS, click cluster zoom in, click marker popup hiện thông tin.
+
+Báo cáo + chờ "ok v1.2.3".
+```
+
+### PROMPT v1.2.3 — 22.9 Notification email admin
+
+```
+Đọc CLAUDE.md mục 22.9. Apps Script gửi email cho admin khi có submission mới.
+
+CHI TIẾT:
+1. Trong Apps Script, tạo sheet `notification_targets` thủ công với header [email, enabled, only_types]. Tạm điền 1 email admin.
+2. Sửa apps-script/Code.gs:
+   - Thêm hàm getNotificationTargets() — đọc sheet (cache 60s), trả [{email, only_types}].
+   - Thêm hàm notifyAdmins(type, data, stt, user, sheetName, rowUrl) — async, try/catch silent fail:
+     * Đọc targets, filter only_types (nếu có) match type.
+     * GmailApp.sendEmail(email, subject, '', {htmlBody: ...}).
+     * Subject: `[SAPULICO KS] ${schema.name} STT #${stt} — ${data['Tuyến đường'] || ''}`.
+     * Body HTML: bảng 5-6 field quan trọng + link Google Sheets (URL row gốc).
+   - Trong handleSubmit, sau appendRow: notifyAdmins(...) async.
+3. KHÔNG động frontend.
+
+Verify: submit form → trong 1 phút admin nhận email + có link mở Google Sheets đúng row.
+
+Báo cáo + chờ "ok v1.2.4".
+```
+
+### PROMPT v1.2.4 — 22.10 Quản lý user CRUD (users.html)
+
+```
+Đọc CLAUDE.md mục 22.10. Tạo trang admin quản lý user.
+
+CHI TIẾT:
+1. Apps Script:
+   - action 'user_create' body {token, username, password, full_name, role, active}. Validate: username unique (case-insensitive), role in [admin/user/user1/demo], password ≥8 ký tự, full_name not empty.
+   - action 'user_update' body {token, username, full_name?, role?, active?}. Username KHÔNG được đổi.
+   - action 'reset_password' (đã có ở v1.1.4 — refactor: di chuyển logic vào users.html).
+   - action 'users' đã có.
+   - Tất cả 3 action mới: permission users_manage (admin only).
+2. Tạo users.html: bảng + nút Thêm/Sửa/Reset PWD/Vô hiệu/Kích hoạt cho mỗi row.
+3. Tạo js/users.js: loadUsers, createUser, updateUser, resetPwd, toggleActive. Form dialog với validate.
+4. Sửa index.html menu admin: thêm "👥 Quản lý user" → users.html (class menu-admin-only — chỉ admin, không user).
+   Quan trọng: hasPermission('users_manage') khác với menu-admin. Update class .menu-admin để chỉ check 'kpi'/'manage'/'report'. Tạo class .menu-users-manage riêng.
+5. Bỏ nút "Reset password" tạm ở index.html (v1.1.4) → di chuyển vào users.html.
+
+Verify: admin tạo user mới → user mới login OK. admin sửa role user1 → demo → user đó mất permission submit. admin vô hiệu user → user không login được.
+
+Báo cáo + chờ "ok v1.2.5".
+```
+
+### PROMPT v1.2.5 — 22.11 Tài liệu tham khảo (docs.html)
+
+```
+Đọc CLAUDE.md mục 22.11. Tạo trang docs + sheet tailieu.
+
+CHI TIẾT:
+1. Trong Apps Script Code.gs:
+   - Thêm SHEET_MAP_AUX = {'tailieu': 'tailieu'} hoặc xử lý riêng.
+   - Thêm hàm initDocsSheet() — tạo sheet tailieu nếu chưa có, seed 5 link mặc định mục 22.11.
+   - action 'docs_list' → đọc sheet, return rows.
+   - action 'docs_create' (admin/user): body {token, title, url, category, description}. Generate id = Utilities.getUuid().
+   - action 'docs_delete' (admin/user): body {token, id}.
+2. Chạy initDocsSheet() 1 lần manual.
+3. Tạo docs.html: grid cards group theo category, search box, modal "+ Thêm tài liệu" (admin/user).
+4. Tạo js/docs.js: loadDocs, addDoc, deleteDoc.
+5. Sửa index.html menu: thêm "📚 Tài liệu tham khảo" → docs.html (mọi role có quyền).
+
+Verify: docs.html hiện 5 link mặc định. admin thêm 1 tài liệu → reload thấy. user1 thấy nhưng KHÔNG có nút thêm/xoá.
+
+Báo cáo + chờ "ok v2.0.1".
+```
+
+---
+
+## Phase v2.0 — Big (5 tính năng)
+
+### PROMPT v2.0.1 — 22.12 QR code TĐK scan
+
+```
+Đọc CLAUDE.md mục 22.12. Thêm scan QR code cho field TĐK.
+
+CHI TIẾT:
+1. Thêm CDN jsQR vào form.html.
+2. Sửa js/form-renderer.js renderField cho type 'tdk':
+   - Bên cạnh input thêm nút "📷 Scan QR".
+   - Click nút → mở modal full-screen với <video> + <canvas>.
+   - navigator.mediaDevices.getUserMedia({video: {facingMode:'environment'}}) → start video → loop requestAnimationFrame → draw to canvas → jsQR(imageData).
+   - Khi detect → fill input, đóng modal, stop stream.
+   - Nút "Huỷ" / icon ✕.
+3. Tạo tools/qr-generator.html (admin tool): nhập danh sách TĐK (paste textarea) → sinh PNG QR cho mỗi tên + nút download zip (hoặc print). Dùng qrcode-generator CDN.
+
+Verify: in 1 QR thử (content = "Trần Phú - 3"), mở form, scan QR → field TĐK tự điền "Trần Phú - 3".
+
+Báo cáo + chờ "ok v2.0.2".
+```
+
+### PROMPT v2.0.2 — 22.13 Voice note cho Ghi chú
+
+```
+Đọc CLAUDE.md mục 22.13. Web Speech API cho textarea Ghi chú.
+
+CHI TIẾT:
+1. Sửa js/form-renderer.js renderField cho type 'textarea' (key 'ghi_chu' hoặc tất cả textarea):
+   - Bên cạnh textarea thêm nút 🎤 (chỉ render nếu 'webkitSpeechRecognition' in window hoặc 'SpeechRecognition' in window).
+   - Click → new SpeechRecognition(): lang='vi-VN', continuous=true, interimResults=true.
+   - onresult → ghép transcript vào textarea (append, không overwrite).
+   - Nút đổi sang ⏹️ khi đang nghe.
+   - Click lại → stop.
+   - Status: 🎤 idle / 🔴 recording / interim text italic.
+
+Verify Chrome Android: mở form, click 🎤, nói "Đèn hỏng từ chiều qua" → text vào textarea.
+
+Báo cáo + chờ "ok v2.0.3".
+```
+
+### PROMPT v2.0.3 — 22.14 Heatmap khảo sát
+
+```
+Đọc CLAUDE.md mục 22.14. Thêm vùng D cho report — heatmap.
+
+CHI TIẾT:
+1. Sửa apps-script/Code.gs handleReport: thêm areaD aggregation theo `Phường` × loại. Return areaD: { headers: [phường,...], types: [loại,...], counts: 2D matrix }.
+2. Sửa js/report.js: thêm renderAreaD():
+   - Table 2D: row = phường (sort by total desc), col = loại.
+   - Cell color theo % count/max — Tailwind class bg-red-100 đến bg-red-700 chia 7 mức.
+   - Cell text: count number.
+   - Click cell → drill-down list (gọi apiList với filter phường + loại).
+3. Sửa report.html: thêm <section> vùng D.
+
+Verify: report chạy → vùng D bảng phường×loại có màu nhạt/đậm tương ứng.
+
+Báo cáo + chờ "ok v2.0.4".
+```
+
+### PROMPT v2.0.4 — 22.15 Backup tự động Sheets → Drive
+
+```
+Đọc CLAUDE.md mục 22.15. Apps Script time-driven trigger backup.
+
+CHI TIẾT:
+1. Sửa apps-script/Code.gs:
+   - Thêm hàm setupBackupTrigger() (admin chạy 1 lần): xoá trigger cũ + ScriptApp.newTrigger('weeklyBackup').timeBased().everyWeeks(1).onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(0).create().
+   - Thêm hàm weeklyBackup() (handler):
+     * Tạo folder Drive 'khaosat-backup' nếu chưa có.
+     * Copy spreadsheet → folder, đặt tên 'khaosat-' + yyyy-MM-dd + '.xlsx'.
+     * Xoá file cũ hơn 12 tuần.
+     * Log Audit.
+2. Hướng dẫn admin setup: chạy setupBackupTrigger() 1 lần manual.
+
+Verify: chạy weeklyBackup() thủ công → kiểm tra Drive thấy file copy.
+
+Báo cáo + chờ "ok v2.0.5".
+```
+
+### PROMPT v2.0.5 — 22.16 Lịch công tác KTV (schedule.html)
+
+```
+Đọc CLAUDE.md mục 22.16. Tạo lịch công tác.
+
+CHI TIẾT:
+1. Apps Script:
+   - initScheduleSheet() — tạo sheet `lichcongtac` với header [id, ktv_username, ngay, loai_ks, khu_vuc, ghi_chu, status, created_by, created_at].
+   - 4 action: schedule_list / schedule_create / schedule_update / schedule_delete.
+   - Permission schedule_write cho create/update/delete (admin/user). schedule_list ai cũng được nhưng user1 chỉ thấy của mình.
+2. Tạo schedule.html: admin grid lịch theo tuần (7 cột) hoặc bảng list. user1 chỉ thấy của mình + filter tuần này.
+3. Tạo js/schedule.js: loadSchedule, addItem, updateStatus, deleteItem.
+4. Sửa index.html menu: thêm "📅 Lịch công tác" cho mọi role.
+5. Sửa js/form-renderer.js: khi mở form, gọi apiScheduleList({ktv_username:me, ngay:today, status:'pending'}) — nếu có item match loai_ks → hiện badge "📋 Việc hôm nay" trên top.
+   Sau khi submit form thành công, tự gọi apiScheduleUpdate để đánh dấu item pending gần nhất khớp loai_ks → done (smart-match nếu chỉ 1 item match).
+
+Verify:
+- admin tạo 5 lịch cho user1 ngày mai.
+- user1 mở schedule → thấy 5 việc. Mở form tang_cuong_den → badge "Việc hôm nay" (nếu lịch hôm nay).
+- Submit → item pending tự thành done.
+
+Báo cáo "Hoàn tất v2.0" và liệt kê hết file mới.
+```
+
+---
+
+## CHECKLIST TỔNG QUAN v1.1+
+
+Sau khi xong hết, kiểm tra:
+- [ ] Sheet `phan quyen` có 9 cột (4 mới + 5 cũ).
+- [ ] Sheet `taikhoan` không thay đổi.
+- [ ] 3 sheet phụ mới: `notification_targets`, `tailieu`, `lichcongtac`.
+- [ ] Sheet `Audit` ghi mọi action mới (update, reset_password, user_create, ...).
+- [ ] 12+ endpoint action: 7 cũ + (users / user_create / user_update / reset_password / update / docs_list / docs_create / docs_delete / schedule_list / schedule_create / schedule_update / schedule_delete).
+- [ ] 5 trang HTML mới: my-kpi.html, map.html, users.html, docs.html, schedule.html (+ tools/qr-generator.html).
+- [ ] JS modules mới: my-kpi.js, map.js, users.js, docs.js, schedule.js.
+- [ ] Field "Bản vẽ" trong 3 schema đã thành ảnh.
+- [ ] manage.html có nút Sửa hoạt động.
+- [ ] kpi/report có nút Excel + PDF.
+- [ ] Notification email đến admin khi có submit mới.
+- [ ] Backup tự động chạy mỗi tuần.
+
+---
+
+**Hết v1.1+.** Tổng cộng 17 prompt (1 setup + 16 features).

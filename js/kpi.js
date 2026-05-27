@@ -22,6 +22,10 @@ export async function initKpi() {
 
   document.getElementById('btn-load').onclick = loadKpi;
   document.getElementById('btn-export').onclick = exportCsv;
+  const btnXlsx = document.getElementById('btn-export-xlsx');
+  const btnPdf = document.getElementById('btn-export-pdf');
+  if (btnXlsx) btnXlsx.onclick = exportXlsx;
+  if (btnPdf) btnPdf.onclick = exportPdf;
 
   // Tự load tháng hiện tại
   await loadKpi();
@@ -53,7 +57,12 @@ async function loadKpi() {
     state.results = res.results || [];
     state.targets = res.targets || {};
     renderTable();
-    document.getElementById('btn-export').disabled = state.results.length === 0;
+    const hasData = state.results.length > 0;
+    document.getElementById('btn-export').disabled = !hasData;
+    const bx = document.getElementById('btn-export-xlsx');
+    const bp = document.getElementById('btn-export-pdf');
+    if (bx) bx.disabled = !hasData;
+    if (bp) bp.disabled = !hasData;
   } catch (e) {
     showToast('Lỗi tải KPI: ' + e.message, 'error', 4000);
   } finally {
@@ -242,4 +251,92 @@ function csvEscape(v) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;
+}
+
+/** Export Excel .xlsx qua SheetJS. */
+function exportXlsx() {
+  if (state.results.length === 0) return;
+  if (typeof XLSX === 'undefined') { showToast('SheetJS chưa load', 'error'); return; }
+  const header = ['Username', 'Họ tên', 'Vai trò', 'Số bản', 'Tần suất', 'Chất lượng', 'Đa dạng', 'Đầy đủ', 'Ổn định', 'Tổng', 'Xếp loại'];
+  const rows = state.results.map(r => [
+    r.username, r.full_name, r.role, r.count,
+    r.frequency, r.quality, r.diversity, r.completeness, r.stability,
+    r.total, r.grade
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Báo cáo KPI tháng ' + state.month],
+    ['Đơn vị: SAPULICO'],
+    ['Xuất lúc: ' + new Date().toLocaleString('vi-VN')],
+    [],
+    header,
+    ...rows
+  ]);
+  // Auto width
+  ws['!cols'] = [{wch:12},{wch:24},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10}];
+  ws['!merges'] = [
+    {s:{r:0,c:0},e:{r:0,c:10}},
+    {s:{r:1,c:0},e:{r:1,c:10}},
+    {s:{r:2,c:0},e:{r:2,c:10}}
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'KPI ' + state.month);
+  XLSX.writeFile(wb, 'kpi-' + state.month + '.xlsx');
+}
+
+/** Export PDF qua jsPDF + autoTable. */
+function exportPdf() {
+  if (state.results.length === 0) return;
+  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('jsPDF chưa load', 'error'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Header
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SAPULICO', 14, 16);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Bao cao KPI thang ' + state.month, 14, 23);
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text('Xuat luc: ' + new Date().toLocaleString('vi-VN'), 14, 28);
+  doc.setTextColor(0);
+
+  // Table (autoTable)
+  doc.autoTable({
+    startY: 33,
+    head: [['User', 'Ho ten', 'Vai tro', 'So ban', 'Tan suat', 'Chat luong', 'Da dang', 'Day du', 'On dinh', 'Tong', 'Xep loai']],
+    body: state.results.map(r => [
+      r.username,
+      r.full_name,
+      r.role,
+      r.count,
+      r.frequency,
+      r.quality,
+      r.diversity,
+      r.completeness,
+      r.stability,
+      r.total,
+      r.grade
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [29, 78, 216] },
+    columnStyles: {
+      0: { cellWidth: 16 },
+      1: { cellWidth: 32 },
+      2: { cellWidth: 12 },
+      3: { cellWidth: 14, halign: 'right' },
+      10: { halign: 'center', fontStyle: 'bold' }
+    },
+    didDrawPage: (data) => {
+      const pageCount = doc.internal.getNumberOfPages();
+      const pageNum = data.pageNumber;
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text('Trang ' + pageNum + '/' + pageCount + ' — SAPULICO 2026',
+        doc.internal.pageSize.getWidth() - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' });
+    }
+  });
+
+  doc.save('kpi-' + state.month + '.pdf');
 }

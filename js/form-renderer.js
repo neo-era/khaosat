@@ -12,8 +12,8 @@
 import { SCHEMAS } from './schemas.js';
 import { PHUONG_XA, QUAN_LIST, TDK_LIST } from './lookups.js';
 import { CONFIG } from './config.js';
-import { requireAuth, logout, getCurrentUser } from './auth.js';
-import { apiSubmit, uploadImage } from './api.js';
+import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
+import { apiSubmit, apiUpdate, apiList, uploadImage } from './api.js';
 import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
 import { compressImage, createThumbnail } from './camera.js';
 import { getCurrentPosition } from './gps.js';
@@ -26,8 +26,12 @@ const state = {
   user: null,
   gps: { status: 'idle' },   // idle | loading | ok | error
   photos: [],                 // [{id, file, status, url, thumbnail, error}]
+  imageUrls: {},              // { ban_ve: {status, url, fileName, thumbnail} } cho field type 'image_url'
   autosaveTimer: null,
-  container: null
+  container: null,
+  editMode: false,            // true khi đang sửa bản ghi (URL ?edit=STT)
+  editStt: null,              // STT đang sửa
+  editOrigData: null,         // row gốc từ server (giữ Người khảo sát + Submitted At ...)
 };
 
 // =====================================================================
@@ -47,12 +51,109 @@ export async function renderForm(containerEl, schemaKey) {
   state.container = containerEl;
   state.gps = { status: 'idle' };
   state.photos = [];
+  state.imageUrls = {};
+
+  // Edit mode: ?edit=STT
+  const editStt = new URLSearchParams(location.search).get('edit');
+  state.editMode = !!editStt;
+  state.editStt = editStt;
+  state.editOrigData = null;
+
+  if (state.editMode && !hasPermission('edit')) {
+    showToast('Bạn không có quyền sửa bản ghi', 'error');
+    setTimeout(() => location.replace('manage.html'), 1500);
+    return;
+  }
 
   renderShell();
   bindEvents();
-  refreshGps();              // async, không await
-  await maybeRestoreDraft();
-  startAutosave();
+  if (state.editMode) {
+    await loadEditRow();
+    // Edit mode: không cần GPS auto-refresh hay autosave draft
+  } else {
+    refreshGps();              // async, không await
+    await maybeRestoreDraft();
+    startAutosave();
+  }
+}
+
+/** Edit mode: tải row gốc từ server theo STT và pre-fill form. */
+async function loadEditRow() {
+  try {
+    const res = await apiList({ type: state.schemaKey, stt: state.editStt, status: 'all' });
+    const row = (res.rows || [])[0];
+    if (!row) {
+      showToast('Không tìm thấy bản ghi STT #' + state.editStt, 'error');
+      setTimeout(() => location.replace('manage.html'), 1500);
+      return;
+    }
+    state.editOrigData = row;
+
+    // Banner báo đang sửa
+    const banner = document.createElement('div');
+    banner.className = 'bg-yellow-100 border-l-4 border-yellow-500 text-yellow-900 p-3 mb-3 rounded text-sm';
+    banner.innerHTML = `✏️ <strong>Đang sửa bản ghi STT #${escapeHtml(String(state.editStt))}</strong>
+      &middot; KTV gốc: ${escapeHtml(row['Người khảo sát'] || row['Username'] || '?')}
+      &middot; Gửi lúc: ${escapeHtml(row['Submitted At'] || '?')}<br>
+      <span class="text-xs">Lưu ý: Người khảo sát, STT, Ngày khảo sát, Submitted At được giữ nguyên — chỉ sửa thông tin nghiệp vụ.</span>`;
+    state.container.insertBefore(banner, state.container.firstChild);
+
+    // Pre-fill fields
+    for (const f of state.schema.fields) {
+      const val = row[f.label];
+      if (val === undefined || val === null || val === '') continue;
+      if (['stt_auto', 'date_auto', 'link_gmap'].includes(f.type)) continue;
+      if (f.key === 'nguoi_ks') continue;  // readonly auto-fill
+
+      if (f.type === 'gps_lat') {
+        state.gps = { status: 'ok', lat: parseFloat(val) || 0, lng: state.gps.lng || 0, accuracy: 0 };
+        updateGpsUI();
+        continue;
+      }
+      if (f.type === 'gps_lng') {
+        state.gps = { status: 'ok', lat: state.gps.lat || 0, lng: parseFloat(val) || 0, accuracy: 0 };
+        updateGpsUI();
+        continue;
+      }
+      if (f.type === 'image_url') {
+        const url = String(val);
+        if (url) {
+          state.imageUrls[f.key] = { status: 'done', url, fileName: '(ảnh cũ)', thumbnail: url };
+          renderImageFieldPreview(f.key);
+        }
+        continue;
+      }
+      const el = state.container.querySelector(`[data-key="${f.key}"]`);
+      if (!el) continue;
+      el.value = val;
+    }
+    // Phường cascade
+    const quanEl = state.container.querySelector('[data-key="quan"]');
+    if (quanEl && quanEl.value) {
+      updatePhuongOptions(quanEl.value);
+      const phuongVal = row['Phường'];
+      if (phuongVal) {
+        const phuongEl = state.container.querySelector('[data-key="phuong"]');
+        if (phuongEl) {
+          if (![...phuongEl.options].some(o => o.value === phuongVal)) {
+            const opt = document.createElement('option');
+            opt.value = phuongVal;
+            opt.textContent = phuongVal + ' (tự nhập)';
+            phuongEl.insertBefore(opt, phuongEl.lastChild);
+          }
+          phuongEl.value = phuongVal;
+        }
+      }
+    }
+    // Pre-fill ảnh hiện trường vào state.photos
+    const photoUrls = String(row['Ảnh (URLs)'] || '').split('|').filter(u => u);
+    state.photos = photoUrls.map(url => ({
+      id: uuid(), file: null, status: 'done', url, thumbnail: url, error: null
+    }));
+    renderPhotoGrid();
+  } catch (e) {
+    showToast('Lỗi tải bản ghi: ' + e.message, 'error', 4000);
+  }
 }
 
 // =====================================================================
@@ -111,7 +212,7 @@ function renderShell() {
   submitArea.innerHTML = `
     <button type="button" id="btn-home" class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-medium" style="min-height:44px">Về trang chủ</button>
     <button type="button" id="btn-submit" class="flex-1 bg-blue-700 text-white py-3 rounded-lg font-medium disabled:bg-gray-400" style="min-height:44px" ${isDemo ? 'disabled' : ''}>
-      ${isDemo ? '🔒 Không lưu được' : '💾 Lưu'}
+      ${isDemo ? '🔒 Không lưu được' : (state.editMode ? '💾 Cập nhật' : '💾 Lưu')}
     </button>
   `;
   state.container.appendChild(submitArea);
@@ -221,6 +322,45 @@ function renderField(field) {
     input.type = 'text';
     input.setAttribute('list', 'tdk-list');
     input.className = baseInputClass;
+  } else if (t === 'image_url') {
+    // Block đặc biệt: input file ẩn + nút chụp + thumbnail preview
+    const wrapImg = document.createElement('div');
+    wrapImg.className = 'space-y-2';
+    wrapImg.dataset.key = field.key;
+    wrapImg.dataset.label = field.label;
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.capture = 'environment';
+    fileInput.className = 'hidden';
+    fileInput.id = 'img-input-' + field.key;
+    wrapImg.appendChild(fileInput);
+
+    const btn = document.createElement('label');
+    btn.htmlFor = fileInput.id;
+    btn.className = 'block w-full bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100 text-sm';
+    btn.style.minHeight = '44px';
+    btn.innerHTML = '<span class="text-blue-700 font-medium">📷 Chụp ảnh bản vẽ</span>';
+    wrapImg.appendChild(btn);
+
+    const preview = document.createElement('div');
+    preview.className = 'hidden';
+    preview.id = 'img-preview-' + field.key;
+    wrapImg.appendChild(preview);
+
+    fileInput.onchange = (e) => handleImageFieldSelect(e, field.key, field.label);
+
+    // Replace input mặc định bằng block tự custom — thoát khỏi luồng `input.id =...` ở dưới
+    if (field.hint) {
+      const small = document.createElement('div');
+      small.className = 'text-xs text-gray-500 mt-1';
+      small.textContent = field.hint;
+      wrapImg.appendChild(small);
+    }
+
+    wrap.appendChild(wrapImg);
+    return wrap;
   } else {
     // Fallback
     input = document.createElement('input');
@@ -416,6 +556,89 @@ function removePhoto(id) {
   renderPhotoGrid();
 }
 
+// =====================================================================
+// IMAGE_URL FIELD (vd Bản vẽ) — 1 ảnh / field
+// =====================================================================
+
+async function handleImageFieldSelect(e, fieldKey, fieldLabel) {
+  const file = (e.target.files || [])[0];
+  if (!file) return;
+  e.target.value = '';  // cho phép chọn lại cùng file
+  state.imageUrls[fieldKey] = { status: 'uploading', url: null, fileName: file.name, thumbnail: null };
+  renderImageFieldPreview(fieldKey);
+  try {
+    state.imageUrls[fieldKey].thumbnail = await createThumbnail(file);
+    renderImageFieldPreview(fieldKey);
+    const url = await uploadImage(file, 'banve/' + state.schemaKey);
+    state.imageUrls[fieldKey] = { status: 'done', url, fileName: file.name, thumbnail: state.imageUrls[fieldKey].thumbnail };
+  } catch (err) {
+    state.imageUrls[fieldKey] = { status: 'error', url: null, fileName: file.name, thumbnail: null, error: err.message || 'Upload fail' };
+  }
+  renderImageFieldPreview(fieldKey);
+}
+
+function removeImageField(fieldKey) {
+  delete state.imageUrls[fieldKey];
+  renderImageFieldPreview(fieldKey);
+}
+
+function renderImageFieldPreview(fieldKey) {
+  const preview = document.getElementById('img-preview-' + fieldKey);
+  if (!preview) return;
+  const item = state.imageUrls[fieldKey];
+  if (!item) {
+    preview.className = 'hidden';
+    preview.innerHTML = '';
+    return;
+  }
+  preview.className = 'relative bg-gray-50 border rounded-lg p-2 flex items-center gap-3';
+  preview.innerHTML = '';
+
+  // Thumbnail (hoặc placeholder nếu chưa sinh)
+  const thumb = document.createElement('div');
+  thumb.className = 'w-20 h-20 rounded bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden';
+  if (item.thumbnail) {
+    const img = document.createElement('img');
+    img.src = item.thumbnail;
+    img.className = 'w-full h-full object-cover';
+    thumb.appendChild(img);
+  } else {
+    thumb.textContent = '⏳';
+  }
+  preview.appendChild(thumb);
+
+  // Info + status
+  const info = document.createElement('div');
+  info.className = 'flex-1 min-w-0';
+  const fileName = document.createElement('div');
+  fileName.className = 'text-sm font-medium truncate';
+  fileName.textContent = item.fileName;
+  info.appendChild(fileName);
+  const status = document.createElement('div');
+  status.className = 'text-xs';
+  if (item.status === 'uploading') { status.textContent = '⏳ Đang tải...'; status.classList.add('text-yellow-700'); }
+  else if (item.status === 'done')  { status.textContent = '✅ Đã tải xong'; status.classList.add('text-green-700'); }
+  else if (item.status === 'error') { status.textContent = '❌ ' + (item.error || 'Lỗi'); status.classList.add('text-red-700'); }
+  info.appendChild(status);
+  preview.appendChild(info);
+
+  // Nút thay/xoá
+  const actions = document.createElement('div');
+  actions.className = 'flex flex-col gap-1 flex-shrink-0';
+  const btnReplace = document.createElement('label');
+  btnReplace.htmlFor = 'img-input-' + fieldKey;
+  btnReplace.className = 'text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded cursor-pointer text-center hover:bg-blue-100';
+  btnReplace.textContent = '🔄 Thay';
+  actions.appendChild(btnReplace);
+  const btnRemove = document.createElement('button');
+  btnRemove.type = 'button';
+  btnRemove.className = 'text-xs px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100';
+  btnRemove.textContent = '✕ Xoá';
+  btnRemove.onclick = () => removeImageField(fieldKey);
+  actions.appendChild(btnRemove);
+  preview.appendChild(actions);
+}
+
 function renderPhotoGrid() {
   const grid = document.getElementById('photo-grid');
   if (!grid) return;
@@ -470,6 +693,12 @@ async function maybeRestoreDraft() {
     const val = draft.data[f.label];
     if (val === undefined || val === null || val === '') continue;
     if (f.key === 'nguoi_ks') continue;  // readonly
+    if (f.type === 'image_url') {
+      // Restore URL nếu đã có (vd draft auto-save sau khi upload xong)
+      state.imageUrls[f.key] = { status: 'done', url: val, fileName: '(ảnh từ draft)', thumbnail: val };
+      renderImageFieldPreview(f.key);
+      continue;
+    }
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
     if (!el) continue;
     el.value = val;
@@ -535,6 +764,11 @@ function collectFormData() {
       data[f.label] = state.gps.status === 'ok' ? state.gps.lng : '';
       continue;
     }
+    if (t === 'image_url') {
+      const item = state.imageUrls[f.key];
+      data[f.label] = (item && item.status === 'done') ? item.url : '';
+      continue;
+    }
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
     data[f.label] = el ? el.value : '';
   }
@@ -544,19 +778,33 @@ function collectFormData() {
 function validateForm() {
   const errors = [];
   for (const f of state.schema.fields) {
-    if (!f.required) continue;
     const t = f.type;
     if (['stt_auto', 'date_auto', 'link_gmap', 'gps_lat', 'gps_lng'].includes(t)) continue;
     if (f.key === 'nguoi_ks') continue;  // auto-fill
+
+    if (t === 'image_url') {
+      if (f.required) {
+        const item = state.imageUrls[f.key];
+        if (!item || item.status !== 'done') errors.push({ field: f });
+      }
+      continue;
+    }
+
+    if (!f.required) continue;
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
     if (!el || !String(el.value || '').trim()) {
       errors.push({ field: f, el });
     }
   }
-  // Photos đang upload chưa xong
-  const pending = state.photos.filter(p => p.status === 'pending' || p.status === 'uploading');
-  if (pending.length > 0) {
-    errors.push({ message: `Đợi ${pending.length} ảnh upload xong rồi mới Lưu` });
+  // Photos (ảnh hiện trường) đang upload chưa xong
+  const pendingPhotos = state.photos.filter(p => p.status === 'pending' || p.status === 'uploading');
+  if (pendingPhotos.length > 0) {
+    errors.push({ message: `Đợi ${pendingPhotos.length} ảnh hiện trường upload xong rồi mới Lưu` });
+  }
+  // image_url fields đang upload chưa xong
+  const pendingImgs = Object.entries(state.imageUrls).filter(([k, v]) => v.status === 'uploading').map(([k]) => k);
+  if (pendingImgs.length > 0) {
+    errors.push({ message: `Đợi ảnh "${pendingImgs.join(', ')}" upload xong rồi mới Lưu` });
   }
   return errors;
 }
@@ -582,14 +830,22 @@ async function handleSubmit() {
   const btn = document.getElementById('btn-submit');
   btn.disabled = true;
   const origText = btn.textContent;
-  btn.textContent = '⏳ Đang lưu...';
+  btn.textContent = state.editMode ? '⏳ Đang cập nhật...' : '⏳ Đang lưu...';
 
   const data = collectFormData();
   const photoUrls = state.photos.filter(p => p.status === 'done').map(p => p.url);
 
   try {
-    const res = await apiSubmit(state.schemaKey, data, photoUrls);
-    // Success
+    let res;
+    if (state.editMode) {
+      // EDIT MODE
+      res = await apiUpdate(state.schemaKey, state.editStt, data, photoUrls);
+      showToast('✅ Đã cập nhật STT #' + state.editStt + ' (' + (res.changes ? res.changes.length : 0) + ' trường thay đổi)', 'success', 3000);
+      setTimeout(() => location.replace('manage.html'), 1500);
+      return;
+    }
+    // CREATE MODE
+    res = await apiSubmit(state.schemaKey, data, photoUrls);
     clearDraft(state.schemaKey);
     stopAutosave();
     saveSubmittedToday({
@@ -613,7 +869,14 @@ async function handleSubmit() {
       setTimeout(() => logout(), 1500);
       return;
     }
-    // Network fail → enqueue
+    // Edit mode: không enqueue (không hỗ trợ offline edit), chỉ báo lỗi
+    if (state.editMode) {
+      showToast('Lỗi cập nhật: ' + msg, 'error', 4000);
+      btn.disabled = false;
+      btn.textContent = origText;
+      return;
+    }
+    // Submit mode + Network fail → enqueue
     if (!navigator.onLine || e.name === 'TypeError' || /fetch|network|HTTP/i.test(msg)) {
       enqueueSubmission({
         action: 'submit',

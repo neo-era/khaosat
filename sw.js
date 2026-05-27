@@ -10,6 +10,7 @@ const SHELL = [
   './form.html',
   './recent.html',
   './kpi.html',
+  './my-kpi.html',
   './manage.html',
   './report.html',
   './manifest.json',
@@ -24,6 +25,7 @@ const SHELL = [
   './js/schemas.js',
   './js/form-renderer.js',
   './js/kpi.js',
+  './js/my-kpi.js',
   './js/manage.js',
   './js/report.js'
 ];

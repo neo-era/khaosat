@@ -1256,4 +1256,370 @@ Repo PUBLIC + URL Apps Script trong `js/config.js` → **URL bị lộ trên Git
 
 ---
 
-**Kết thúc CLAUDE.md.** Mọi quyết định cấu hình đã chốt. **KHÔNG tự động bắt đầu code**. Đợi user yêu cầu rõ ràng (vd "bắt đầu code", "code phần X"), rồi thực hiện theo checklist mục 18.
+## 22. Roadmap v1.1+ — Tính năng đang thiết kế (chờ user duyệt)
+
+> Phần này là **thiết kế chi tiết** cho 16 tính năng mới. Mỗi tính năng có: Mục đích / File mới hoặc sửa / Schema thay đổi / Endpoint mới / UI flow / Permission. Khi user duyệt thiết kế nào → mới code theo đúng spec. KHÔNG code trước khi user nói rõ.
+
+### Phân pha đề xuất
+- **v1.1 (easy wins)**: 22.1 → 22.6 (Bản vẽ ảnh, Filter KTV, KPI cá nhân, Reset pwd, Sửa bản ghi, Excel/PDF)
+- **v1.2 (medium)**: 22.7 → 22.11 (Geocoding, Bản đồ, Email, User CRUD, Tài liệu)
+- **v2.0 (big)**: 22.12 → 22.16 (QR scan, Voice, Heatmap, Backup, Lịch công tác)
+
+### Bổ sung phân quyền cần thêm vào sheet `phan quyen`
+
+Khi triển khai v1.1+, thêm 4 cột mới vào sheet `phan quyen`: `edit` (sửa bản ghi), `users_manage` (CRUD user), `schedule_write` (tạo lịch), `notify_admin` (nhận email). Default permissions:
+
+| Role | edit | users_manage | schedule_write | notify_admin |
+|---|---|---|---|---|
+| admin | TRUE | TRUE | TRUE | TRUE |
+| user | TRUE | FALSE | TRUE | TRUE |
+| user1 | FALSE | FALSE | FALSE | FALSE |
+| demo | FALSE | FALSE | FALSE | FALSE |
+
+`my_kpi` (KPI cá nhân) — KHÔNG cần cột mới: tất cả role đăng nhập đều xem được KPI của chính mình (server tự filter).
+
+---
+
+### 22.1 — Bản vẽ → upload ảnh (thay vì text)
+
+**Mục đích**: KTV chụp ảnh bản vẽ thiết kế (giấy A4) ngay tại hiện trường thay vì gõ mã.
+
+**File sửa**:
+- `js/schemas.js`: 3 schema có field `Bản vẽ` (tang_cuong_den, ngam_hoa, thay_den) — đổi `type: 'text'` → `type: 'image_url'`.
+- `js/form-renderer.js`: thêm renderer cho type `image_url` — input file 1 ảnh, upload Cloudinary, lưu URL vào field.
+
+**UI**:
+- Nút "📷 Chụp/Chọn ảnh bản vẽ" → upload Cloudinary folder `khaosat/banve/` → thumbnail preview + URL ẩn.
+- Cho phép replace ảnh nếu chụp sai.
+- Field readonly với KTV (chỉ thấy thumbnail + button thay).
+
+**Lưu Google Sheets**: cell chứa URL Cloudinary (giống cột `Ảnh (URLs)` nhưng đơn lẻ).
+
+---
+
+### 22.2 — Filter KTV trong manage.html
+
+**Mục đích**: dropdown KTV trong trang Quản lý hiện đang rỗng (known issue v1.0).
+
+**File sửa**:
+- `apps-script/Code.gs`: thêm `action: "users"` → return `[{username, full_name, role, active}]` (chỉ active=TRUE). Permission: bất kỳ role có quyền `manage` hoặc `report`.
+- `js/api.js`: thêm `apiUsers()`.
+- `js/manage.js` + `js/report.js`: gọi `apiUsers()` khi init, populate dropdown.
+
+**Schema**: không thay đổi.
+
+**Effort**: nhỏ (~30 phút).
+
+---
+
+### 22.3 — KPI cá nhân cho KTV (`my-kpi.html`)
+
+**Mục đích**: KTV (user1) xem KPI của CHÍNH MÌNH theo tháng, không thấy người khác. Admin vẫn dùng `kpi.html` để xem all.
+
+**File mới**:
+- `my-kpi.html` — trang đơn, giống `kpi.html` nhưng chỉ 1 hàng (KTV hiện tại) + biểu đồ ngày + 5 chỉ tiêu.
+- `js/my-kpi.js` — gọi `apiKpi(month)` rồi filter `results.find(r => r.username === currentUser.username)`.
+
+**File sửa**:
+- `apps-script/Code.gs` `handleKpi`: nếu role không có quyền `kpi` (vd user1) → vẫn cho phép, nhưng filter results chỉ trả 1 entry của chính mình. Hoặc: tạo action mới `my_kpi`.
+- `index.html` menu: thêm "🎯 KPI của tôi" → `my-kpi.html` cho mọi role (user1 thấy của mình, admin/user click vào `kpi.html` xem tổng thay vì cá nhân).
+
+**Permission**: không cần thêm — tất cả role đăng nhập đều xem được của mình.
+
+---
+
+### 22.4 — Reset password qua UI
+
+**Mục đích**: Admin reset/đổi password user mà không vào Apps Script editor.
+
+**File sửa**:
+- `apps-script/Code.gs`: thêm `action: "reset_password"` → body `{token, username, new_password}`. Permission: `users_manage` (chỉ admin). Hash mới + ghi đè cột `password_hash`. Log vào Audit (action=reset_password, note=`username`). KHÔNG log password.
+- (sẽ tạo cùng `users.html` ở 22.10) UI: nút "🔑 Reset PWD" cạnh user → dialog nhập mật khẩu mới 2 lần xác nhận → call API.
+
+**Bảo mật**: password mới ≥8 ký tự, không trùng username. Admin được tự reset password của chính mình. User1/demo không có quyền.
+
+---
+
+### 22.5 — Sửa bản ghi (Edit)
+
+**Mục đích**: Admin/user sửa bản ghi đã submit (sửa typo, bổ sung thông tin) thay vì phải xoá + tạo lại.
+
+**File sửa**:
+- `apps-script/Code.gs`: thêm `action: "update"` → body `{token, type, stt, data, photos?}`. Permission `edit`. Tìm row theo STT. **KHÔNG ghi đè** các trường server-managed (STT, Submitted At, Username, Người khảo sát gốc — giữ để KPI tính đúng). Cho phép sửa các field business (Tuyến, Phường, Số đèn...). Nếu `photos` có → ghi đè cột `Ảnh (URLs)`. Log Audit action=update với note `fields_changed: [...]`.
+- `js/api.js`: thêm `apiUpdate(type, stt, data, photos)`.
+- `js/manage.js`: thêm nút "✏️ Sửa" cạnh "Xoá" → redirect `form.html?type=X&edit=STT`.
+- `js/form-renderer.js`: thêm edit mode. Nếu URL có `&edit=STT`:
+  - Gọi `apiList({type, stt})` để load row.
+  - Pre-fill toàn bộ field (kể cả gps_lat/lng readonly).
+  - Đổi nút "Lưu" thành "Cập nhật", submit gọi `apiUpdate` thay vì `apiSubmit`.
+  - Disable thay đổi `Người khảo sát`, `STT` (đã readonly sẵn).
+
+**Audit nghiêm ngặt**: ai sửa gì, khi nào — đều log.
+
+---
+
+### 22.6 — Xuất Excel + PDF
+
+**Mục đích**: ngoài CSV đơn giản, export Excel đa sheet (đẹp, có format) + PDF báo cáo (giấy).
+
+**Thư viện CDN**:
+- SheetJS: `https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js`
+- jsPDF: `https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js`
+- jsPDF AutoTable: `https://cdn.jsdelivr.net/npm/jspdf-autotable@3.7.1/dist/jspdf.plugin.autotable.min.js`
+
+**File sửa**:
+- `kpi.html` + `report.html`: thêm 2 nút "📊 Excel" + "📄 PDF" cạnh "📥 CSV".
+- `js/kpi.js`: hàm `exportXlsx()` tạo workbook 1 sheet (KPI table). Hàm `exportPdf()` tạo PDF A4 portrait với header SAPULICO + tên tháng + bảng KPI + footer trang.
+- `js/report.js`: `exportXlsx()` tạo 3 sheet riêng (Vùng A / B / C). `exportPdf()` PDF A4 landscape với bảng + capture SVG chart → image.
+
+**Format**:
+- Excel: header bold, freeze row 1, autofilter, định dạng số.
+- PDF: logo "SAPULICO" góc trên, ngày export, page number, font Roboto (Google Fonts subset embed).
+
+---
+
+### 22.7 — Reverse geocoding (hẻm/tuyến từ GPS)
+
+**Mục đích**: khi có GPS, tự động đề xuất `Tuyến đường` và `Hẻm`. KTV vẫn được nhập tay/sửa.
+
+**API**: **Nominatim** (OpenStreetMap free, 1 req/s, no key):
+```
+https://nominatim.openstreetmap.org/reverse?lat=10.7&lon=106.7&format=json&zoom=18&accept-language=vi
+```
+Response có `address.road` (tuyến), `address.suburb` (khu), `address.neighbourhood` (hẻm/khu phố).
+
+**File sửa**:
+- `js/gps.js`: thêm `reverseGeocode(lat, lng)` → trả `{road, suburb, neighbourhood, raw}`. Cache 60s mỗi tọa độ để giảm request.
+- `js/form-renderer.js`:
+  - Sau khi `refreshGps()` thành công, tự gọi `reverseGeocode`.
+  - Nếu field `Tuyến đường` còn rỗng → suggest dạng "Trần Phú (tự điền từ GPS)" với nút "✕ Xoá" để KTV không muốn.
+  - Tương tự field `Hẻm` (nếu schema có).
+- Respect KTV input: chỉ suggest, không overwrite nếu đã có giá trị.
+
+**Lưu ý**: Nominatim usage policy yêu cầu User-Agent header và max 1 req/s. Frontend tự throttle.
+
+---
+
+### 22.8 — Bản đồ vị trí GPS (`map.html`)
+
+**Mục đích**: admin xem trực quan vị trí các bản KS trên bản đồ TP.HCM.
+
+**Thư viện CDN**:
+- Leaflet: `https://unpkg.com/leaflet@1.9.4/dist/leaflet.css` + `leaflet.js`
+- Leaflet.markercluster: `https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js`
+
+**File mới**:
+- `map.html` — trang full-screen với filter bar trên + bản đồ chiếm 90% màn hình.
+- `js/map.js` — init Leaflet (tile OpenStreetMap.HOT), load data qua `apiList`, render markers với cluster, color theo loại KS.
+
+**Permission**: thêm `map` vào `phan quyen`. Default: admin/user TRUE, user1 TRUE (chỉ marker của mình), demo FALSE.
+
+**UI**:
+- Filter: loại / KTV (nếu admin) / từ-đến ngày / trạng thái.
+- Center mặc định: trung tâm TP.HCM (10.7769, 106.7009).
+- Marker icon: emoji + màu theo loại KS.
+- Click marker: popup ngắn (Loại + STT + KTV + tuyến) + nút "Mở chi tiết" → modal full.
+- Cluster: zoom out tự gộp.
+- Toggle layer: "Của tôi" / "Tất cả" (admin).
+
+---
+
+### 22.9 — Notification email khi submission mới
+
+**Mục đích**: admin/user nhận email mỗi khi có KTV submit, để theo dõi tiến độ.
+
+**Phương án**: Apps Script `GmailApp.sendEmail` (free 100 mail/ngày tài khoản consumer, 1500/ngày Workspace).
+
+**File sửa**:
+- `apps-script/Code.gs` `handleSubmit`: sau khi appendRow thành công, gọi `notifyAdmins(type, data, stt, user)` async (không block response).
+- Sheet mới `notification_targets`: 2 cột `email` + `enabled`. Admin tự thêm/sửa danh sách.
+- Hàm `notifyAdmins`:
+  - Đọc sheet `notification_targets` (cache 60s).
+  - Gửi email từ chính account chạy script.
+  - Subject: `[SAPULICO KS] {Tên loại} STT #{N} — {Tuyến đường}`.
+  - Body HTML: bảng các field quan trọng + link Google Sheets row + (nếu có) thumbnail ảnh.
+- Error handling: nếu gửi fail (quá quota), log Audit nhưng không reject submit.
+
+**Alternative**: Webhook Telegram (URL bot) thay email — set `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` trong Script Properties. Frontend không cần biết.
+
+---
+
+### 22.10 — Quản lý user CRUD (`users.html`)
+
+**Mục đích**: admin tạo/sửa/khoá user qua UI thay vì chỉnh sheet.
+
+**Permission mới**: `users_manage` — CHỈ admin (không phải user, vì security).
+
+**File mới**:
+- `users.html` — bảng user + nút Thêm/Sửa/Reset PWD/Vô hiệu.
+- `js/users.js` — logic CRUD.
+
+**Endpoint Code.gs**:
+- `action: "users"` (đã có ở 22.2) — list.
+- `action: "user_create"` body `{token, username, password, full_name, role, active}`. Validate: username unique, role hợp lệ, password ≥8 ký tự.
+- `action: "user_update"` body `{token, username, full_name?, role?, active?}` (KHÔNG cho đổi username; muốn đổi → tạo user mới + vô hiệu cũ).
+- `action: "reset_password"` (đã có ở 22.4).
+- KHÔNG có `user_delete` cứng — chỉ soft (active=FALSE) để giữ lịch sử KPI.
+
+**UI**:
+- Bảng: username | full_name | role | active | created_at | actions.
+- Nút "+ Thêm user" → dialog form.
+- Nút "✏️ Sửa" / "🔑 Reset PWD" / "🚫 Vô hiệu" / "✅ Kích hoạt" cạnh mỗi row.
+- Validate front-end + back-end.
+
+**Audit**: ghi log create/update/reset/disable kèm username thực hiện.
+
+---
+
+### 22.11 — Tài liệu tham khảo (`docs.html`)
+
+**Mục đích**: chỗ tập trung văn bản pháp luật + tiêu chuẩn kỹ thuật + link Đảng/Nhà nước/Chính phủ — KTV tra cứu khi cần.
+
+**Sheet mới `tailieu`** trong file Google Sheets:
+| Cột | Kiểu |
+|---|---|
+| `id` | text (auto UUID) |
+| `title` | text |
+| `category` | text (chọn từ: "Văn bản pháp luật", "Tiêu chuẩn kỹ thuật", "Đảng - Nhà nước - Chính phủ", "Hướng dẫn nội bộ", "Khác") |
+| `url` | text (URL) |
+| `description` | text |
+| `added_by` | text (username) |
+| `added_at` | datetime |
+
+**Endpoint Code.gs**:
+- `action: "docs_list"` → đọc sheet, return list.
+- `action: "docs_create"` (admin/user): tạo row mới.
+- `action: "docs_delete"` (admin/user): xoá row theo id.
+
+**File mới**:
+- `docs.html` — grid cards theo category, search box, nút "+ Thêm tài liệu" (admin/user).
+- `js/docs.js` — render + CRUD.
+
+**Link mặc định seed** (chạy 1 lần khi tạo sheet):
+- Cổng Chính phủ: https://chinhphu.vn
+- Đảng Cộng sản VN: https://dangcongsan.vn
+- Bộ Công Thương: https://moit.gov.vn
+- UBND TPHCM: https://hochiminhcity.gov.vn
+- Sở Xây dựng TPHCM: https://soxaydung.hochiminhcity.gov.vn
+- Tiêu chuẩn chiếu sáng QCVN 07: (link cụ thể nếu có)
+
+**Permission**: xem = mọi role. Thêm/xoá = admin/user.
+
+---
+
+### 22.12 — QR code TĐK scan
+
+**Mục đích**: in QR dán lên tủ điều khiển ngoài hiện trường. KTV scan → auto-fill field `Tủ điều khiển`.
+
+**Thư viện CDN**: `jsQR` — `https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js`
+
+**File sửa**:
+- `js/form-renderer.js`: render type `tdk` thêm nút "📷 Scan QR" → mở dialog camera.getUserMedia → loop scan canvas → detect → fill text → đóng dialog.
+
+**File mới**:
+- `tools/qr-generator.html` (admin) — sinh QR cho 903 TĐK in ra (mỗi QR là 1 PNG, content = tên TĐK).
+- Dùng thư viện `qrcode-generator` CDN.
+
+**Permission**: scan = mọi role. Sinh QR (tools) = admin/user.
+
+---
+
+### 22.13 — Voice note cho field Ghi chú
+
+**Mục đích**: KTV ghi chú giọng nói thay vì gõ, tay rảnh chụp ảnh.
+
+**API**: Web Speech API (built-in browser, free).
+
+**File sửa**:
+- `js/form-renderer.js`: trên textarea field `ghi_chu` thêm nút 🎤. Click → `new SpeechRecognition({lang:'vi-VN'})` → bắt đầu nghe → onresult → append text vào ô.
+- Fallback: nếu trình duyệt không support (chủ yếu Safari iOS cũ), ẩn nút.
+
+**UX**:
+- Trạng thái: 🎤 idle → 🔴 recording → ⏹️ stop button.
+- Hiện interim transcript khi đang nói (italic gray) → confirm khi nói xong.
+
+---
+
+### 22.14 — Heatmap khảo sát
+
+**Mục đích**: admin thấy ngay khu vực nào nhiều/ít KS để phân công.
+
+**2 dạng heatmap**:
+- **Table heatmap**: trong `report.html` thêm vùng D — bảng 2D phường × loại, cell tô màu theo count (Tailwind gradient bg-red-100 → bg-red-700).
+- **Map heatmap** (nếu đã làm 22.8 Bản đồ): plugin `Leaflet.heat` — điểm GPS dày = vùng nóng (đỏ), thưa = vùng nguội (xanh).
+
+**File sửa**:
+- `js/report.js`: render vùng D từ data `areaC` (đã có pivot username × type; cần aggregate thêm theo phường).
+- `apps-script/Code.gs` `handleReport`: thêm vùng D output — aggregate theo `Phường`.
+
+**Click cell heatmap** → drill-down list bản ghi.
+
+---
+
+### 22.15 — Backup tự động Sheets → Drive
+
+**Mục đích**: phòng mất dữ liệu (admin lỡ tay xoá sheet, sheet bị hack...).
+
+**Phương án**: Apps Script Time-driven trigger.
+
+**File sửa apps-script/Code.gs**:
+- Hàm `setupBackupTrigger()` (admin chạy 1 lần): tạo time trigger chạy mỗi tuần (vd thứ Hai 00:00).
+- Hàm `weeklyBackup()` (handler): copy spreadsheet → folder Drive `khaosat-backup` (tạo nếu chưa có) → đặt tên `khaosat-YYYY-MM-DD.xlsx`. Giữ tối đa 12 bản gần nhất (xoá cái cũ hơn).
+- Log Audit: action=backup, note=file_id_mới.
+
+**Permission**: không cần — trigger chạy server-side.
+
+**Restore**: thủ công — admin mở Drive folder, copy bản backup về Google Sheets.
+
+---
+
+### 22.16 — Lịch công tác KTV (`schedule.html`)
+
+**Mục đích**: admin phân công KTV → loại KS → khu vực → ngày. KTV xem việc của mình hôm nay/tuần.
+
+**Sheet mới `lichcongtac`**:
+| Cột | Kiểu |
+|---|---|
+| `id` | text (UUID) |
+| `ktv_username` | text |
+| `ngay` | date (YYYY-MM-DD) |
+| `loai_ks` | text (key trong SHEET_MAP) |
+| `khu_vuc` | text (vd "Quận 5, Phường An Đông") |
+| `ghi_chu` | textarea |
+| `status` | text (`pending` / `done` / `skipped`) |
+| `created_by` | text |
+| `created_at` | datetime |
+
+**Endpoint Code.gs**:
+- `action: "schedule_list"` body `{token, from?, to?, ktv_username?}`. Permission: admin/user xem all, user1 xem của mình.
+- `action: "schedule_create"` body `{token, items: [...]}`. Permission `schedule_write` (admin/user).
+- `action: "schedule_update"` body `{token, id, fields}` — đổi status, ngày, ghi chú.
+- `action: "schedule_delete"` body `{token, id}`.
+
+**File mới**:
+- `schedule.html` — admin: form thêm + bảng lịch theo tuần/tháng (grid). user1: list of "Hôm nay" + "Tuần này".
+- `js/schedule.js`.
+
+**Tích hợp form-renderer**:
+- Khi KTV mở `form.html?type=X`, check sheet `lichcongtac` xem có item nào `pending` của KTV này hôm nay không. Hiện badge "📋 Bạn có 5 việc hôm nay, đã xong 2" trên top.
+- Sau khi submit form thành công, auto-update item `pending` gần nhất khớp `loai_ks` thành `done` (smart-match).
+
+**Permission**: thêm `schedule_write` (admin/user) và `schedule_view` (mọi role, server tự filter).
+
+---
+
+### Tóm tắt bổ sung file/sheet/endpoint sau khi làm hết v1.1+
+
+**Sheet mới**: `notification_targets`, `tailieu`, `lichcongtac`.
+
+**File frontend mới**: `my-kpi.html` + `js/my-kpi.js`, `map.html` + `js/map.js`, `users.html` + `js/users.js`, `docs.html` + `js/docs.js`, `schedule.html` + `js/schedule.js`, `tools/qr-generator.html`.
+
+**Action Apps Script mới**: `users`, `user_create`, `user_update`, `reset_password`, `update` (edit bản ghi), `docs_list`, `docs_create`, `docs_delete`, `schedule_list`, `schedule_create`, `schedule_update`, `schedule_delete`.
+
+**Thư viện CDN thêm**: SheetJS, jsPDF + autotable, Leaflet + markercluster + heat, jsQR, qrcode-generator.
+
+**Permission cột mới trong `phan quyen`**: `edit`, `users_manage`, `schedule_write`, `notify_admin`, `map`.
+
+---
+
+**Kết thúc CLAUDE.md.** Mọi quyết định cấu hình đã chốt. **KHÔNG tự động bắt đầu code**. Đợi user yêu cầu rõ ràng (vd "bắt đầu code v1.1", "code 22.X"), rồi thực hiện theo checklist mục 18.
