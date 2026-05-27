@@ -9,18 +9,34 @@
 ### Mục tiêu
 Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường** hệ thống chiếu sáng công cộng tại TP.HCM, nhập dữ liệu qua điện thoại (có chụp ảnh, lấy GPS), dữ liệu tự động đẩy vào Google Sheets. Thay thế cách làm hiện tại (KTV ghi giấy → nhập Excel văn phòng).
 
-### Người dùng
-- **KTV hiện trường**: dùng điện thoại Android/iOS, thao tác trên trình duyệt (Chrome/Safari). Không cần đăng nhập.
-- **Quản lý văn phòng**: xem dữ liệu trực tiếp trên Google Sheets.
+### Người dùng & phân quyền
+
+Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `taikhoan` nhận 1 trong 4 giá trị: `admin`, `user`, `user1`, `demo`.
+
+| Role | Đăng nhập | Submit form | Xoá bản ghi | Xem KPI | Quản lý bản ghi cũ | Xem báo cáo | Mô tả |
+|---|---|---|---|---|---|---|---|
+| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Quản lý văn phòng |
+| `user` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | Alias của admin (cùng quyền, khác tên cho lịch sử) |
+| `user1` | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | **KTV hiện trường mặc định** — submit nhưng không xoá được |
+| `demo` | ✓ | ✗ (readonly) | ✗ | ✗ | ✗ | ✗ | Chỉ xem form, dùng để đào tạo / demo |
+
+**Quy ước**:
+- Sau đăng nhập, frontend lưu `role` trong session và check quyền ở mỗi action.
+- `admin` và `user` được xử lý như nhau trong code (dùng helper `isFullAccess(role)`).
+- Apps Script verify quyền ở server-side, không tin client. Mọi endpoint kiểm role từ token.
+- Trường "Người khảo sát" auto-fill từ `full_name` của user đã đăng nhập (readonly).
 
 ### Phạm vi
 - **15 loại khảo sát** (mỗi loại là 1 form độc lập, ghi vào 1 sheet riêng trong Google Sheets).
 - Mỗi bản ghi có thể đính kèm **nhiều ảnh hiện trường**.
 - Có **lấy GPS tự động** (cho các form khảo sát tuyến).
-- **Không đăng nhập** — KTV tự nhập tên mình ở trường "Người khảo sát".
+- **Có đăng nhập** — username + password lưu trong sheet `taikhoan` của cùng file Google Sheets. Mật khẩu hash SHA-256 + salt. **4 role** (`admin`/`user`/`user1`/`demo`) với 3 mức quyền (xem bảng dưới).
+- **Trang KPI cho quản lý** (`admin`/`user`) — đọc lại data từ Google Sheets qua Apps Script, tính KPI theo tháng cho từng KTV.
+- **Trang quản lý bản ghi** (`admin`/`user`) — tìm/xoá/sửa bản ghi cũ. Dùng **soft-delete** (đánh dấu `Deleted At`, không xoá thật) để khôi phục được khi lỡ tay.
+- **Xoá ảnh Cloudinary** kèm khi soft-delete bản ghi (qua Cloudinary Admin API, dùng `api_key`/`api_secret` lưu trong Script Properties).
 
 ### Các nguyên tắc quan trọng (đọc kỹ)
-1. **Header Google Sheets phải giữ NGUYÊN VĂN tiếng Việt** giống file Excel gốc (kể cả dấu chấm, dấu phẩy, viết hoa/thường lẻ tẻ). Đây là dữ liệu sản xuất, đổi sẽ vỡ workflow downstream của LAVIPCO.
+1. **Header Google Sheets phải giữ NGUYÊN VĂN tiếng Việt** giống file Excel gốc (kể cả dấu chấm, dấu phẩy, viết hoa/thường lẻ tẻ). Đây là dữ liệu sản xuất, đổi sẽ vỡ workflow downstream của SAPULICO.
 2. **Mỗi loại khảo sát = 1 sheet riêng trong cùng 1 Google Sheets file** (không gộp, không tách thành nhiều file).
 3. **Form render động từ JSON schema** — KHÔNG hardcode 15 form HTML riêng. Đây là yêu cầu kiến trúc bắt buộc.
 4. **Không tạo backend** — chỉ dùng Google Apps Script làm proxy ghi data, GitHub Pages host frontend tĩnh.
@@ -54,9 +70,13 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 ├── CLAUDE.md                  ← file này
 ├── README.md                  ← hướng dẫn người dùng (KTV) ngắn gọn
 ├── SETUP.md                   ← hướng dẫn setup Google Sheets, Apps Script, Cloudinary
-├── index.html                 ← trang chủ: chọn 1 trong 15 loại khảo sát
+├── login.html                 ← trang đăng nhập (entry point cho cả KTV và admin)
+├── index.html                 ← trang chủ: chọn 1 trong 15 loại khảo sát (cần đăng nhập)
 ├── form.html                  ← trang form chung, render động theo ?type=...
-├── recent.html                ← trang xem các bản ghi gần đây trong ngày
+├── recent.html                ← trang xem các bản ghi gần đây trong ngày (KTV xem của mình)
+├── manage.html                ← trang quản lý bản ghi (admin/user — tìm/sửa/xoá)
+├── kpi.html                   ← trang KPI tháng (CHỈ admin/user truy cập được)
+├── report.html                ← trang báo cáo tổng hợp theo loại KS / thời gian / KTV (admin/user)
 ├── manifest.json              ← PWA manifest
 ├── sw.js                      ← Service Worker (cache shell + offline)
 ├── assets/
@@ -68,6 +88,10 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 │   ├── lookups.js             ← dữ liệu Phường/Xã (102 mục) và TĐK (903 mục) cho dropdown/autocomplete
 │   ├── form-renderer.js       ← engine render form từ schema
 │   ├── api.js                 ← gọi Apps Script + upload Cloudinary
+│   ├── auth.js                ← login, session token, route-guard, đọc user hiện tại
+│   ├── kpi.js                 ← tính KPI tháng từ data, render bảng/biểu đồ
+│   ├── report.js              ← tổng hợp báo cáo + render bảng/biểu đồ
+│   ├── manage.js              ← logic trang manage.html (list/delete/restore)
 │   ├── gps.js                 ← lấy tọa độ GPS
 │   ├── camera.js              ← xử lý ảnh (compress trước khi upload)
 │   ├── storage.js             ← localStorage: lưu nháp form, queue khi offline
@@ -102,10 +126,67 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 | 14 | `decal_so_tru` | `14 Decal số trụ` | 12 | 1 |
 | 15 | `nang_mong` | `15. Nâng móng` | 15 | 1 |
 
+> **Cách tạo nhanh**: KHÔNG cần thao tác tay tạo 15 sheet. Sau khi tạo file Google Sheets trống và bind Apps Script, admin chạy hàm `initSheets()` 1 lần — script tự tạo đủ 15 sheet với header chính xác + 2 sheet phụ + conditional format. Chi tiết ở mục 7.
+
 **Cột bổ sung cho TẤT CẢ 15 sheet** (thêm vào cuối, sau cột cuối cùng của header gốc):
 - `Ảnh (URLs)` — chuỗi các URL Cloudinary, phân tách bằng `|`
 - `Submitted At` — timestamp ISO khi Apps Script nhận request (server-side, không phải client time)
 - `User Agent` — để debug khi cần
+- `Username` — username của KTV submit (server-side gán từ token đã xác thực, không tin client). Cột này dùng cho tính KPI.
+- `Deleted At` — soft-delete flag. Rỗng = bản ghi còn hiệu lực. Có giá trị (timestamp) = đã bị xoá. KPI và `recent.html` lọc bỏ các row có `Deleted At`. Trên Google Sheets row vẫn nhìn thấy nhưng được tô màu xám/strikethrough (conditional format).
+- `Deleted By` — username của admin/user thực hiện xoá. Rỗng nếu chưa xoá.
+
+### Sheet phụ trong cùng file Google Sheets
+
+Ngoài 15 sheet khảo sát, file Google Sheets có thêm:
+
+**Sheet `taikhoan`** — danh sách người dùng đăng nhập được (tên sheet viết liền, không dấu):
+
+| Cột | Kiểu | Ghi chú |
+|---|---|---|
+| `username` | text | Duy nhất, không dấu, vd: `ktv01`, `admin`, `demo` |
+| `password_hash` | text | SHA-256(password + salt), salt giữ trong Script Properties. **Plaintext không chấp nhận** — verify bằng length 64 hex. |
+| `full_name` | text | Họ tên đầy đủ — auto-fill vào trường "Người khảo sát" |
+| `role` | text | 1 trong 4: `admin` / `user` / `user1` / `demo` (xem mục 1) |
+| `active` | boolean | `TRUE`/`FALSE` — admin có thể vô hiệu hoá account mà không xoá. Nếu cột không tồn tại → ngầm hiểu TRUE. |
+| `created_at` | datetime | Khi tạo account |
+
+Quản lý thêm/sửa user **bằng tay** trực tiếp trên sheet. Khi đổi mật khẩu, admin chạy script trợ giúp (function `hashPassword` trong Apps Script) để sinh hash mới rồi paste vào. Code đọc theo TÊN cột (không theo index) — cho phép sắp xếp cột tuỳ ý.
+
+**Sheet `phan quyen`** — bảng quyền theo role, **admin sửa bằng tick checkbox trực tiếp trên sheet** (không cần sửa code):
+
+| Cột | Kiểu | Ghi chú |
+|---|---|---|
+| `vaiTro` | text | Tên role: `admin`/`user`/`user1`/`demo` |
+| `submit` | boolean (checkbox) | TRUE = role được submit form |
+| `delete` | boolean (checkbox) | TRUE = role được xoá bản ghi |
+| `kpi` | boolean (checkbox) | TRUE = role xem được trang KPI |
+| `manage` | boolean (checkbox) | TRUE = role vào được trang quản lý |
+| `report` | boolean (checkbox) | TRUE = role xem được báo cáo |
+| `moTa` | text | Mô tả vai trò (chỉ để người xem) |
+
+Code đọc sheet này runtime với cache 60s (CacheService). Khi admin tick/untick → áp dụng trong vòng 1 phút. Nếu sheet bị xoá/lỗi → fallback sang DEFAULT_PERMISSIONS hardcode trong Code.gs (đồng bộ với bảng mục 1) → app vẫn chạy.
+
+Data default 4 dòng (initSheets tự tạo):
+- `admin` | TRUE TRUE TRUE TRUE TRUE | Quản lý văn phòng — toàn quyền
+- `user`  | TRUE TRUE TRUE TRUE TRUE | Quản lý phụ (cùng quyền admin)
+- `user1` | TRUE FALSE FALSE FALSE FALSE | KTV hiện trường — chỉ nhập KS
+- `demo`  | FALSE FALSE FALSE FALSE FALSE | Tài khoản xem thử — readonly
+
+**Sheet `KPI_Targets`** (tuỳ chọn, để admin chỉnh chỉ tiêu mà không cần sửa code):
+
+| Cột | Giá trị mặc định |
+|---|---|
+| `target_submissions_per_month` | 50 |
+| `target_distinct_types` | 5 |
+| `target_active_days` | 20 |
+| `weight_frequency` | 0.40 |
+| `weight_quality` | 0.30 |
+| `weight_diversity` | 0.15 |
+| `weight_completeness` | 0.10 |
+| `weight_stability` | 0.05 |
+
+Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định hardcode.
 
 ---
 
@@ -118,9 +199,9 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 - `ngày khảo sát` / `Ngày khảo sát`: **KTV không nhập tay**. Apps Script tự ghi `new Date()` khi nhận request, theo timezone `Asia/Ho_Chi_Minh`, format `yyyy-MM-dd HH:mm:ss`.
 - `kinh độ`, `vĩ độ`: lấy tự động bằng `navigator.geolocation`, KTV có nút "Lấy lại GPS" nếu cần.
 - `link` / `Link Google Map`: tự sinh `https://www.google.com/maps?q=<lat>,<lng>` nếu có GPS, để trống nếu không.
-- `Bản vẽ`: để trống, KTV không nhập (do file gốc thường để trống — confirm với user nếu cần).
+- `Bản vẽ`: text input, **không bắt buộc**. KTV nhập tên/mã bản vẽ thiết kế nếu có (vd "BV-2026-001"), để trống nếu chưa có. (chốt 2026-05-26: KTV được nhập)
 - `Ghi chú`: luôn là `textarea`, không bắt buộc.
-- `Người khảo sát`: text input, **bắt buộc**, có gợi ý lưu vào localStorage (lần sau KTV mở form sẽ thấy tên cũ pre-fill).
+- `Người khảo sát`: **KTV không nhập tay**. Sau khi đăng nhập, frontend đọc `full_name` của user từ session và tự điền vào trường này (hiển thị readonly). KHÔNG cho phép sửa để tránh giả mạo. Server-side cũng overwrite trường này từ token để chắc chắn (defense in depth).
 - `Quận`, `Phường`: dropdown lấy từ `lookups.js`. Quận chọn trước → lọc danh sách phường thuộc quận đó.
 - `Tủ điều khiển`: autocomplete (datalist) từ `lookups.js`, cho phép nhập tự do (vì có thể TĐK mới chưa có trong danh mục).
 
@@ -161,7 +242,7 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 | 14 | kinh độ | lng | gps_lng | — | |
 | 15 | vĩ độ | lat | gps_lat | — | |
 | 16 | Người khảo sát | nguoi_ks | text | **Yes** | |
-| 17 | Bản vẽ | ban_ve | skip | — | để trống |
+| 17 | Bản vẽ | ban_ve | text | No | KTV nhập mã/tên bản vẽ nếu có |
 | 18 | Ghi chú | ghi_chu | textarea | No | |
 | 19 | Vị trí | vi_tri | text | No | |
 | 20 | Tên hẻm | ten_hem | text | No | |
@@ -193,7 +274,7 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 | 19 | kinh độ | lng | gps_lng | — |
 | 20 | vĩ độ | lat | gps_lat | — |
 | 21 | Người khảo sát | nguoi_ks | text | **Yes** |
-| 22 | Bản vẽ | ban_ve | skip | — |
+| 22 | Bản vẽ | ban_ve | text | No |
 | 23 | Ghi chú | ghi_chu | textarea | No |
 
 **5.3 `thay_den` — "Thay den"**
@@ -213,7 +294,7 @@ Xây website cho phép **kỹ thuật viên (KTV) khảo sát hiện trường**
 | 11 | Năm lắp đặt | nam_ld | number | No |
 | 12 | ngày khảo sát | ngay_ks | date_auto | — |
 | 13 | Người khảo sát | nguoi_ks | text | **Yes** |
-| 14 | Bản vẽ | ban_ve | skip | — |
+| 14 | Bản vẽ | ban_ve | text | No |
 | 15 | Ghi chú | ghi_chu | textarea | No |
 | 16 | link | link_gmap | link_gmap | — |
 
@@ -475,15 +556,157 @@ export const TDK_LIST = [
 ## 7. Google Apps Script — `apps-script/Code.gs`
 
 ### Yêu cầu
-- 1 hàm `doPost(e)` nhận JSON body `{ type: "tang_cuong_den", data: {...} }`.
+- 1 hàm `doPost(e)` duy nhất nhận JSON body có trường `action`:
+  - `action: "login"` — body `{ username, password }` → trả `{ ok, token, full_name, role }`
+  - `action: "submit"` — body `{ token, type, data, photos: [urls] }` → ghi row vào sheet tương ứng. Reject nếu role là `demo`.
+  - `action: "list"` — body `{ token, type?, username?, from?, to?, includeDeleted? }` → trả danh sách bản ghi (cho `recent.html` và `manage.html`). Role `user1`/`demo` chỉ thấy của mình; `admin`/`user` thấy tất cả.
+  - `action: "delete"` — body `{ token, type, stt }` → soft-delete (set `Deleted At` + `Deleted By`) + xoá ảnh Cloudinary kèm. Chỉ `admin`/`user` được gọi.
+  - `action: "restore"` — body `{ token, type, stt }` → undo soft-delete (clear `Deleted At` + `Deleted By`). Không restore được ảnh (đã xoá Cloudinary). Chỉ `admin`/`user`.
+  - `action: "kpi"` — body `{ token, month: "2026-05" }` → trả KPI tất cả KTV trong tháng. Chỉ `admin`/`user`.
+  - `action: "report"` — body `{ token, types?: [...], from?, to?, usernames?: [...], status? }` → trả aggregation đa chiều cho trang báo cáo. Chỉ `admin`/`user`. Chi tiết ở mục 15.
 - Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
-- Server-side gán: `STT` (= maxRow của sheet trừ header rows + 1), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`).
+- Server-side gán: `STT` (= maxRow của sheet trừ header rows + 1), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`), `Người khảo sát` (= `full_name` từ user của token), `Username` (= username từ token).
 - Append row.
 - Trả về JSON `{ ok: true, stt: <số>, sheet: <tên> }` với `ContentService.createTextOutput().setMimeType(JSON)`.
 - Bắt lỗi → `{ ok: false, error: <msg> }` và `Logger.log`.
 - **CORS**: Apps Script khi deploy as Web App `Anyone` đã tự cho phép. Frontend gọi bằng `fetch(URL, { method: 'POST', mode: 'no-cors' ... })` ban đầu sẽ KHÔNG đọc được response → giải pháp: dùng `Content-Type: text/plain` để tránh preflight CORS, vẫn POST được. Hoặc dùng `application/x-www-form-urlencoded`. **Test kỹ trên mobile Safari trước khi nói đã xong.**
+
+### Authentication & phân quyền
+- **Password hashing**: SHA-256(password + salt). Salt cố định, lấy từ `PropertiesService.getScriptProperties().getProperty('AUTH_SALT')` (set thủ công trong Project Settings → Script Properties, vd salt 32 ký tự random).
+- **Token**: sau khi login thành công, sinh token = `base64(username + "|" + expiresAt + "|" + HMAC_SHA256(username + expiresAt, salt))`. `expiresAt` = now + 8h. Stateless, không cần lưu DB.
+- **Verify token** mỗi request: decode → kiểm tra expiresAt > now → recompute HMAC → match thì OK, trả lại `{ username, role, full_name }` (đọc lại từ sheet `taikhoan`, để role/full_name luôn fresh nếu admin sửa).
+- **Rate limiting nhẹ**: giới hạn 5 lần login sai/phút từ cùng 1 username bằng `CacheService`. Sai quá → khoá 5 phút.
+- **active=FALSE** trong sheet `taikhoan` → từ chối login với message "Tài khoản đã bị khoá".
+
+**Permissions**: Apps Script đọc từ sheet `phan quyen` (mục 4) với cache 60s. Frontend `js/auth.js` chỉ giữ DEFAULT_PERMISSIONS hardcode đồng bộ để render UI (hide/show menu) — server vẫn là source of truth.
+
+```javascript
+// Hardcode default trong cả Code.gs và js/auth.js (đồng bộ với data default sheet phan quyen)
+const DEFAULT_PERMISSIONS = {
+  admin:  { submit: true,  delete: true,  kpi: true,  manage: true,  report: true  },
+  user:   { submit: true,  delete: true,  kpi: true,  manage: true,  report: true  },
+  user1:  { submit: true,  delete: false, kpi: false, manage: false, report: false },
+  demo:   { submit: false, delete: false, kpi: false, manage: false, report: false }
+};
+
+// Code.gs: đọc runtime từ sheet, fallback default
+function getPermissions() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('permissions');
+  if (cached) return JSON.parse(cached);
+  try {
+    const sheet = getSpreadsheet().getSheetByName('phan quyen');
+    const data = sheet.getDataRange().getValues();
+    const header = data[0];
+    const idxRole = header.indexOf('vaiTro');
+    const actions = ['submit', 'delete', 'kpi', 'manage', 'report'];
+    const perms = {};
+    for (let i = 1; i < data.length; i++) {
+      const role = data[i][idxRole];
+      if (!role) continue;
+      perms[role] = {};
+      actions.forEach(a => {
+        perms[role][a] = data[i][header.indexOf(a)] === true;
+      });
+    }
+    cache.put('permissions', JSON.stringify(perms), 60);
+    return perms;
+  } catch (err) {
+    Logger.log('getPermissions fallback to default: ' + err);
+    return DEFAULT_PERMISSIONS;
+  }
+}
+
+function can(role, action) {
+  const p = getPermissions();
+  return !!(p[role] && p[role][action]);
+}
+function isFullAccess(role) { return role === 'admin' || role === 'user'; }
+```
+
+Mỗi endpoint kiểm tra `can(role, action)` đầu hàm, fail thì trả `{ ok: false, error: "forbidden" }`. Frontend cũng check để ẩn UI, nhưng server-side check là **bắt buộc** (không tin client).
+
+### Soft-delete
+- Hàm `softDelete(type, stt, deletedByUsername)`:
+  1. Verify role có quyền `delete`.
+  2. Mở sheet, tìm row có `STT` khớp.
+  3. Đọc cột `Ảnh (URLs)` → parse các `public_id` Cloudinary → gọi Cloudinary Admin API xoá (xem mục 8).
+  4. Set cột `Deleted At` = now, `Deleted By` = username.
+  5. Trả `{ ok: true }`.
+- Hàm `restore(type, stt)`:
+  1. Verify role.
+  2. Clear `Deleted At`, `Deleted By`.
+  3. **Không khôi phục được ảnh** đã xoá Cloudinary — báo cảnh báo "Ảnh đính kèm đã bị xoá vĩnh viễn, chỉ khôi phục được dữ liệu chữ".
+
+### Conditional format cho row deleted
+Trong file SETUP.md, hướng dẫn admin set conditional formatting cho 15 sheet: nếu cột `Deleted At` không rỗng → tô màu xám + strikethrough. Giúp nhìn trực quan trong Google Sheets. **`initSheets()` tự áp conditional format khi tạo sheet, user không cần thao tác tay.**
+
+### Hàm `initSheets()` — tự tạo cấu trúc Google Sheets
+Để tránh user phải tạo thủ công 15 sheet + paste header tiếng Việt (dễ sai), Apps Script phải có hàm public `initSheets()`. Admin tạo file Google Sheets trống → bind Apps Script → chạy `initSheets()` 1 lần là xong toàn bộ cấu trúc.
+
+**Yêu cầu hàm `initSheets()`:**
+1. Đọc spreadsheet hiện tại (qua `SpreadsheetApp.openById(SPREADSHEET_ID)` lấy từ Script Properties).
+2. Với mỗi entry trong `SHEET_MAP` (15 loại KS):
+   - Nếu sheet đã tồn tại với tên đúng → SKIP (không ghi đè để bảo toàn dữ liệu).
+   - Nếu chưa → tạo mới với tên đúng (chính xác từng ký tự, kể cả khoảng trắng/dấu chấm).
+   - Set header row 1 = `[...HEADERS[type], 'Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By']`.
+   - Freeze row 1 (`sheet.setFrozenRows(1)`).
+   - Set conditional format: nếu cột `Deleted At` của row hiện tại không rỗng → tô xám nhạt (#f0f0f0) + strikethrough toàn row.
+   - Tự động set column width vừa phải cho cột STT (40px), Ngày khảo sát (140px), Người khảo sát (120px), Ảnh URLs (200px).
+3. Tạo sheet `taikhoan` nếu chưa có:
+   - Header: `[username, password_hash, full_name, role, active, created_at]`.
+   - Freeze row 1.
+   - Data validation cho cột `role`: chỉ chấp nhận `admin`/`user`/`user1`/`demo`.
+   - Data validation cho cột `active`: checkbox TRUE/FALSE.
+4. Tạo sheet `KPI_Targets` nếu chưa có:
+   - 2 cột: `param`, `value`.
+   - 8 row default theo mục 4 (target_submissions_per_month=50, target_distinct_types=5, …, weight_stability=0.05).
+5. Sheet `Audit` không tạo sẵn — sẽ tự sinh khi có lần delete/restore đầu tiên.
+6. Xoá sheet "Sheet1" mặc định nếu vẫn còn và trống.
+7. Trả về `{ok: true, created: [...], skipped: [...], message: "..."}` để admin xem kết quả.
+
+**Tách const `HEADERS`** ở đầu Code.gs:
+```javascript
+const HEADERS = {
+  tang_cuong_den: ['STT','Hẻm','Tuyến đường','Quận','Phường','Tủ điều khiển',
+                   'Độ rộng đường','Dãy phân cách','Số làn xe','Đầu tuyến','Cuối tuyến',
+                   'Số đèn dự kiến','ngày khảo sát','kinh độ','vĩ độ','Người khảo sát',
+                   'Bản vẽ','Ghi chú','Vị trí','Tên hẻm','Trạng thái thiết kế','Link Google Map'],
+  ngam_hoa: [...],  // 23 cột
+  // ... đủ 15 loại, label nguyên văn theo mục 5
+};
+```
+
+**Lưu ý đồng bộ**: nội dung `HEADERS` trong Code.gs PHẢI khớp NGUYÊN VĂN với `label` trong `js/schemas.js` và bảng schema mục 5. Khi sửa schema, sửa cả 2 nơi.
+
+Ngoài ra, có thể thêm hàm `validateSheets()` (tuỳ chọn) — quét tất cả sheet, so sánh header thực tế với `HEADERS`, báo lỗi nếu lệch. Hữu ích khi nghi sheet bị sửa nhầm.
+
+### Hàm `migrateTaikhoan()` — chuyển sheet `taikhoan` cũ sang format mới
+
+Vì file Google Sheets `khao-sat-ke-hoach` đã có sẵn sheet `taikhoan` với header tiếng Việt cũ (`tenDangNhap`, `matKhau`, `hoTen`, `vaiTro`, `Ngày cấp`) và mật khẩu **plaintext**, cần hàm migration chạy 1 lần để chuyển sang format mới:
+
+1. Phát hiện header cũ → đổi tên:
+   - `tenDangNhap` → `username`
+   - `matKhau` → `password_hash`
+   - `hoTen` → `full_name`
+   - `vaiTro` → `role`
+   - `Ngày cấp` → `created_at`
+2. Thêm cột `active` nếu chưa có, default TRUE cho tất cả row.
+3. Với mỗi row, nếu `password_hash` length != 64 (= không phải SHA-256 hex) → coi là plaintext, hash lại bằng `hashPassword(plain)` và ghi đè. Log từng user đã migrate.
+4. Idempotent: chạy lại an toàn (đã hash thì skip).
+5. Return JSON `{ok, migrated_users: [...], skipped: [...], renamed_columns: bool, added_active: bool}`.
+
+### Endpoint `action=kpi` chi tiết
+- Chỉ chấp nhận khi `role === "admin"`. Token role=ktv → trả `{ ok: false, error: "forbidden" }`.
+- Input: `month` định dạng `YYYY-MM` (vd `2026-05`).
+- Xử lý:
+  1. Đọc sheet `taikhoan` → danh sách KTV active.
+  2. Đọc 15 sheet khảo sát, filter row có `Submitted At` thuộc tháng `month` VÀ `Username` thuộc KTV active.
+  3. Với mỗi KTV, tính 5 chỉ tiêu (xem mục 13 — Trang KPI).
+  4. Trả `{ ok: true, month, results: [{ username, full_name, frequency, quality, diversity, completeness, stability, total, grade }, ...] }`.
+- Performance: scan toàn bộ 15 sheet có thể chậm nếu data nhiều ngàn dòng. Chấp nhận response 3-5s. Nếu sau này cần tối ưu, thêm sheet cache `KPI_Cache` cập nhật incremental khi mỗi submit.
 
 ### Lưu ý sheet `5. TCNoi`
 - File gốc có header ở **row 2** (row 1 trống/có giá trị lạ "3125").
@@ -519,6 +742,20 @@ const SHEET_MAP = {
 1. Tạo tài khoản tại `cloudinary.com` (free).
 2. Tạo unsigned upload preset, set folder mặc định `khaosat`.
 3. Lấy `cloud_name` và `upload_preset`, điền vào `js/config.js`.
+4. Lấy `api_key` và `api_secret` (Dashboard → Account Details) → **lưu trong Apps Script Properties**:
+   - `CLOUDINARY_API_KEY`
+   - `CLOUDINARY_API_SECRET`
+   - **KHÔNG** đưa các giá trị này vào `js/config.js` (frontend public).
+
+### Xoá ảnh khi soft-delete bản ghi
+Apps Script gọi Cloudinary Admin API:
+```
+POST https://api.cloudinary.com/v1_1/{cloud_name}/image/destroy
+Body: { public_id, api_key, timestamp, signature }
+signature = SHA1("public_id={pid}&timestamp={ts}" + api_secret)
+```
+- `public_id` parse từ URL Cloudinary đã lưu (vd `https://res.cloudinary.com/X/image/upload/v123/khaosat/tang_cuong_den/abc.jpg` → public_id = `khaosat/tang_cuong_den/abc`).
+- Lỗi xoá ảnh (ảnh không tồn tại, network…) → **không chặn soft-delete row**, chỉ log và tiếp tục. Quan trọng hơn là dữ liệu chữ được đánh dấu xoá.
 
 ### Code upload trong `js/api.js`
 ```javascript
@@ -595,7 +832,7 @@ Lưới 15 thẻ, mỗi thẻ:
 - Click → mở `form.html?type=<key>`
 
 Header trang chủ có:
-- Logo LAVIPCO (placeholder text "LAVIPCO" nếu chưa có logo)
+- Logo SAPULICO (placeholder text "SAPULICO" nếu chưa có logo)
 - Link "Xem khảo sát hôm nay" → `recent.html`
 - Indicator online/offline + số bản chờ sync
 
@@ -610,12 +847,247 @@ Header trang chủ có:
 
 ---
 
-## 12. PWA
+## 12. Trang đăng nhập `login.html`
+
+### Mục đích
+- Entry point của toàn bộ app. Mọi trang khác (`index.html`, `form.html`, `recent.html`, `kpi.html`) **bắt buộc** check session ngay khi load — không có session hợp lệ → redirect về `login.html`.
+
+### UI
+- Form đơn giản: 1 input username + 1 input password + 1 nút "Đăng nhập".
+- Có checkbox "Nhớ tôi" (mặc định bật) — kiểm soát việc lưu token vào `localStorage` (8 tiếng) hay `sessionStorage` (đến khi đóng tab).
+- Hiện lỗi inline: "Sai tên đăng nhập hoặc mật khẩu", "Tài khoản bị khoá", "Sai 5 lần, vui lòng đợi 5 phút".
+- Mobile-first như form khảo sát, button cao ≥44px.
+- Logo + tên app phía trên form.
+
+### Luồng đăng nhập
+1. User nhập username/password → click "Đăng nhập".
+2. Frontend gọi `POST {action: "login", username, password}` đến Apps Script.
+3. Apps Script verify (hash + so sánh với sheet `taikhoan`).
+4. Thành công → trả `{ ok: true, token, full_name, role, expires_at }`.
+5. Frontend lưu `{ token, username, full_name, role, expires_at }` vào storage.
+6. Redirect theo role:
+   - `admin` hoặc `user` → `kpi.html` (mặc định cho quản lý).
+   - `user1` → `index.html` (KTV nhập khảo sát).
+   - `demo` → `index.html` nhưng mọi form ở chế độ readonly (nút Lưu disabled, hiện banner "Chế độ xem thử").
+
+### Route guard (`js/auth.js`)
+- Hàm `requireAuth(requiredPermission?)`: gọi đầu mỗi trang. Truyền tên permission cần (`submit`/`delete`/`kpi`/`manage`), hoặc không truyền để chỉ check đăng nhập.
+  - Đọc token từ storage. Nếu không có / hết hạn → `location.replace('login.html')`.
+  - Nếu `requiredPermission` được truyền và `PERMISSIONS[role][requiredPermission]` là false → redirect về trang phù hợp với role hiện tại (vd user1 vào `kpi.html` → đẩy về `index.html`; demo vào `manage.html` → đẩy về `index.html`).
+- Hàm `getCurrentUser()`: trả `{ username, full_name, role }`.
+- Hàm `hasPermission(action)`: shortcut cho `PERMISSIONS[currentRole][action]`. Dùng để show/hide UI (vd ẩn nút Xoá nếu không có quyền).
+- Hàm `logout()`: clear storage + redirect login. Có nút "Đăng xuất" ở header mọi trang.
+
+### Áp dụng cho từng trang
+| Trang | Yêu cầu | Role được vào |
+|---|---|---|
+| `login.html` | không cần auth | tất cả (và chưa đăng nhập) |
+| `index.html` | đăng nhập | tất cả (4 role) |
+| `form.html` | `requireAuth('submit')` cho nút Lưu | demo vào được nhưng disable nút Lưu |
+| `recent.html` | đăng nhập | tất cả; user1/demo chỉ thấy bản ghi của mình; admin/user thấy tất cả |
+| `manage.html` | `requireAuth('manage')` | admin, user |
+| `kpi.html` | `requireAuth('kpi')` | admin, user |
+
+### Bảo mật — biết rõ giới hạn
+- Mật khẩu hash SHA-256 + salt server-side là **đủ** cho nội bộ SAPULICO, **không đủ** cho hệ thống công khai. Không có 2FA, không lockout DB-side ngoài rate limit memory.
+- Token stateless không thể revoke trước khi hết hạn (trừ khi đổi salt — sẽ vô hiệu hoá TẤT CẢ token đang dùng).
+- Apps Script Web App `Anyone` nghĩa là endpoint public — bất kỳ ai có URL đều có thể spam request login. Rate limit ở mục 7 giảm thiểu, không loại bỏ.
+- **Khuyến nghị**: chỉ dùng URL Apps Script trong nội bộ, không công khai trên trang public.
+
+---
+
+## 13. Trang KPI `kpi.html` (admin / user)
+
+### Mục đích
+Trang dashboard cho **quản lý văn phòng** xem hiệu quả và chấm điểm KPI cho từng KTV theo tháng. Tự động tính từ data thực trong Google Sheets, **không cần nhập tay**.
+
+### Quyền truy cập
+- `requireAuth('kpi')` ở đầu trang → chỉ role `admin` hoặc `user` vào được.
+- `user1`/`demo` vô tình mở URL này → bị đẩy về `index.html`.
+- **Lưu ý KPI**: chỉ tính trên bản ghi có `Deleted At` rỗng (bỏ qua bản đã soft-delete).
+
+### UI
+- Dropdown chọn tháng (mặc định = tháng hiện tại). Format `YYYY-MM`. Có thể chọn các tháng đã qua.
+- Nút "Tải dữ liệu" → gọi `action=kpi` đến Apps Script.
+- Hiện loading spinner (request có thể 3-5s).
+- Bảng kết quả, mỗi hàng 1 KTV, cột:
+
+| KTV | Họ tên | Số bản | Tần suất | Chất lượng | Đa dạng | Đầy đủ | Ổn định | **Tổng** | Xếp loại |
+|---|---|---|---|---|---|---|---|---|---|
+
+- Sort theo cột "Tổng" giảm dần (KTV xuất sắc lên đầu).
+- Mỗi cột con cũng sortable bằng click header.
+- Xếp loại có màu: A=xanh, B=xanh nhạt, C=vàng, D=đỏ.
+- Có nút "Xuất CSV" → download file CSV để admin báo cáo.
+- Click vào 1 KTV → mở modal hiện chi tiết: bản ghi theo từng loại KS, biểu đồ cột số bản theo ngày trong tháng (vẽ bằng SVG thuần, không thư viện).
+
+### 5 chỉ tiêu chấm điểm (NGUỒN CHÂN LÝ)
+
+Tính cho từng KTV trong tháng `M`:
+
+**1. Tần suất** (`frequency`, trọng số 40%)
+- Đếm số bản ghi user này submit trong tháng M (tất cả 15 loại cộng lại).
+- Công thức: `min(count / target_submissions_per_month, 1) × 100`
+- Default target = **50 bản/tháng**.
+
+**2. Chất lượng dữ liệu** (`quality`, trọng số 30%)
+- `pct_anh` = % bản có ≥1 URL trong cột `Ảnh (URLs)`.
+- `pct_gps` = % bản có cả `kinh độ` và `vĩ độ` khác rỗng (chỉ tính trên các loại form có GPS — `hkn`, `vo_tu` không có GPS thì bỏ qua khỏi mẫu số).
+- Công thức: `(pct_anh + pct_gps) / 2`
+
+**3. Đa dạng loại KS** (`diversity`, trọng số 15%)
+- Số loại khảo sát khác nhau (trong 15 loại) mà user đã submit ít nhất 1 bản trong tháng.
+- Công thức: `min(distinct_types / target_distinct_types, 1) × 100`
+- Default target = **5 loại**.
+
+**4. Đầy đủ thông tin** (`completeness`, trọng số 10%)
+- Với mỗi bản: tỉ lệ trường `optional` (không bắt buộc) đã điền / tổng trường optional của loại đó.
+- Trung bình tỉ lệ này trên tất cả bản trong tháng → × 100.
+- Khuyến khích KTV điền cả ghi chú, năm lắp đặt, v.v.
+
+**5. Tính ổn định** (`stability`, trọng số 5%)
+- Số ngày khác nhau trong tháng mà user có ít nhất 1 submit (xét theo cột `Submitted At`, timezone Asia/Ho_Chi_Minh).
+- Công thức: `min(active_days / target_active_days, 1) × 100`
+- Default target = **20 ngày/tháng**.
+
+### Công thức tổng
+
+```
+KPI_total = frequency × 0.40
+          + quality × 0.30
+          + diversity × 0.15
+          + completeness × 0.10
+          + stability × 0.05
+```
+
+Kết quả thang **0-100**, làm tròn 1 chữ số thập phân.
+
+### Xếp loại
+
+| Điểm | Loại | Ý nghĩa |
+|---|---|---|
+| ≥ 85 | **A** | Xuất sắc |
+| 70 – 84.9 | **B** | Tốt |
+| 55 – 69.9 | **C** | Đạt |
+| < 55 | **D** | Cần cải thiện |
+
+### Lưu ý quan trọng
+- **Trọng số và mục tiêu lấy từ sheet `KPI_Targets`** nếu tồn tại, ngược lại dùng default trên. Cho phép admin tinh chỉnh mà không sửa code.
+- KTV mới (chưa đủ tháng) sẽ có KPI thấp tự nhiên — admin tự đánh giá bối cảnh, không trừ điểm chỉ vì mới vào.
+- Trang KPI **không sửa được dữ liệu** — chỉ xem. Sửa data phải vào Google Sheets trực tiếp.
+- Khi có nghi vấn (vd KTV claim "tôi làm nhiều mà điểm thấp"), admin click chi tiết KTV → kiểm tra danh sách bản ghi cụ thể.
+
+---
+
+## 14. Trang quản lý bản ghi `manage.html` (admin / user)
+
+### Mục đích
+Cho admin/user tìm và xoá (soft-delete) các bản ghi cũ trực tiếp trong app, không cần mở Google Sheets. Khôi phục được bản đã xoá nhầm.
+
+### Quyền truy cập
+- `requireAuth('manage')` → chỉ `admin`, `user`.
+- `user1`/`demo` truy cập → redirect `index.html`.
+
+### UI
+- **Bộ lọc** ở đầu trang:
+  - Loại khảo sát (dropdown 15 loại + "Tất cả")
+  - KTV (dropdown lấy từ sheet `taikhoan`)
+  - Khoảng thời gian: từ ngày → đến ngày
+  - Trạng thái: `Đang hoạt động` / `Đã xoá` / `Tất cả` (mặc định `Đang hoạt động`)
+  - Ô tìm kiếm tự do (search trong cột Tuyến đường, Ghi chú)
+- Nút "Tìm" → gọi `action=list` với filter, hiện loading.
+- **Bảng kết quả** (paginate 50/trang):
+
+| ☐ | STT | Loại | Tuyến đường | KTV | Ngày | Ảnh | Trạng thái | Thao tác |
+|---|---|---|---|---|---|---|---|---|
+
+- Cột "Ảnh": click → mở lightbox xem các ảnh đính kèm.
+- Cột "Trạng thái": tag xanh `Hoạt động` / tag xám `Đã xoá lúc YYYY-MM-DD bởi X`.
+- Cột "Thao tác":
+  - Bản đang hoạt động → nút **Xem** (modal readonly) + nút **Xoá** (confirm 2 bước).
+  - Bản đã xoá → nút **Khôi phục** (chỉ phục hồi data, không khôi phục ảnh — báo trước).
+- Checkbox đầu hàng + nút "Xoá đã chọn" để xoá hàng loạt (kèm confirm).
+
+### Confirm xoá
+Modal:
+```
+Bạn sắp xoá bản ghi STT #N của loại "Tang cuong den".
+- Dữ liệu sẽ được đánh dấu xoá (có thể khôi phục).
+- Tất cả ảnh đính kèm sẽ bị xoá VĨNH VIỄN khỏi Cloudinary, KHÔNG khôi phục được.
+
+[Huỷ]  [Xoá vĩnh viễn ảnh + soft-delete data]
+```
+
+### Audit log nhẹ
+- Mỗi lần xoá, ghi log vào sheet `Audit` (cùng file):
+  - `timestamp` | `action` (delete/restore) | `username` | `target_sheet` | `target_stt` | `note`
+- Sheet `Audit` được tự động tạo nếu chưa có. Admin xem bằng cách mở Google Sheets, không cần UI trong app.
+
+---
+
+## 15. Trang báo cáo tổng hợp `report.html` (admin / user)
+
+### Mục đích
+Khác với KPI (chấm điểm KTV), trang này tổng hợp **số liệu khảo sát** theo các chiều cắt (loại KS / thời gian / KTV / trạng thái) để admin báo cáo lên cấp trên và theo dõi tiến độ dự án.
+
+### Quyền truy cập
+- `requireAuth('report')` → chỉ `admin`, `user`.
+- `user1`/`demo` truy cập → redirect `index.html`.
+
+### UI
+- **Bộ lọc** (ngang trên đầu trang):
+  - Loại khảo sát: multi-select (15 loại), mặc định "Tất cả".
+  - Khoảng thời gian: từ ngày → đến ngày. Có preset nhanh: "Tháng này", "Tháng trước", "Quý này", "Năm nay", "Tuỳ chọn".
+  - KTV: multi-select từ sheet `taikhoan`, mặc định "Tất cả".
+  - Trạng thái: `Đang hoạt động` (mặc định) / `Đã xoá` / `Tất cả`.
+  - Mức tổng hợp (group by): `Ngày` / `Tuần` / `Tháng` / `Quý`. Mặc định = `Tháng`.
+- Nút "Tải báo cáo" → gọi `action=report` với filter.
+- **Khu vực kết quả** chia 3 vùng:
+
+  **A. Bảng tổng quan** (1 dòng/loại KS):
+  | Loại KS | Tổng bản | Có ảnh | Có GPS | Trung bình ảnh/bản | Đã xoá |
+  |---|---|---|---|---|---|
+
+  **B. Biểu đồ cột chồng** (stacked bar chart, vẽ bằng SVG vanilla):
+  - Trục X = thời gian (theo mức group by).
+  - Mỗi cột = tổng số bản, chia màu theo loại KS.
+  - Tooltip hover hiện chi tiết.
+
+  **C. Bảng pivot KTV × Loại KS**:
+  | KTV \ Loại | Tang cuong den | Ngam Hoa | ... | Tổng |
+  |---|---|---|---|---|
+  | Nguyễn Văn A | 12 | 8 | ... | 45 |
+  | ... |
+
+- Nút "Xuất CSV" → tải về 3 file CSV tương ứng 3 vùng A/B/C (zip lại 1 file).
+- Click vào số trong bảng → mở popup hiện danh sách bản ghi cụ thể (drill-down).
+
+### Logic server-side `action=report`
+1. Verify role có quyền `report`.
+2. Scan các sheet trong `types` (mặc định 15 sheet), filter rows:
+   - `Submitted At` thuộc `[from, to]`.
+   - `Username` thuộc `usernames` (nếu chỉ định).
+   - `Deleted At` rỗng/không rỗng theo `status`.
+3. Aggregate:
+   - Đếm theo loại.
+   - Đếm theo (loại, thời_gian_bucket) — bucket tính theo `Submitted At` và mức group by.
+   - Đếm theo (KTV, loại).
+   - Đếm ảnh, GPS theo loại.
+4. Trả về 3 mảng tương ứng 3 vùng A/B/C. Format ổn định để frontend render.
+
+### Performance
+- Với 15 sheet × vài ngàn rows, scan toàn bộ có thể 3-8s. Chấp nhận với UI loading rõ ràng.
+- Nếu sau này dữ liệu vượt 50k rows, cân nhắc thêm sheet `Index` cache rebuild incremental khi mỗi submit. Chưa làm ngay.
+- **Tuỳ chọn**: trang `report.html` có thể đọc trực tiếp từ Google Sheets **CSV publish URL** (xem mục 16) thay vì gọi Apps Script — nhanh hơn vì không qua serverless. Nhược điểm: data public, không filter server-side, cần parse 15 CSV. Mặc định KHÔNG dùng cách này; chỉ bật khi Apps Script chậm quá.
+
+---
+
+## 16. PWA
 
 `manifest.json`:
 ```json
 {
-  "name": "Khảo sát chiếu sáng LAVIPCO",
+  "name": "Khảo sát chiếu sáng SAPULICO",
   "short_name": "KS Đèn",
   "start_url": "./",
   "display": "standalone",
@@ -632,88 +1104,156 @@ Header trang chủ có:
 
 ---
 
-## 13. File `js/config.js`
+## 17. File `js/config.js`
 
 ```javascript
 // js/config.js — Sửa các giá trị này sau khi setup xong Apps Script & Cloudinary
 export const CONFIG = {
-  // URL Apps Script Web App (sau khi deploy)
-  appsScriptUrl: 'https://script.google.com/macros/s/XXXXXXXXXX/exec',
-  
+  // URL Apps Script Web App (SAPULICO production, deployed 2026-05-26)
+  appsScriptUrl: 'https://script.google.com/macros/s/AKfycbxX9mgYO6g9A4BRTmJN3QpiZg1VutAeWcNgm4hY8zHPaPykgWYmgFv8M20S7YG8oCp7/exec',
+
+  // CSV publish URL của Google Sheets (read-only, dùng cho report.html nếu cần đọc trực tiếp)
+  // CẢNH BÁO: URL này public, ai có URL đều đọc được data.
+  sheetsCsvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRajzWe7TR5VPW5QOzYAOdZJoqRRbQpk4iO4GKOT4rd7GUQj87fTsPAll6cCC6bkcpEyMs5FYg_JMrH/pub?output=csv',
+
   // Cloudinary
   cloudinaryName: 'your-cloud-name',
   cloudinaryPreset: 'khaosat_unsigned',
-  
+
   // Tùy chọn
   imageMaxDim: 1600,
   imageQuality: 0.8,
   autosaveInterval: 5000,
+  sessionTimeoutHours: 8,
 };
 ```
 
-**KHÔNG commit URL/key thật lên repo public**. Tài liệu phải nhắc user fork private repo, hoặc dùng GitHub Actions secrets nếu muốn public.
+### ⚠️ Cảnh báo bảo mật về 2 URL trên
+- `appsScriptUrl`: bất kỳ ai có URL này đều POST được. Có 3 lớp bảo vệ:
+  1. Mọi action ngoài `login` yêu cầu token hợp lệ.
+  2. Login có rate limit (5 lần sai/phút → khoá 5 phút).
+  3. Role-based permission.
+  → Vẫn có thể bị spam request login → nên giữ URL kín, **không công khai trên web/social**.
+- `sheetsCsvUrl`: ai có URL đều đọc được **một sheet** (sheet được publish). Vô tình lộ data sản xuất chiếu sáng.
+- **Nếu repo GitHub là Public**: 2 URL này lộ ra → cân nhắc **đổi repo sang Private** hoặc tách `config.js` ra khỏi git (gitignore) và để user tự sửa khi deploy. Câu hỏi 5 ở mục 21 cần làm rõ điều này.
 
 ---
 
-## 14. Thứ tự thực hiện (CHECKLIST cho Claude Code)
+## 18. Thứ tự thực hiện (CHECKLIST cho Claude Code)
 
 Khi nhận lệnh "bắt đầu code dự án này", thực hiện theo đúng thứ tự:
 
-- [ ] **B1.** Tạo `README.md` (giới thiệu ngắn, hướng dẫn KTV mở app trên điện thoại).
-- [ ] **B2.** Tạo `SETUP.md` chi tiết từng bước: tạo Google Sheets, paste 15 header, deploy Apps Script, tạo Cloudinary preset, sửa `config.js`, push GitHub Pages.
-- [ ] **B3.** Tạo `apps-script/Code.gs` đầy đủ với mapping ở mục 7. Comment tiếng Việt.
-- [ ] **B4.** Đọc file Excel gốc (`khao_sat_tang_cuong_den.xlsx`) → sinh `js/lookups.js` đầy đủ 102 phường + 903 TĐK. **Nếu không có file Excel trong repo, HỎI user upload trước.**
+- [ ] **B1.** Tạo `README.md` (giới thiệu ngắn, hướng dẫn KTV mở app trên điện thoại, hướng dẫn admin xem KPI + quản lý bản ghi + báo cáo).
+- [ ] **B2.** Tạo `SETUP.md` chi tiết từng bước: tạo Google Sheets, paste 15 header + sheet `taikhoan` + sheet `KPI_Targets`, đặt conditional format cho cột `Deleted At`, set `AUTH_SALT` + `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET` trong Script Properties, deploy Apps Script, tạo Cloudinary preset, sửa `config.js`, push GitHub Pages. Kèm hướng dẫn tạo user đầu tiên (admin) và hash mật khẩu, ví dụ mỗi role 1 tài khoản (admin/user/user1/demo). Hướng dẫn Publish-to-web để lấy CSV URL (nếu dùng).
+- [ ] **B3.** Tạo `apps-script/Code.gs` đầy đủ với 7 endpoint (`login`, `submit`, `list`, `delete`, `restore`, `kpi`, `report`) theo mục 7. Bảng `PERMISSIONS`. Hàm helper `hashPassword(plain)`. Comment tiếng Việt.
+- [ ] **B4.** Đọc file Excel gốc (`khao sat tang cuong den.xlsx`) → sinh `js/lookups.js` đầy đủ 102 phường + 903 TĐK. **Nếu không có file Excel trong repo, HỎI user upload trước.**
 - [ ] **B5.** Tạo `js/schemas.js` với đầy đủ 15 schema theo đúng mục 5.
-- [ ] **B6.** Tạo `js/utils.js`, `js/gps.js`, `js/camera.js`, `js/storage.js`, `js/api.js` (helper modules).
-- [ ] **B7.** Tạo `js/form-renderer.js` — engine chính render form từ schema, validate, submit.
-- [ ] **B8.** Tạo `form.html` — load `?type=` từ URL, gọi renderer.
-- [ ] **B9.** Tạo `index.html` — trang chủ 15 ô.
-- [ ] **B10.** Tạo `recent.html`.
-- [ ] **B11.** Tạo `manifest.json`, `sw.js`, icon placeholder.
-- [ ] **B12.** **Test thủ công** trên Chrome desktop + 1 lần Chrome mobile (devtools mobile mode):
-  - Mở từng form trong 15 loại — đảm bảo render đúng, không lỗi console.
-  - Submit 1 form `tang_cuong_den` thật (dùng Apps Script URL test) → kiểm tra row xuất hiện đúng cột trong Sheet.
-  - Test offline: tắt mạng → submit → bật mạng → bản đang chờ phải tự sync.
-- [ ] **B13.** Viết section "Known Issues" vào `README.md` nếu phát hiện gì.
+- [ ] **B6.** Tạo `js/utils.js`, `js/auth.js` (bao gồm `PERMISSIONS` map, `requireAuth`, `hasPermission`, `isFullAccess`), `js/gps.js`, `js/camera.js`, `js/storage.js`, `js/api.js` (helper modules).
+- [ ] **B7.** Tạo `js/form-renderer.js` — engine chính render form từ schema, validate, submit. Trường `nguoi_ks` auto-fill từ `auth.getCurrentUser().full_name`, readonly. Role `demo` → disable nút Lưu, hiện banner.
+- [ ] **B8.** Tạo `login.html` — trang đăng nhập theo mục 12.
+- [ ] **B9.** Tạo `form.html` — load `?type=` từ URL, gọi renderer. Có `requireAuth()` đầu trang.
+- [ ] **B10.** Tạo `index.html` — trang chủ 15 ô. Có `requireAuth()`. Header hiện tên user + role badge + nút Đăng xuất + (nếu có quyền) các link "KPI", "Quản lý", "Báo cáo".
+- [ ] **B11.** Tạo `recent.html`. Có `requireAuth()`. user1/demo chỉ thấy của mình; admin/user thấy tất cả.
+- [ ] **B12.** Tạo `js/kpi.js` + `kpi.html` — bảng KPI tháng, chi tiết KTV, export CSV. Có `requireAuth('kpi')`.
+- [ ] **B13.** Tạo `js/manage.js` + `manage.html` — bộ lọc, bảng bản ghi, xoá/khôi phục. Có `requireAuth('manage')`.
+- [ ] **B14.** Tạo `js/report.js` + `report.html` — bảng tổng quan + biểu đồ cột chồng + pivot KTV×Loại, export CSV. Có `requireAuth('report')`.
+- [ ] **B15.** Tạo `manifest.json`, `sw.js`, icon placeholder.
+- [ ] **B16.** **Test thủ công** trên Chrome desktop + 1 lần Chrome mobile (devtools mobile mode):
+  - Đăng nhập sai → hiện lỗi, không lưu token. Sai 5 lần → bị khoá 5 phút.
+  - Đăng nhập `user1` (KTV) → vào `index.html`, mở từng form trong 15 loại — render đúng, `Người khảo sát` auto-fill readonly, không lỗi console.
+  - Submit 1 form `tang_cuong_den` thật → kiểm tra row xuất hiện đúng cột, `Username` đúng, `Deleted At` rỗng.
+  - Đăng nhập `demo` → mọi form thấy được nhưng nút Lưu disabled, banner hiện rõ. Cố submit qua devtools → server reject.
+  - Đăng nhập `admin` → tự vào `kpi.html`, chọn tháng hiện tại → bảng KPI đúng, xếp loại đúng. Mở `manage.html` → filter ra bản test → xoá → kiểm tra Google Sheets thấy `Deleted At` có giá trị + ảnh Cloudinary đã biến mất. Khôi phục → `Deleted At` về rỗng nhưng ảnh không quay lại. Mở `report.html` → đặt filter "Tháng này, tất cả loại, tất cả KTV" → bảng+biểu đồ hiện đúng.
+  - `user` thử lại các flow của admin → hoạt động giống.
+  - `user1` cố mở `kpi.html`/`manage.html`/`report.html` → bị redirect về `index.html`. `demo` cũng vậy.
+  - KPI và report bỏ qua bản đã soft-delete (verify bằng cách xoá 1 bản rồi tính lại).
+  - Test offline: tắt mạng → submit (với user1) → bật mạng → bản đang chờ phải tự sync.
+- [ ] **B17.** Viết section "Known Issues" vào `README.md` nếu phát hiện gì.
 
 ---
 
-## 15. Checklist chất lượng (Claude tự review trước khi báo "xong")
+## 19. Checklist chất lượng (Claude tự review trước khi báo "xong")
 
-- [ ] Không có hardcode URL Apps Script / Cloudinary trong file ngoài `config.js`.
+- [ ] Không có hardcode URL Apps Script / Cloudinary / salt / API secret trong file ngoài `config.js` và Apps Script Properties.
+- [ ] `CLOUDINARY_API_SECRET` không lộ ra bất kỳ file frontend nào.
 - [ ] Tất cả 15 form render được không lỗi console.
-- [ ] Header trong Google Sheets test giống NGUYÊN VĂN trong mục 4-5.
-- [ ] STT và Ngày khảo sát do server gán, không gửi từ client.
+- [ ] Header trong Google Sheets test giống NGUYÊN VĂN trong mục 4-5 (kể cả 5 cột bổ sung cuối).
+- [ ] STT, Ngày khảo sát, Người khảo sát, Username, Submitted At do server gán, không tin client.
+- [ ] `nguoi_ks` ở UI là readonly, KTV không thể sửa.
 - [ ] GPS bật trên HTTPS, có fallback khi user từ chối permission.
 - [ ] Ảnh được nén trước upload (verify bằng cách check size response).
-- [ ] localStorage có dọn dẹp (sau khi submit thành công, xóa draft).
+- [ ] localStorage có dọn dẹp (sau khi submit thành công, xóa draft). Token KHÔNG bị xoá nhầm.
 - [ ] Đã test trên màn hình 360px width (Chrome devtools).
-- [ ] Đã test offline → online sync queue.
+- [ ] Đã test offline → online sync queue. Queue có gửi kèm token; nếu token hết hạn thì hỏi đăng nhập lại trước khi sync.
+- [ ] Đã test login sai 5 lần → bị khoá 5 phút.
+- [ ] Đã test 4 role: admin/user/user1/demo. Mỗi role chỉ vào được trang được phép.
+- [ ] Demo thấy form nhưng nút Lưu disabled. Submit từ demo bị server reject.
+- [ ] Admin xem KPI tháng có data thật, các con số đúng (so với đếm tay vài KTV).
+- [ ] Soft-delete hoạt động: bản ghi có `Deleted At` không hiện trong recent/kpi/list mặc định.
+- [ ] Khi soft-delete, ảnh Cloudinary bị xoá thật (verify trên Cloudinary dashboard).
+- [ ] Restore phục hồi cờ Deleted At nhưng cảnh báo ảnh không khôi phục được.
+- [ ] Sheet `Audit` ghi log mỗi lần delete/restore.
+- [ ] Report tổng quan đếm đúng — đối chiếu thủ công với Google Sheets COUNTIF.
+- [ ] Report bỏ qua bản đã soft-delete khi status filter là "Đang hoạt động".
+- [ ] Pivot KTV × Loại không hiện hàng trống cho KTV không submit gì trong khoảng filter.
 - [ ] `SETUP.md` đầy đủ, một người không phải dev cũng theo được.
 
 ---
 
-## 16. Quy tắc giao tiếp với user (Lam Mai - LAVIPCO)
+## 20. Quy tắc giao tiếp với user (Lam Mai - SAPULICO)
 
 - User là kỹ sư, làm việc bằng tiếng Việt, ưu tiên giao tiếp tiếng Việt.
 - User KHÔNG phải lập trình viên web. Khi giải thích kỹ thuật, dùng từ ngữ thực tế.
 - **Khi gặp ambiguity, HỎI thay vì tự quyết** (đặc biệt với: header tiếng Việt có khoảng trắng cuối, có nên thêm trường mới không, đổi tên sheet, đổi UX...).
-- Khi báo cáo tiến độ, dùng checklist mục 14 — nói rõ đã làm B mấy, đang ở B mấy.
+- Khi báo cáo tiến độ, dùng checklist mục 18 — nói rõ đã làm B mấy, đang ở B mấy.
 - **Không** xài emoji nhiều, không tagline marketing. Tone kỹ thuật, ngắn gọn.
 
 ---
 
-## 17. Câu hỏi cần xác nhận với user trước khi bắt đầu
+## 21. Quyết định cấu hình (đã chốt với user)
 
-Trước khi viết code, hỏi user các điểm sau (nếu chưa rõ):
+Mọi câu hỏi đã được trả lời ngày 2026-05-26. **KHÔNG được tự ý đổi các quyết định dưới đây — nếu phát hiện vướng mắc kỹ thuật, HỎI user trước.**
 
-1. **Tên file Google Sheets** muốn đặt là gì? (vd "Khảo sát LAVIPCO 2026")
-2. **Logo LAVIPCO**: có cung cấp file ảnh không, hay dùng text placeholder?
-3. **Trường "Bản vẽ"** trong các form khảo sát tuyến — có muốn KTV nhập không, hay luôn để trống như hiện tại?
-4. **Năm hiện hành cho `Năm lắp đặt`**: cho phép nhập tự do hay giới hạn 1990–2026?
-5. **Repo GitHub** muốn đặt tên gì? Public hay Private?
-6. **Domain custom**: chỉ dùng `<user>.github.io/<repo>` hay có domain riêng?
+### Thông tin dự án
+- **Đơn vị**: SAPULICO (không phải LAVIPCO — đã đổi tên 2026-05-26).
+- **Tên file Google Sheets**: `khao-sat-ke-hoach`.
+- **Repo GitHub**: `khaosat`. **PUBLIC**. (user chấp nhận rủi ro URL Apps Script lộ ra — xem phần ⚠️ dưới).
+- **Domain**: dùng GitHub Pages mặc định (`<user>.github.io/khaosat`), không domain riêng.
+- **Logo**: dùng text placeholder "SAPULICO" cho đến khi user cung cấp file ảnh.
+
+### Phân quyền & đăng nhập
+- **Đăng nhập**: có. Username/password lưu trong sheet `taikhoan` của cùng file Google Sheets.
+- **4 role**: `admin`, `user` (alias của admin), `user1` (KTV mặc định), `demo` (chỉ xem form).
+- **Người khảo sát auto-fill**: lấy từ `full_name` của user đã đăng nhập, readonly.
+- **Tài khoản KTV ban đầu**: user sẽ tự tạo trong sheet `taikhoan` sau khi setup. Claude tạo 4 user mẫu (1 cho mỗi role) trong `SETUP.md` để user theo template.
+
+### Các trang
+- **Trang KPI**: chỉ admin/user. 5 chỉ tiêu, trọng số 40/30/15/10/5, thang 100, xếp loại A/B/C/D.
+- **Trang quản lý `manage.html`**: chỉ admin/user. Filter, xoá, khôi phục.
+- **Trang báo cáo `report.html`**: chỉ admin/user. Filter theo loại KS / thời gian / KTV / trạng thái + group by ngày/tuần/tháng/quý. 3 vùng kết quả.
+- **Soft-delete**: bản ghi xoá có `Deleted At`, ảnh Cloudinary xoá thật, có sheet `Audit` log.
+
+### Schema chi tiết
+- **Trường "Bản vẽ"** (xuất hiện ở 3 form: tang_cuong_den, ngam_hoa, thay_den): KTV nhập tự do dạng text (mã bản vẽ, vd "BV-2026-001"). KHÔNG dùng `skip` nữa.
+- **Trường "Năm lắp đặt"**: nhập tự do dạng number, KHÔNG giới hạn range.
+
+### Mục tiêu KPI
+- Giữ default của mục 13 (50 bản/tháng, 5 loại, 20 ngày) — user sẽ điều chỉnh sau qua sheet `KPI_Targets`.
+
+### URL production (đã nhận từ user 2026-05-26)
+- Apps Script: `https://script.google.com/macros/s/AKfycbxX9mgYO6g9A4BRTmJN3QpiZg1VutAeWcNgm4hY8zHPaPykgWYmgFv8M20S7YG8oCp7/exec`
+- Sheets CSV publish: `https://docs.google.com/spreadsheets/d/e/2PACX-1vRajzWe7TR5VPW5QOzYAOdZJoqRRbQpk4iO4GKOT4rd7GUQj87fTsPAll6cCC6bkcpEyMs5FYg_JMrH/pub?output=csv`
+
+### ⚠️ Rủi ro bảo mật đã được user chấp nhận
+Repo PUBLIC + URL Apps Script trong `js/config.js` → **URL bị lộ trên GitHub**. Hệ quả thực tế:
+1. Ai có URL đều POST request được. Bảo vệ chính là token + role + rate limit + `active=FALSE`. Mật khẩu KTV phải đủ mạnh.
+2. Sheets CSV public — sheet được publish có thể đọc bất kỳ.
+3. **Khuyến nghị mitigation tối thiểu cho user thực hiện**:
+   - Mật khẩu KTV ≥ 10 ký tự, không trùng tên user.
+   - `AUTH_SALT` ≥ 32 ký tự random, không tiết lộ.
+   - `CLOUDINARY_API_SECRET` chỉ trong Script Properties, **không bao giờ** vào git.
+   - Kiểm tra log Apps Script định kỳ (Executions) — phát hiện spam thì rotate URL (re-deploy với version mới).
 
 ---
 
-**Kết thúc CLAUDE.md.** Khi Claude Code đọc xong file này, nhắn lại user: "Tôi đã đọc CLAUDE.md. Trước khi bắt đầu, tôi cần xác nhận 6 điểm ở mục 17." rồi chờ trả lời, KHÔNG tự code ngay.
+**Kết thúc CLAUDE.md.** Mọi quyết định cấu hình đã chốt. **KHÔNG tự động bắt đầu code**. Đợi user yêu cầu rõ ràng (vd "bắt đầu code", "code phần X"), rồi thực hiện theo checklist mục 18.
