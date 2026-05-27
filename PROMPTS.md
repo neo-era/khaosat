@@ -1,517 +1,832 @@
-# BỘ PROMPT HOÀN CHỈNH — Dự án Website Khảo sát Chiếu sáng LAVIPCO
+# BỘ PROMPT HOÀN CHỈNH — Dự án `khaosat` SAPULICO
 
-> Hướng dẫn sử dụng: Mỗi `### PROMPT N` bên dưới là một message bạn **copy nguyên văn** dán vào Claude Code (hoặc claude.ai có upload file). Chạy lần lượt từ Prompt 0 đến Prompt 10. Đừng nhảy bước.
+> File này là **kịch bản dẫn dắt Claude Code** thực hiện toàn bộ dự án theo `CLAUDE.md`. Mỗi `### PROMPT N` là 1 message bạn copy nguyên văn dán vào Claude Code, **chạy lần lượt từ 0 → 14**. Sau mỗi prompt **đợi Claude báo cáo xong + xác nhận** rồi mới sang prompt tiếp theo. Không nhảy bước.
+
+> Bộ prompt này đã được đồng bộ với `CLAUDE.md` ngày 2026-05-26 — phiên bản có đăng nhập 4 role (`admin`/`user`/`user1`/`demo`), 3 trang admin (KPI / Quản lý / Báo cáo), soft-delete + audit log, 7 endpoint Apps Script.
 
 ---
 
 ## Chuẩn bị TRƯỚC KHI bắt đầu
 
-1. Tạo **repo GitHub Private** mới, tên gợi ý: `khao-sat-chieu-sang`.
-2. Clone repo về máy.
-3. Copy 2 file vào root repo:
-   - `CLAUDE.md` (đã có ở chat trước)
-   - `khao_sat_tang_cuong_den.xlsx` (file Excel gốc của bạn)
-4. Mở **Claude Code** (hoặc terminal có Claude Code) trong thư mục repo, hoặc mở **claude.ai** và upload 2 file trên ở message đầu tiên.
+1. Đã có sẵn repo GitHub Public tên `khaosat` (theo quyết định mục 21 CLAUDE.md).
+2. Clone repo về máy. Trong repo phải có:
+   - `CLAUDE.md` (đã hoàn thiện)
+   - `PROMPTS.md` (file này)
+   - `khao sat tang cuong den.xlsx` (file Excel gốc, không đổi tên)
+3. **Trên Google Sheets**: đã tạo file trống tên `khao-sat-ke-hoach`. 15 sheet khảo sát + sheet `taikhoan` + `KPI_Targets` **sẽ được Apps Script tự tạo** bằng hàm `initSheets()` ở Bước C của SETUP — không cần làm thủ công. URL Apps Script đã deploy: `…AKfycbxX9mgYO6g…/exec` (xem `CLAUDE.md` mục 17).
+4. Mở Claude Code trong thư mục repo. Gõ Prompt 0 dưới đây làm message đầu tiên.
+
+⚠️ **Repo Public** → mọi file commit đều public. Tuyệt đối **không commit** `AUTH_SALT`, `CLOUDINARY_API_SECRET` (giữ trong Apps Script Properties).
 
 ---
 
-## PROMPT 0 — Khởi tạo (LUÔN GỬI ĐẦU TIÊN)
+## PROMPT 0 — Khởi tạo & xác nhận
 
 ```
-Đây là dự án xây website khảo sát hiện trường chiếu sáng đô thị cho công ty LAVIPCO.
-
-Tôi đã đính kèm:
-1. CLAUDE.md — tài liệu kỹ thuật đầy đủ, là nguồn chân lý của dự án
-2. khao_sat_tang_cuong_den.xlsx — file Excel gốc chứa cấu trúc 15 loại khảo sát + 102 phường + 903 TĐK
+Đây là dự án `khaosat` cho SAPULICO. Toàn bộ thiết kế đã chốt trong CLAUDE.md ở root repo.
 
 YÊU CẦU:
-- Đọc TOÀN BỘ CLAUDE.md (đặc biệt là mục 14 - checklist 13 bước, và mục 17 - 6 câu hỏi cần xác nhận).
-- KHÔNG code ngay. KHÔNG tạo file nào.
-- Sau khi đọc xong, trả lời tôi:
-  (a) Xác nhận bạn đã hiểu kiến trúc tổng thể (tóm tắt 3-5 dòng).
-  (b) Hỏi tôi 6 câu hỏi xác nhận ở mục 17 của CLAUDE.md.
-  (c) Nếu thấy điểm nào trong CLAUDE.md mâu thuẫn hoặc không rõ, nêu ra luôn.
-
-Sau khi tôi trả lời 6 câu hỏi, mới bắt đầu code theo checklist mục 14.
+1. Đọc toàn bộ CLAUDE.md, đặc biệt chú ý:
+   - Mục 1 — 4 role và bảng phân quyền
+   - Mục 4 — 15 sheet + 2 sheet phụ + 5 cột bonus
+   - Mục 5 — schema 15 form (Bản vẽ là text, không skip)
+   - Mục 7 — 7 endpoint Apps Script + PERMISSIONS map
+   - Mục 18 — checklist B1–B17 (đây là roadmap)
+   - Mục 21 — các quyết định đã chốt
+2. KHÔNG code, KHÔNG tạo file, KHÔNG sửa file nào.
+3. Trả lời:
+   (a) Tóm tắt kiến trúc tổng thể 3–5 dòng.
+   (b) Liệt kê 4 role + quyền tương ứng theo bảng mục 1.
+   (c) Liệt kê 7 endpoint Apps Script + endpoint nào cho role nào.
+   (d) Nếu phát hiện điểm nào trong CLAUDE.md không rõ hoặc mâu thuẫn, nêu ra ngay. Nếu không có, nói "không có vướng mắc".
+4. Sau khi tôi gõ "ok B1" mới được bắt đầu code Bước 1.
 ```
 
-> **Bạn chờ Claude trả lời 6 câu hỏi**, rồi reply 6 câu trả lời. Gợi ý đáp án tham khảo (bạn tự điều chỉnh):
-> 1. Tên Google Sheets: `Khảo sát LAVIPCO 2026`
-> 2. Logo: dùng text "LAVIPCO" placeholder, sau có ảnh sẽ thay
-> 3. Trường "Bản vẽ": luôn để trống, KTV không nhập
-> 4. Năm lắp đặt: cho nhập tự do, validate 1990–2026
-> 5. Repo tên `khao-sat-chieu-sang`, private
-> 6. Dùng URL mặc định `<user>.github.io/<repo>`, chưa cần domain riêng
+> Đợi Claude trả lời, kiểm tra xem đã hiểu đúng chưa (đặc biệt là 4 role và 7 endpoint). Nếu Claude hiểu sai bất kỳ chi tiết nào → dừng lại, chỉ ra chỗ sai, yêu cầu đọc lại CLAUDE.md. Khi đã ổn → gửi PROMPT 1.
 
 ---
 
-## PROMPT 1 — Tạo README và SETUP
+## PROMPT 1 — B1 + B2: README & SETUP
 
 ```
-Tốt. Giờ thực hiện Bước 1 và Bước 2 của checklist mục 14 trong CLAUDE.md:
+Thực hiện B1 và B2 trong checklist mục 18 của CLAUDE.md.
 
-B1. Tạo README.md ở root — ngắn gọn, dành cho KTV và quản lý:
-- Mô tả dự án 3-4 dòng
-- Cách KTV mở app trên điện thoại (link, hướng dẫn "Add to Home Screen" Android/iOS)
-- Cách quản lý xem dữ liệu (link Google Sheets)
-- Liên hệ hỗ trợ
-- Section "Known Issues" để trống, sẽ điền sau
+B1. Tạo README.md ở root:
+- Giới thiệu dự án 3-4 dòng (SAPULICO khảo sát chiếu sáng đô thị).
+- Cách KTV mở app trên điện thoại + hướng dẫn "Add to Home Screen" (Chrome Android, Safari iOS).
+- Cách admin xem KPI / Quản lý / Báo cáo (link đến các trang `kpi.html`, `manage.html`, `report.html`).
+- 4 role và quyền (bảng ngắn lấy từ mục 1 CLAUDE.md).
+- Section "Known Issues" để trống.
+- Mục liên hệ hỗ trợ (tạm để placeholder email admin@sapulico.local).
 
-B2. Tạo SETUP.md ở root — chi tiết cho người setup (có thể không biết code):
-- Bước A: Tạo Google Sheets mới, đổi tên 15 sheet đúng như mục 4 CLAUDE.md, paste header (có thể dùng script copy từ file Excel gốc — hướng dẫn cụ thể)
-- Bước B: Tạo Google Apps Script project, paste Code.gs (sẽ tạo ở bước sau), set Script Properties SPREADSHEET_ID, deploy as Web App "Anyone"
-- Bước C: Đăng ký Cloudinary free, tạo unsigned upload preset tên "khaosat_unsigned", folder mặc định "khaosat"
-- Bước D: Sửa js/config.js dán URL Apps Script và thông tin Cloudinary vào
-- Bước E: Push lên GitHub, bật GitHub Pages branch main, đợi 2 phút
-- Bước F: Test thử submit 1 form, kiểm tra dòng xuất hiện đúng trong Sheet và ảnh upload Cloudinary
+B2. Tạo SETUP.md ở root — viết cho người không phải dev, từng cú click:
+- **Bước A**: Tạo file Google Sheets **trống** tên `khao-sat-ke-hoach`. KHÔNG cần tạo 15 sheet thủ công — sẽ tự sinh ở bước D.
+- **Bước B**: Vào Extensions → Apps Script → đặt tên project "khaosat", paste `apps-script/Code.gs`. Vào Project Settings → Script Properties, set 4 key:
+  * `SPREADSHEET_ID` = ID lấy từ URL Google Sheets (đoạn giữa `/d/` và `/edit`).
+  * `AUTH_SALT` = chuỗi random ≥32 ký tự (gợi ý: chạy `Math.random().toString(36).repeat(3)` trong console rồi copy).
+  * `CLOUDINARY_API_KEY` = lấy ở bước E.
+  * `CLOUDINARY_API_SECRET` = lấy ở bước E.
+- **Bước C**: Trong Apps Script, mở Code.gs, chọn hàm `initSheets` từ dropdown trên cùng, bấm **Run**. Cấp quyền lần đầu (Authorize). Đợi ~10s. Kết quả: tự động tạo đủ 15 sheet khảo sát + sheet `taikhoan` + sheet `KPI_Targets`, header tiếng Việt + conditional format + freeze row 1 + cột bonus đã sẵn. Verify bằng cách mở Google Sheets thấy đủ sheet.
+- **Bước D**: Tạo 4 user mẫu trong sheet `taikhoan`. Cách sinh password hash:
+  1. Trong Apps Script, mở Code.gs, ở hàm bất kỳ paste tạm: `Logger.log(hashPassword('matkhau-cua-ban'))`, Run, xem hash trong Executions log, copy.
+  2. Hoặc dùng cách an toàn hơn: ở Apps Script Editor chọn hàm `hashPassword`, mở "Execution log", chạy với `e.parameter` chứa password — phức tạp, dùng cách 1 là đủ.
+  3. 4 user mẫu (đặt mật khẩu mạnh, không dùng các ví dụ dưới):
+     - `admin01` | hash của `Adm!n@2026sup3rl0ng` | "Nguyễn Quản Lý" | role=admin | active=TRUE
+     - `user01` | hash | "Trần Phó Quản Lý" | role=user | active=TRUE
+     - `ktv01` | hash | "Lê Kỹ Thuật Viên" | role=user1 | active=TRUE
+     - `demo` | hash | "Tài Khoản Demo" | role=demo | active=TRUE
+- **Bước E**: Đăng ký Cloudinary free → Dashboard Settings → Upload presets → "Add upload preset" tên `khaosat_unsigned`, Signing Mode = Unsigned, Folder = `khaosat`. Lưu. Vẫn ở Dashboard, lấy `Cloud Name`, `API Key`, `API Secret` — paste 2 key sau vào Apps Script Properties (bước B).
+- **Bước F**: Apps Script → Deploy → New deployment → Type: Web app → Description "khaosat v1" → Execute as: Me → Who has access: **Anyone** → Deploy. Copy URL (kết thúc bằng `/exec`). So sánh với URL trong `js/config.js` — nếu khác (deployed lại) thì cập nhật `config.js`.
+- **Bước G**: Cập nhật `js/config.js` điền `cloudinaryName` + `cloudinaryPreset` (URL Apps Script và sheetsCsvUrl đã có sẵn).
+- **Bước H**: Trong Google Sheets, Tệp → Chia sẻ → Xuất bản lên web → chọn sheet `Tang cuong den` (hoặc tất cả) → format CSV. Copy URL, so sánh với `sheetsCsvUrl` trong config.js, nếu khác thì cập nhật.
+- **Bước I**: git add, commit, push. Vào repo Settings → Pages → Source = branch `main`, folder `/`. Đợi 2 phút, GitHub thông báo URL.
+- **Bước J**: Mở `https://<user>.github.io/khaosat/login.html` trên điện thoại. Đăng nhập với 1 user mẫu. Submit thử 1 form, verify thấy dòng mới trong Google Sheets.
 
-Mỗi bước có ảnh chụp màn hình KHÔNG cần (chưa có), nhưng phải mô tả từng cú click một cách rõ ràng. Tone tiếng Việt, ngắn gọn.
+⚠️ Lưu ý bảo mật: **KHÔNG** push các giá trị Script Properties (`AUTH_SALT`, `CLOUDINARY_API_SECRET`) lên git. Chúng chỉ sống trong Apps Script Properties, không nằm trong file nào của repo.
 
-Sau khi tạo xong 2 file, dừng lại, báo cáo "Đã hoàn tất B1, B2" và chờ tôi xác nhận trước khi sang B3.
-```
+Mọi bước viết tiếng Việt, ngắn gọn, click-by-click. Dùng heading rõ ràng.
 
----
-
-## PROMPT 2 — Tạo Google Apps Script
-
-```
-B3. Tạo file apps-script/Code.gs theo yêu cầu mục 7 của CLAUDE.md.
-
-Yêu cầu CỤ THỂ:
-- Hàm doPost(e) nhận body, parse JSON (e.postData.contents).
-- Validate type có trong SHEET_MAP (mục 7 CLAUDE.md).
-- Mở spreadsheet bằng SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID')).
-- Lấy sheet theo tên trong SHEET_MAP, error rõ ràng nếu không tồn tại.
-- Đọc header row 1 của sheet đó (lastColumn).
-- Với mỗi cột header, tìm giá trị tương ứng trong data:
-  * Nếu header = "STT" → server tự gán = sheet.getLastRow() (số dòng hiện tại = STT mới, vì header chiếm row 1).
-  * Nếu header chứa "ngày khảo sát" hoặc "Ngày khảo sát" → server tự gán Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss").
-  * Còn lại: map từ data theo thứ tự label (data là object {label_tieng_viet: value}).
-- Append row bằng sheet.appendRow(rowArray).
-- Trả về ContentService JSON {ok: true, stt, sheet, timestamp}.
-- Try/catch toàn bộ → trả {ok: false, error: e.toString(), stack: e.stack}.
-- Log mọi request bằng console.log để debug trên Apps Script Executions.
-
-Lưu ý CORS:
-- Frontend sẽ gửi POST với Content-Type: text/plain để tránh preflight.
-- Body là JSON string trong text/plain.
-- Apps Script doPost vẫn parse được qua e.postData.contents.
-
-Comment tiếng Việt trong code để Lam (user) hiểu khi cần debug sau này.
-
-KHÔNG tạo file nào khác. Chỉ Code.gs. Sau khi xong, báo cáo và chờ xác nhận.
+Sau khi xong, in cây thư mục hiện tại + báo "Đã hoàn tất B1, B2". Chờ tôi nói "ok B3".
 ```
 
 ---
 
-## PROMPT 3 — Sinh lookups.js từ Excel
+## PROMPT 2 — B3: Apps Script Code.gs
 
 ```
-B4. Đọc file khao_sat_tang_cuong_den.xlsx, sinh js/lookups.js.
+Thực hiện B3. Tạo `apps-script/Code.gs` theo mục 7 CLAUDE.md.
 
-Yêu cầu:
-- Mở sheet "Phường-Xã 2025" → đọc từ row 5 đến hết (header ở row 3, row 4 trống).
-  * Cột B (index 1): tên phường mới
-  * Cột D (index 3): quận/huyện cũ (TP Thủ Đức, Quận 1, Quận 3, ...)
-  * Loại bỏ row có cột B trống hoặc là ký tự whitespace (\xa0).
-  * Trim whitespace.
-  * Phải đủ 102 mục.
+YÊU CẦU CỤ THỂ:
 
-- Mở sheet "TĐK" → đọc từ row 3 đến hết (header ở row 1, row 2 là filler "1 1 1 1").
-  * Cột C (index 2): TĐK 2026
-  * Loại bỏ trống và duplicate.
-  * Trim whitespace.
-  * Phải khoảng 900+ mục.
+1. Đầu file:
+   - Const SHEET_MAP (15 entries từ mục 7).
+   - Const PERMISSIONS (4 role × 5 action) từ mục 7.
+   - Hàm helper `can(role, action)`, `isFullAccess(role)`.
+   - Hàm `getSpreadsheet()` đọc SPREADSHEET_ID từ Script Properties.
+   - Hàm `getSalt()`, `getCloudinaryCreds()`.
 
-- Output js/lookups.js dùng ES6 export:
+2. Hàm `hashPassword(plain)` — public, để admin chạy thủ công sinh hash khi tạo user. Input plain text → output SHA-256(plain + salt) dạng hex.
 
-  export const PHUONG_XA = [
-    { ten: "...", quan_cu: "..." },
-    ...
-  ];
-  export const QUAN_LIST = [...].sort();  // unique từ PHUONG_XA
-  export const TDK_LIST = [...].sort();   // unique
+3. **Const `HEADERS`** ở đầu file — chứa header nguyên văn của 15 loại KS, key trùng `SHEET_MAP`, mảng label tiếng Việt theo đúng thứ tự mục 5 CLAUDE.md. Tham chiếu giải thích đồng bộ với schemas.js.
 
-- Đầu file ghi comment: "// Tự sinh từ khao_sat_tang_cuong_den.xlsx — KHÔNG sửa tay, regen khi nguồn cập nhật"
-- Cuối file ghi 2 dòng log: "// 102 phường/xã, X quận cũ" và "// Y tủ điều khiển"
+4. **Hàm `initSheets()`** — public, gọi thủ công 1 lần khi setup. Yêu cầu chi tiết:
+   - Mở spreadsheet hiện tại từ SPREADSHEET_ID.
+   - Với mỗi entry SHEET_MAP:
+     * Nếu sheet đã tồn tại → SKIP (log "skipped: <name>").
+     * Nếu chưa → tạo mới, set header row 1 = `[...HEADERS[key], 'Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By']`.
+     * Freeze row 1.
+     * Conditional format: `Deleted At` cell không rỗng → tô background #f0f0f0 + strikethrough toàn row (apply A:Z).
+     * Set column width cho STT (40px), Ngày khảo sát (140px), Người khảo sát (120px), Ảnh URLs (200px). Các cột khác auto.
+   - Tạo sheet `taikhoan` nếu chưa có:
+     * Header: `username, password_hash, full_name, role, active, created_at`.
+     * Freeze row 1. Width tự chọn.
+     * Data validation cột `role` (cột D): danh sách `admin/user/user1/demo`.
+     * Data validation cột `active` (cột E): checkbox.
+   - Tạo sheet `KPI_Targets` nếu chưa có:
+     * Header: `param, value`.
+     * 8 row default:
+       - target_submissions_per_month | 50
+       - target_distinct_types | 5
+       - target_active_days | 20
+       - weight_frequency | 0.40
+       - weight_quality | 0.30
+       - weight_diversity | 0.15
+       - weight_completeness | 0.10
+       - weight_stability | 0.05
+   - Xoá sheet "Sheet1" mặc định nếu vẫn còn và trống.
+   - Return JSON `{ok:true, created:[...], skipped:[...], message:"..."}` để admin xem qua Logger.
+   - Log từng bước qua `Logger.log(...)`.
+   - Try/catch toàn bộ, error → log + return `{ok:false, error}`.
 
-Sau khi sinh xong, in ra console số lượng để tôi verify. Báo cáo và chờ xác nhận.
+5. **Hàm `validateSheets()`** (tuỳ chọn nhưng nên có) — quét tất cả sheet, so sánh header thực với HEADERS, báo sheet nào lệch.
+
+6. Hàm `doPost(e)`:
+   - Parse `e.postData.contents` thành object.
+   - Switch theo `action`: login / submit / list / delete / restore / kpi / report.
+   - Bao try/catch toàn bộ, error → trả `{ok:false, error, stack}`.
+   - Header response: `ContentService.createTextOutput(JSON.stringify(...)).setMimeType(JSON)`.
+
+7. `action: "login"`:
+   - Đọc sheet `taikhoan`, tìm username (active=TRUE).
+   - Verify hash.
+   - Rate limit qua CacheService: key `login_fail_${username}`, max 5 fail/phút, sai quá → khoá 5 phút, trả lỗi rõ.
+   - Active=FALSE → "Tài khoản bị khoá".
+   - Thành công → sinh token stateless = base64(`username|expiresAt|HMAC_SHA256(username+expiresAt, salt)`), expiresAt = now + 8h.
+   - Return `{ok:true, token, username, full_name, role, expires_at}`.
+
+8. Hàm `verifyToken(token)` → trả `{username, role, full_name}` hoặc throw "invalid token". Re-đọc role/full_name từ sheet `taikhoan` để luôn fresh.
+
+9. `action: "submit"`:
+   - verifyToken.
+   - Reject nếu `!can(role, 'submit')` (role demo).
+   - Validate `type` có trong SHEET_MAP.
+   - Mở sheet, đọc header row 1.
+   - Map data theo header label tiếng Việt. Server overwrite:
+     * `STT` = sheet.getLastRow() (giả sử header row 1).
+     * `ngày khảo sát` / `Ngày khảo sát` = `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`.
+     * `Người khảo sát` = full_name từ token.
+     * `Submitted At` = ISO timestamp.
+     * `User Agent` = `e.parameter.ua` nếu có.
+     * `Username` = username từ token.
+     * `Deleted At`, `Deleted By` = rỗng.
+   - appendRow.
+   - Return `{ok:true, stt, sheet, timestamp}`.
+
+10. `action: "list"`:
+    - verifyToken.
+    - Filter:
+      * Nếu role không có quyền `manage`/`report` → ép `username = currentUser.username`.
+      * Param hỗ trợ: type, username, from, to, includeDeleted.
+    - Scan sheet(s), filter rows, return rows array.
+
+11. `action: "delete"` (soft-delete):
+    - verifyToken, can(role, 'delete') hoặc reject.
+    - Tìm row theo (type, stt).
+    - Parse cột `Ảnh (URLs)` → từng URL → trích `public_id` → gọi Cloudinary Admin API destroy (signature SHA1). Lỗi xoá ảnh → log, không chặn.
+    - Set `Deleted At` = now, `Deleted By` = username.
+    - Ghi log vào sheet `Audit` (tự tạo nếu chưa có): timestamp, action=delete, username, target_sheet, target_stt, note.
+    - Return ok.
+
+12. `action: "restore"`:
+    - verifyToken, can(role, 'delete'). Clear Deleted At + Deleted By. Log vào Audit. Return ok kèm cảnh báo ảnh không khôi phục.
+
+13. `action: "kpi"`:
+    - verifyToken, can(role, 'kpi').
+    - Input: `month` (YYYY-MM).
+    - Đọc sheet `KPI_Targets` lấy targets/weights, fallback default (50/5/20, 0.40/0.30/0.15/0.10/0.05).
+    - Đọc 15 sheet KS, filter row có Submitted At thuộc tháng + Deleted At rỗng.
+    - Aggregate theo Username: count, có ảnh, có GPS, distinct types, active days, completeness avg.
+    - Tính 5 chỉ tiêu theo mục 13 CLAUDE.md, tổng KPI, xếp loại A/B/C/D.
+    - Return `{ok, month, results: [...]}` sort theo total desc.
+
+14. `action: "report"`:
+    - verifyToken, can(role, 'report').
+    - Input: types[], from, to, usernames[], status, groupBy.
+    - Filter rows, aggregate 3 vùng:
+      * A (bảng tổng quan): theo loại KS.
+      * B (timeseries): theo (loại, bucket thời gian theo groupBy).
+      * C (pivot): theo (KTV, loại).
+    - Return `{ok, areaA, areaB, areaC}`.
+
+15. Comment tiếng Việt mọi hàm phức tạp. Đặt log `console.log` đầu mỗi action để debug trên Apps Script Executions.
+
+LƯU Ý quan trọng: `HEADERS` trong Code.gs PHẢI khớp NGUYÊN VĂN với label trong schemas.js và mục 5 CLAUDE.md. Đây là source of truth thứ hai (bắt buộc do Apps Script không đọc được file js frontend). Nếu sau này sửa schema, phải sửa CẢ HAI.
+
+KHÔNG tạo file khác. Sau khi xong, in danh sách hàm + báo cáo. Chờ tôi nói "ok B4".
 ```
 
 ---
 
-## PROMPT 4 — Tạo schemas.js (15 schema)
+## PROMPT 3 — B4: Sinh lookups.js từ Excel
 
 ```
-B5. Tạo js/schemas.js với đầy đủ 15 schema theo mục 5 CLAUDE.md.
+Thực hiện B4. Đọc file `khao sat tang cuong den.xlsx` (lưu ý có khoảng trắng trong tên file) → sinh `js/lookups.js`.
 
-Yêu cầu CỤ THỂ:
+DỮ LIỆU LẤY:
 
-- Export default một object:
-  export const SCHEMAS = {
-    tang_cuong_den: {
-      name: "Tăng cường đèn",          // tên hiển thị cho KTV
-      sheet: "Tang cuong den",         // tên sheet Google Sheets (khớp CLAUDE.md mục 4)
-      icon: "💡",                      // emoji cho trang chủ
-      fields: [
-        { label: "STT", key: "stt", type: "stt_auto" },
-        { label: "Hẻm", key: "hem", type: "text", required: false },
-        ...
-      ]
-    },
-    ngam_hoa: { ... },
-    ...
-  };
+1. Sheet "Phường-Xã 2025":
+   - Header ở row 3, row 4 trống → đọc từ row 5 đến hết.
+   - Cột B (index 1): tên phường mới.
+   - Cột D (index 3): quận/huyện cũ.
+   - Loại bỏ row trống và whitespace-only.
+   - Trim trailing/leading whitespace (chú ý ký tự non-breaking space \xa0).
+   - Phải đủ 102 mục — nếu thiếu/thừa, dừng lại báo cáo, không tự sửa.
 
-- "label" PHẢI là chuỗi TIẾNG VIỆT NGUYÊN VĂN từ mục 5 CLAUDE.md (kể cả khoảng trắng, dấu, viết hoa/thường lẻ). Đây là khoá để map sang cột Google Sheets.
-- Đầy đủ cả 15 loại. Đếm số field phải khớp số cột mục 4 (vd Tang cuong den 22 cột → 22 field).
-- "type" dùng các giá trị: text, number, decimal, textarea, date_auto, stt_auto, gps_lat, gps_lng, select, quan, phuong, tdk, link_gmap, skip.
-- Với type "select": có thêm "options: [...]" như chỉ định mục 5.
-- Tên hiển thị (name) thân thiện với KTV, không dùng key kỹ thuật:
-  * tang_cuong_den → "Tăng cường đèn"
-  * ngam_hoa → "Ngầm hóa"
-  * thay_den → "Thay đèn"
-  * hkn → "Hộp kín nước"
-  * tc_noi → "Thay cáp nổi"
-  * cap_luon_can → "Cáp luồn cần"
-  * tc_ngam → "Thay cáp ngầm"
-  * thay_can → "Thay cần"
-  * thay_tru → "Thay trụ"
-  * choa_den → "Chóa đèn"
-  * nap_tru → "Nắp trụ"
-  * vo_tu → "Vỏ tủ"
-  * tc_den_kc_xa → "Tăng cường đèn khoảng cách xa"
-  * decal_so_tru → "Decal số trụ"
-  * nang_mong → "Nâng móng trụ"
-- Icon emoji tùy chọn nhưng nhất quán 1 cảm hứng "công trình điện".
+2. Sheet "TĐK":
+   - Header ở row 1, row 2 là filler.
+   - Đọc từ row 3 đến hết.
+   - Cột C (index 2): TĐK 2026.
+   - Loại bỏ trống, duplicate, trim.
+   - Phải khoảng 900+ mục.
 
-Sau khi xong, in ra console: "Đã tạo schemas.js với N loại khảo sát, tổng M trường". Báo cáo và chờ xác nhận.
+OUTPUT `js/lookups.js`:
+
+```javascript
+// Tự sinh từ "khao sat tang cuong den.xlsx" ngày {YYYY-MM-DD}
+// KHÔNG sửa tay file này. Khi nguồn cập nhật, chạy lại script sinh.
+
+export const PHUONG_XA = [
+  { ten: "...", quan_cu: "..." },
+  // ... 102 mục
+];
+
+export const QUAN_LIST = [...new Set(PHUONG_XA.map(p => p.quan_cu))].sort();
+
+export const TDK_LIST = [
+  "...",
+  // ... ~903 mục
+].sort();
+
+// Tổng: 102 phường/xã, N quận cũ, M tủ điều khiển
+```
+
+Sau khi tạo, in:
+- Số phường/xã thực tế (phải = 102).
+- Số quận cũ unique.
+- Số TĐK unique.
+- 5 mục PHUONG_XA đầu + 5 mục TDK đầu để tôi verify mắt.
+
+Chờ tôi nói "ok B5".
 ```
 
 ---
 
-## PROMPT 5 — Helper modules (utils, gps, camera, storage, api)
+## PROMPT 4 — B5: schemas.js (15 schema)
 
 ```
-B6. Tạo 5 helper module trong js/. Mỗi file ES6 module, export rõ ràng. Code Vanilla JS, không dùng thư viện ngoài.
+Thực hiện B5. Tạo `js/schemas.js` với đầy đủ 15 schema theo mục 5 CLAUDE.md.
+
+CẤU TRÚC:
+
+```javascript
+export const SCHEMAS = {
+  tang_cuong_den: {
+    name: "Tăng cường đèn",      // hiển thị cho KTV
+    sheet: "Tang cuong den",      // PHẢI khớp mục 4 CLAUDE.md
+    icon: "💡",
+    fields: [
+      { label: "STT", key: "stt", type: "stt_auto" },
+      { label: "Hẻm", key: "hem", type: "text", required: false },
+      // ... đủ 22 field theo mục 5.1
+    ]
+  },
+  ngam_hoa: { name: "Ngầm hóa", sheet: "Ngam Hoa", icon: "🔌", fields: [...] },
+  // ... đủ 15 loại
+};
+```
+
+RÀNG BUỘC:
+- `label` PHẢI NGUYÊN VĂN tiếng Việt từ mục 5 CLAUDE.md (kể cả khoảng trắng, dấu, viết hoa/thường lẻ).
+- Đủ field theo từng schema 5.1 → 5.15.
+- Số field phải khớp số cột mục 4 (vd tang_cuong_den = 22, ngam_hoa = 23, ...).
+- `type` dùng các giá trị: text, number, decimal, textarea, date_auto, stt_auto, gps_lat, gps_lng, select, quan, phuong, tdk, link_gmap.
+- KHÔNG dùng `skip` nữa — trường "Bản vẽ" giờ là `text` (theo quyết định 2026-05-26 mục 21).
+- `select` có thêm `options: [...]` đúng theo mục 5.
+- Field có note đặc biệt (vd placeholder) thêm field `placeholder` hoặc `hint`.
+
+TÊN HIỂN THỊ + ICON cho 15 loại:
+- tang_cuong_den → "Tăng cường đèn" 💡
+- ngam_hoa → "Ngầm hóa" 🔌
+- thay_den → "Thay đèn" 🔦
+- hkn → "Hộp kín nước" 📦
+- tc_noi → "Thay cáp nổi" 🪢
+- cap_luon_can → "Cáp luồn cần" 🧵
+- tc_ngam → "Thay cáp ngầm" ⛓️
+- thay_can → "Thay cần đèn" 🦯
+- thay_tru → "Thay trụ" 🏗️
+- choa_den → "Chóa đèn" 🪔
+- nap_tru → "Nắp trụ" 🛡️
+- vo_tu → "Vỏ tủ điều khiển" 🗄️
+- tc_den_kc_xa → "Tăng cường đèn khoảng cách xa" 🛣️
+- decal_so_tru → "Decal số trụ" 🔢
+- nang_mong → "Nâng móng trụ" ⛏️
+
+Sau khi xong:
+- console.log số schema (= 15).
+- console.log tổng số field qua tất cả schema.
+- Verify từng schema bằng cách so sánh số field với mục 4 CLAUDE.md, in bảng so sánh.
+
+Chờ tôi nói "ok B6".
+```
+
+---
+
+## PROMPT 5 — B6: Helper modules
+
+```
+Thực hiện B6. Tạo các module helper trong `js/`. Tất cả ES6 module, Vanilla JS, không thư viện ngoài.
 
 js/utils.js:
-- showToast(message, type='success', duration=3000) — toast nổi góc dưới
+- showToast(message, type='success'|'error'|'warning'|'info', duration=3000)
 - escapeHtml(str)
-- formatVnDate(dateObj) → "26/05/2026 14:30"
+- formatVnDate(dateObj) → "26/05/2026 14:30:25"
+- formatVnDateOnly(dateObj) → "26/05/2026"
+- monthKey(dateObj) → "2026-05"
 - debounce(fn, wait)
-- uuid() — random 8 ký tự
+- uuid()
+- groupBy(array, keyFn)
+
+js/auth.js (CỐT LÕI — đọc mục 12 CLAUDE.md):
+- export const PERMISSIONS (giống hệt Apps Script).
+- export function can(role, action), isFullAccess(role), hasPermission(action).
+- export function getCurrentUser() — đọc từ sessionStorage/localStorage tuỳ "remember".
+- export async function login(username, password, remember) — gọi api, lưu token.
+- export function logout() — clear storage, redirect login.html.
+- export function requireAuth(requiredAction?) — gọi ở đầu mỗi trang HTML; nếu thiếu permission redirect; nếu chưa login redirect login.html. Cũng check expires_at, hết hạn → logout.
+- export function getAuthHeader() — trả `{token: ...}` để gửi kèm request.
 
 js/gps.js:
-- getCurrentPosition({timeout=10000, highAccuracy=true}) → Promise resolves {lat, lng, accuracy} hoặc rejects.
-- Có fallback: nếu permission denied, reject với error.code rõ ràng.
-- Format số: 6 chữ số sau dấu chấm.
+- getCurrentPosition({timeout=10000, highAccuracy=true}) → Promise<{lat, lng, accuracy}>
+- Reject với error.code rõ ràng nếu permission denied / timeout.
+- Format số 6 chữ số sau dấu chấm.
 
 js/camera.js:
 - compressImage(file, maxDim=1600, quality=0.8) → Promise<Blob>
-- createThumbnail(file, dim=120) → Promise<DataURL>  (để hiện preview nhanh trước khi upload)
-- Validate file: chỉ image/*, max 20MB raw.
+- createThumbnail(file, dim=120) → Promise<DataURL>
+- Validate: chỉ image/*, max 20MB raw.
 
-js/storage.js (wrapper localStorage):
-- saveDraft(type, formData) → key "draft_{type}"
-- loadDraft(type) → object hoặc null
-- clearDraft(type)
-- enqueueSubmission(payload) → push vào queue_submissions array
-- getQueue() → array
-- removeFromQueue(uuid) — xóa item đã sync thành công
-- saveLastNguoiKs(name) / getLastNguoiKs()
-- saveSubmittedToday(record) — lưu vào submitted_today (auto reset mỗi ngày dựa trên date)
-- getSubmittedToday() → array
+js/storage.js:
+- saveDraft(type, formData) / loadDraft(type) / clearDraft(type)
+- enqueueSubmission(payload) / getQueue() / removeFromQueue(uuid)
+- saveSubmittedToday(record) — tự reset sang ngày mới.
+- getSubmittedToday() (lọc theo date hôm nay)
+- saveToken(token, username, full_name, role, expires_at, remember) / getToken() / clearToken()
 
-js/api.js:
-- submitSurvey(type, data) → POST đến CONFIG.appsScriptUrl với Content-Type: text/plain, body JSON.stringify({type, data}). Trả về parsed response. Throw nếu ok: false.
-- uploadImage(file, surveyType) → POST đến Cloudinary, trả về secure_url. Đã nén ảnh trước khi gọi.
-- syncQueue() — đọc queue, retry từng item, xóa item thành công, giữ item failed. Trả về {success: N, failed: M}.
+js/api.js — wrapper cho 7 endpoint Apps Script:
+- apiLogin(username, password)
+- apiSubmit(type, data, photos)
+- apiList({type, username, from, to, includeDeleted})
+- apiDelete(type, stt)
+- apiRestore(type, stt)
+- apiKpi(month)
+- apiReport({types, from, to, usernames, status, groupBy})
+- uploadImage(file, surveyType) — Cloudinary unsigned upload, đã nén trước.
+- syncQueue() — đọc queue, retry từng submission, xoá thành công, giữ failed.
+- Tất cả request submit/list/delete/restore/kpi/report gửi kèm token qua field `token` trong body. POST text/plain để tránh CORS preflight.
 
-Tất cả file phải có comment đầu file giải thích vai trò bằng tiếng Việt.
-
-Sau khi xong, báo cáo từng file đã tạo và chờ xác nhận.
+Tất cả file có comment đầu file giải thích vai trò. Sau khi xong, in danh sách file + báo cáo. Chờ tôi nói "ok B7".
 ```
 
 ---
 
-## PROMPT 6 — Form renderer (engine chính)
+## PROMPT 6 — B7: form-renderer.js
 
 ```
-B7. Tạo js/form-renderer.js — engine render form từ schema.
+Thực hiện B7. Tạo `js/form-renderer.js` — engine render form từ schema.
 
-Yêu cầu CỤ THỂ:
+API:
+export async function renderForm(containerEl, schemaKey)
 
-export async function renderForm(containerEl, schemaKey) {
-  const schema = SCHEMAS[schemaKey];
-  // 1. Render heading: tên loại khảo sát + nút "← Về trang chủ"
-  // 2. Render form: với mỗi field trong schema.fields, render input phù hợp với type.
-  //    - skip / date_auto / stt_auto / link_gmap: KHÔNG render UI.
-  //    - gps_lat & gps_lng: render chung 1 block "GPS hiện tại: lat, lng (sai số Xm)" + nút "Lấy lại GPS". Tự động gọi GPS khi mở form.
-  //    - quan: <select> từ QUAN_LIST. onChange → cập nhật danh sách phường.
-  //    - phuong: <select> filter theo quận đã chọn. Cho phép thêm option "Khác (nhập tay)" → khi chọn sẽ hiện thêm input text.
-  //    - tdk: <input list="tdk-list"> + <datalist id="tdk-list"> với TDK_LIST.
-  //    - select: <select> với options.
-  //    - text/textarea/number/decimal: render input bình thường, có placeholder dựa trên ghi chú trong schema nếu có.
-  //    - required: thêm dấu * đỏ vào label, HTML5 required attribute.
-  // 3. Block ảnh: input file accept="image/*" multiple capture="environment". Grid preview 3 cột, mỗi ảnh có nút X xóa. Upload song song khi vừa chọn, hiện progress.
-  // 4. Block GPS như mô tả trên.
-  // 5. Pre-fill "Người khảo sát" từ getLastNguoiKs() nếu có.
-  // 6. Auto-save: setInterval mỗi 5s → saveDraft(schemaKey, collectFormData()).
-  // 7. Khi mở form, nếu có draft cũ → confirm("Có bản nháp chưa gửi. Khôi phục?") → load.
-  // 8. Submit handler:
-       a. Validate required fields. Nếu thiếu, focus field đầu tiên + toast.
-       b. Disable nút Submit, hiện spinner.
-       c. Collect data: {label: value, ...} dùng đúng schema.label làm key.
-       d. Nếu type không skip "Link Google Map" và đã có GPS, gán link_gmap = "https://www.google.com/maps?q={lat},{lng}".
-       e. Đính kèm "Ảnh (URLs)" = urls.join("|") (cột bonus).
-       f. Try: await submitSurvey(schemaKey, data).
-          Success: clearDraft, saveLastNguoiKs, saveSubmittedToday, showToast("Đã lưu STT #" + stt). Hỏi: "Nhập tiếp loại này" / "Về trang chủ".
-          Failure (offline hoặc lỗi mạng): enqueueSubmission, showToast("Đã lưu offline, sẽ tự đồng bộ", 'warning'), vẫn clearDraft + về trang chủ.
+LUỒNG:
+1. Đọc `getCurrentUser()`. Nếu chưa login → redirect login.html (gọi requireAuth() đầu hàm).
+2. Lấy schema = SCHEMAS[schemaKey]. Nếu không có → toast lỗi + redirect index.html.
+3. Render header: tên loại + icon + nút "← Về trang chủ".
+4. Render từng field theo type:
+   - stt_auto / date_auto / link_gmap: KHÔNG render UI.
+   - gps_lat & gps_lng: render gộp 1 block "GPS: lat, lng (sai số Xm)" + nút "Lấy lại GPS". Tự động gọi GPS khi mở form.
+   - Người khảo sát (key=nguoi_ks): auto-fill = currentUser.full_name, readonly. Nếu role=demo, hiện banner cảnh báo.
+   - quan: <select> từ QUAN_LIST. onChange → cập nhật danh sách phường.
+   - phuong: <select> filter theo quận. Thêm option "Khác (nhập tay)" cho phép input text fallback.
+   - tdk: <input list="tdk-list"> + <datalist> với TDK_LIST.
+   - select: <select> với options.
+   - text/textarea/number/decimal: input thường, placeholder nếu schema có hint.
+   - required: dấu * đỏ + HTML5 required.
+5. Block ảnh:
+   - input file accept="image/*" multiple capture="environment".
+   - Grid preview 3 cột, mỗi ảnh có nút ✕.
+   - Upload song song khi chọn, hiện progress bar.
+   - Lưu mảng URL.
+6. Pre-fill từ draft cũ (nếu có) — confirm trước khi load.
+7. Auto-save mỗi 5s vào draft.
+8. Submit handler:
+   a. Validate required (skip trường readonly).
+   b. Nếu role=demo → toast "Tài khoản xem thử không submit được", return.
+   c. Disable nút Lưu + spinner.
+   d. Đợi tất cả ảnh upload xong (block submit nếu còn upload).
+   e. Collect data: object với key = schema.label (giữ NGUYÊN VĂN, để map cột Sheet).
+   f. Auto: `Link Google Map` = "https://www.google.com/maps?q=lat,lng" nếu có GPS.
+   g. Gán `Ảnh (URLs)` = urls.join("|").
+   h. Try: await apiSubmit(schemaKey, data, photos).
+      Success → clearDraft, saveSubmittedToday, toast "Đã lưu STT #N". Hỏi tiếp tục/về.
+      Network fail → enqueueSubmission, toast "Đã lưu offline, sẽ tự đồng bộ", về index.
+      Server error (forbidden/invalid token) → logout + redirect login.
 
-Implementation note:
-- Tách thành nhiều hàm nhỏ: renderField, renderImageBlock, renderGpsBlock, collectFormData, validateForm, handleSubmit.
-- Code rõ ràng, comment tiếng Việt các phần phức tạp.
-- KHÔNG dùng innerHTML với data từ user (XSS) — dùng textContent hoặc escapeHtml.
+YÊU CẦU:
+- Tách hàm nhỏ: renderField, renderImageBlock, renderGpsBlock, collectFormData, validateForm, handleSubmit.
+- KHÔNG dùng innerHTML với dữ liệu user — escapeHtml hoặc textContent.
+- Comment tiếng Việt mọi đoạn phức tạp.
+- Mobile-first, button ≥44px.
 
-Sau khi xong, báo cáo và chờ xác nhận.
+Sau khi xong, báo cáo. Chờ tôi nói "ok B8".
 ```
 
 ---
 
-## PROMPT 7 — HTML pages
+## PROMPT 7 — B8: login.html
 
 ```
-B8 + B9 + B10. Tạo 3 file HTML chính.
+Thực hiện B8. Tạo `login.html` theo mục 12 CLAUDE.md.
 
-index.html (trang chủ):
-- <head>: meta viewport mobile, manifest.json link, Tailwind CDN, title "Khảo sát chiếu sáng LAVIPCO".
-- <body>: 
-  * Header sticky: text "LAVIPCO" (text-lg font-bold) + bên phải indicator online/offline (chấm xanh/đỏ) + số bản chờ sync.
-  * Section chính: lưới 15 thẻ. Mobile 2 cột, tablet+ 3-4 cột. Mỗi thẻ: emoji to ở trên, tên loại ở dưới. Tap → window.location = "form.html?type=" + key.
-  * Footer: link "Xem khảo sát hôm nay" → recent.html. Version tag.
-- Script ở cuối: import SCHEMAS từ schemas.js, render grid động.
-- Đăng ký service worker sw.js.
-- Khi load, gọi syncQueue() nếu online — không await, chạy nền.
+CẤU TRÚC:
+- <head>: viewport mobile, Tailwind CDN, title "Đăng nhập — Khảo sát SAPULICO".
+- <body>:
+  * Logo + text "SAPULICO" ở trên.
+  * Card form ở giữa màn hình:
+    - Input username (autofocus, autocapitalize=off).
+    - Input password (type=password).
+    - Checkbox "Nhớ đăng nhập" (mặc định bật).
+    - Nút "Đăng nhập" (full width, blue-700, ≥44px).
+    - Vùng hiển thị lỗi inline (red-600, ẩn mặc định).
+  * Phía dưới: "Liên hệ quản trị nếu quên mật khẩu" (placeholder).
 
-form.html:
-- Cùng header với index nhưng có thêm nút "←" về trang chủ.
-- Body: 1 div #form-container.
-- Script: parse URL ?type=, gọi renderForm(container, type).
-- Nếu type không hợp lệ → redirect về index.html.
+LOGIC (`<script type="module">` ở cuối):
+- Import login, getCurrentUser từ auth.js.
+- Nếu đã login (token còn hạn) → redirect theo role:
+  * admin/user → kpi.html
+  * user1 → index.html
+  * demo → index.html
+- Submit form:
+  1. Disable nút + spinner.
+  2. Call login(username, password, remember).
+  3. Success → redirect theo role như trên.
+  4. Fail → hiện lỗi cụ thể từ server (sai mật khẩu / bị khoá / hết quota).
+- Sau 5 lần fail → disable nút 5 phút, đếm ngược trên UI.
 
-recent.html:
-- Cùng header.
-- Body: list các record từ getSubmittedToday(). Mỗi card: icon loại, tuyến đường, thời gian, STT, [N ảnh].
+KHÔNG đăng ký service worker ở login.html (để dễ debug auth flow).
+
+Sau khi xong, báo cáo. Chờ tôi nói "ok B9".
+```
+
+---
+
+## PROMPT 8 — B9 + B10 + B11: form, index, recent
+
+```
+Thực hiện B9, B10, B11.
+
+B9. `form.html`:
+- <head>: viewport, Tailwind, title động "<Tên loại> — Khảo sát SAPULICO".
+- Header sticky: nút "←" về index + tên loại KS + tên user + nút Đăng xuất.
+- <body><div id="form-container"></div>
+- Script module:
+  * requireAuth() đầu trang.
+  * Parse URL ?type=. Nếu invalid → redirect index.
+  * Gọi renderForm(container, type).
+  * Đăng ký sw.js.
+
+B10. `index.html` (trang chủ):
+- Header sticky: text "SAPULICO" + tên user + role badge + indicator online/offline + số bản chờ sync + menu dropdown:
+  * Trang chủ
+  * Khảo sát hôm nay (recent.html)
+  * (admin/user) Xem KPI (kpi.html)
+  * (admin/user) Quản lý bản ghi (manage.html)
+  * (admin/user) Báo cáo tổng hợp (report.html)
+  * Đăng xuất
+- Grid 15 thẻ. Mobile 2 cột, tablet 3, desktop 4. Mỗi thẻ: icon to + tên + tap → form.html?type=key.
+- Nếu role=demo: banner vàng trên đầu "Chế độ xem thử — không lưu được dữ liệu".
+- Script: requireAuth(), render menu dựa trên hasPermission(), call syncQueue() async, đăng ký sw.js.
+
+B11. `recent.html`:
+- Header giống index.
+- Nếu role có quyền `manage` → filter cho phép xem của KTV khác. Mặc định "Của tôi hôm nay".
+- List card mỗi record: icon loại, tuyến đường, thời gian, STT, số ảnh (badge).
 - Tap card → expand chi tiết readonly các trường (không cho sửa).
-- Nếu trống: "Hôm nay chưa có bản khảo sát nào".
+- Empty state: "Hôm nay chưa có bản khảo sát nào".
 
-UX bắt buộc:
-- Tất cả button cao ≥ 44px.
-- Màu chủ đạo: blue-700 (#1d4ed8) cho primary, gray-100 background.
-- Font: system-ui mặc định của Tailwind.
-- Mọi text Việt, không có chuỗi tiếng Anh lộ ra.
+UX:
+- Button ≥44px.
+- Màu primary: blue-700.
+- Tất cả text tiếng Việt.
 
-Sau khi xong 3 file HTML, báo cáo và chờ xác nhận.
+Sau khi xong 3 file HTML, báo cáo. Chờ tôi nói "ok B12".
 ```
 
 ---
 
-## PROMPT 8 — PWA: manifest + service worker + icons
+## PROMPT 9 — B12: KPI
 
 ```
-B11. Tạo manifest.json, sw.js, và 2 file icon placeholder.
+Thực hiện B12. Tạo `js/kpi.js` + `kpi.html` theo mục 13 CLAUDE.md.
 
-manifest.json: y như mục 12 CLAUDE.md, đầy đủ name/short_name/start_url="./"/display=standalone/theme_color=#1d4ed8.
+`kpi.html`:
+- Header giống index.html, có nút về trang chủ.
+- requireAuth('kpi') đầu trang (user1/demo bị đẩy về index).
+- Dropdown chọn tháng (mặc định = tháng hiện tại, format YYYY-MM). Có 12 tháng gần nhất.
+- Nút "Tải dữ liệu".
+- Loading spinner.
+- Bảng kết quả với header: KTV / Họ tên / Số bản / Tần suất / Chất lượng / Đa dạng / Đầy đủ / Ổn định / Tổng / Xếp loại.
+- Sort mặc định Tổng desc. Click header để đổi sort.
+- Xếp loại có màu: A xanh, B xanh nhạt, C vàng, D đỏ.
+- Nút "Xuất CSV".
+- Click KTV → modal hiện chi tiết + biểu đồ cột số bản theo ngày (SVG vanilla, max 31 cột).
 
-sw.js (service worker đơn giản):
-- Cache name: "khaosat-v1"
-- Trên install: cache các file shell: '/', '/index.html', '/form.html', '/recent.html', '/manifest.json', tất cả file js/, css/style.css.
-- Trên fetch:
-  * Request đến apps script URL hoặc cloudinary: KHÔNG cache, network only.
-  * Request đến tailwind CDN: cache-first.
+`js/kpi.js`:
+- function loadKpi(month) — call apiKpi, render bảng.
+- function exportCsv(results) — generate CSV, download.
+- function renderDetailModal(ktv, records) — vẽ biểu đồ SVG.
+
+Sau khi xong, báo cáo. Chờ tôi nói "ok B13".
+```
+
+---
+
+## PROMPT 10 — B13: Quản lý bản ghi
+
+```
+Thực hiện B13. Tạo `js/manage.js` + `manage.html` theo mục 14 CLAUDE.md.
+
+`manage.html`:
+- requireAuth('manage') đầu trang.
+- Header giống index.
+- Vùng filter trên đầu:
+  * Loại khảo sát: dropdown 15 loại + "Tất cả".
+  * KTV: dropdown từ taikhoan + "Tất cả".
+  * Từ ngày → đến ngày.
+  * Trạng thái: "Đang hoạt động" (mặc định) / "Đã xoá" / "Tất cả".
+  * Ô tìm kiếm tự do.
+  * Nút "Tìm".
+- Bảng kết quả với checkbox đầu hàng + cột: STT / Loại / Tuyến đường / KTV / Ngày / Ảnh / Trạng thái / Thao tác.
+- Pagination 50/trang.
+- Nút "Xoá đã chọn" + nút thao tác từng dòng (Xem / Xoá / Khôi phục).
+- Modal confirm xoá:
+  ```
+  Bạn sắp xoá bản ghi STT #N của loại "<tên>".
+  - Dữ liệu sẽ được đánh dấu xoá (có thể khôi phục).
+  - Tất cả ảnh đính kèm sẽ bị xoá VĨNH VIỄN khỏi Cloudinary, KHÔNG khôi phục được.
+  [Huỷ] [Xoá vĩnh viễn ảnh + soft-delete data]
+  ```
+- Modal xem chi tiết readonly.
+
+`js/manage.js`:
+- loadRecords(filters), deleteRecord(type, stt), restoreRecord(type, stt), bulkDelete(items).
+- Lightbox hiển thị ảnh.
+
+Sau khi xong, báo cáo. Chờ tôi nói "ok B14".
+```
+
+---
+
+## PROMPT 11 — B14: Báo cáo tổng hợp
+
+```
+Thực hiện B14. Tạo `js/report.js` + `report.html` theo mục 15 CLAUDE.md.
+
+`report.html`:
+- requireAuth('report') đầu trang.
+- Header giống index.
+- Vùng filter:
+  * Loại khảo sát: multi-select 15 loại (default tất cả).
+  * Khoảng thời gian: từ → đến + preset "Tháng này"/"Tháng trước"/"Quý này"/"Năm nay"/"Tuỳ chọn".
+  * KTV: multi-select.
+  * Trạng thái: "Đang hoạt động"/"Đã xoá"/"Tất cả".
+  * Group by: Ngày/Tuần/Tháng/Quý.
+  * Nút "Tải báo cáo".
+- 3 vùng kết quả:
+  * **A. Bảng tổng quan**: 1 hàng/loại — Tổng bản / Có ảnh / Có GPS / Trung bình ảnh-bản / Đã xoá.
+  * **B. Biểu đồ cột chồng** SVG vanilla: trục X = thời gian, mỗi cột chia màu theo loại, tooltip hover.
+  * **C. Pivot table** KTV × Loại: số bản, cell click → drill-down list bản ghi.
+- Nút "Xuất CSV" → tải zip 3 file CSV.
+
+`js/report.js`:
+- loadReport(filters), renderTableA(), renderChartB(), renderPivotC().
+- exportCsv() — JSZip CDN nếu cần, hoặc tải lần lượt 3 file.
+
+Sau khi xong, báo cáo. Chờ tôi nói "ok B15".
+```
+
+---
+
+## PROMPT 12 — B15: PWA
+
+```
+Thực hiện B15. Tạo PWA assets.
+
+manifest.json: y mục 16 CLAUDE.md. name="Khảo sát chiếu sáng SAPULICO", short_name="KS Đèn", start_url="./", display="standalone", theme_color="#1d4ed8", icons 192/512.
+
+sw.js:
+- Cache name "khaosat-v1".
+- Install: precache shell — '/', '/index.html', '/login.html', '/form.html', '/recent.html', '/kpi.html', '/manage.html', '/report.html', '/manifest.json', tất cả file js/, css/style.css.
+- Fetch strategy:
+  * Apps Script URL hoặc Cloudinary: network only.
+  * Tailwind CDN: cache-first.
   * Còn lại: stale-while-revalidate.
-- Trên activate: xóa cache cũ tên khác.
+- Activate: xoá cache name khác.
 
-Icons: tạo 2 file PNG 192x192 và 512x512 đặt ở assets/. Nội dung ảnh: nền màu blue-700, chữ "KS" trắng to ở giữa. Generate bằng Python + Pillow nếu cần.
+assets/icon-192.png, assets/icon-512.png: PNG nền blue-700 #1d4ed8, chữ "KS" trắng, sinh bằng Python+Pillow nếu cần.
 
-css/style.css: tạm thời rỗng (chỉ comment giải thích) — Tailwind đã đủ.
+css/style.css: đầu file comment giải thích, body tạm rỗng (Tailwind đủ).
 
-Sau khi xong, báo cáo và chờ xác nhận.
+Sau khi xong, báo cáo. Chờ tôi nói "ok B16".
 ```
 
 ---
 
-## PROMPT 9 — Test toàn bộ
+## PROMPT 13 — B16: Test toàn bộ
 
 ```
-B12. Test toàn bộ ứng dụng. Bạn KHÔNG cần deploy thật, chỉ verify code chạy được trên môi trường mô phỏng:
+Thực hiện B16. Test toàn bộ ứng dụng (mock — chưa cần deploy thật).
 
-1. Mở Python http.server tại root repo (port 8080).
-2. Dùng curl/wget kiểm tra index.html, form.html, recent.html, manifest.json, sw.js, các file js/ load 200 OK.
-3. Parse từng file JS bằng node (nếu có) hoặc kiểm tra cú pháp ES6 — không có lỗi syntax.
-4. Mở từng schema trong SCHEMAS, đảm bảo:
-   - schema.sheet khớp danh sách mục 4 CLAUDE.md (in ra bảng so sánh)
-   - schema.fields có ít nhất các field bắt buộc: stt, ngay_ks (date_auto), nguoi_ks
-   - Tất cả label tiếng Việt không có ký tự lạ
-5. Validate Code.gs: SHEET_MAP có đủ 15 entries, key khớp với SCHEMAS.
+Kế hoạch test:
+1. Khởi `python -m http.server 8080` ở root repo.
+2. Verify 200 OK cho tất cả file HTML/JS/JSON.
+3. Parse từng file JS bằng `node --check` (nếu có) hoặc regex syntax — không lỗi.
+4. Verify SCHEMAS:
+   - Số loại = 15.
+   - Mỗi schema.sheet khớp mục 4 CLAUDE.md (in bảng so sánh).
+   - Mỗi schema.fields có stt/ngay_ks/nguoi_ks.
+   - Tất cả label tiếng Việt không lỗi encoding.
+5. Verify Code.gs:
+   - SHEET_MAP 15 entries khớp SCHEMAS keys.
+   - PERMISSIONS 4 role × 5 action.
+   - 7 case trong switch action.
+6. Verify auth.js:
+   - PERMISSIONS map giống Apps Script.
+   - requireAuth có check expiresAt.
+7. Verify api.js:
+   - Mọi action gửi kèm token (trừ login).
+   - Cloudinary upload nén trước.
 
-In ra báo cáo:
-- ✅ / ❌ cho từng mục test
-- Liệt kê file đã tạo (tree)
-- Tổng số dòng code (wc -l)
-- Bất kỳ vấn đề nào phát hiện
+Mô phỏng các luồng (không cần thật sự gọi Apps Script, chỉ kiểm trên code):
+- login → redirect theo role.
+- demo cố submit → bị reject.
+- user1 cố mở kpi.html → bị redirect.
+- delete → soft-delete row + xoá ảnh Cloudinary + log Audit.
 
-Sau đó cập nhật README.md mục "Known Issues" nếu có gì cần lưu ý.
+Output:
+- ✅/❌ cho từng mục test.
+- Tree cây thư mục.
+- wc -l tổng số dòng code.
+- Liệt kê vấn đề phát hiện (nếu có).
 
-Báo cáo và chờ xác nhận.
-```
+Cập nhật README.md "Known Issues" với phát hiện.
 
----
-
-## PROMPT 10 — Final review + tổng kết
-
-```
-B13. Tổng kết dự án.
-
-Thực hiện:
-1. Đi qua checklist mục 15 CLAUDE.md (Checklist chất lượng), tick từng mục:
-   - [ ] Không có hardcode URL Apps Script / Cloudinary trong file ngoài config.js
-   - [ ] Tất cả 15 form render được không lỗi console
-   - [ ] Header trong Google Sheets test giống nguyên văn mục 4-5
-   - [ ] STT và Ngày khảo sát do server gán
-   - [ ] GPS có fallback khi user từ chối
-   - [ ] Ảnh được nén trước upload
-   - [ ] localStorage có dọn dẹp sau submit thành công
-   - [ ] Test trên màn hình 360px width
-   - [ ] Test offline → online sync
-   - [ ] SETUP.md đầy đủ
-
-2. Cập nhật README.md với:
-   - Link demo (sẽ là https://<user>.github.io/khao-sat-chieu-sang sau deploy)
-   - Bảng 15 loại khảo sát
-   - Section "Cách dùng cho KTV" 5 bước
-   - Section "Known Issues" nếu có
-
-3. Tạo file CHANGELOG.md với phiên bản 1.0.0 ngày hôm nay, liệt kê features.
-
-4. In ra cây thư mục cuối cùng (tree).
-
-5. In ra "NEXT STEPS" cho user — chính xác cần làm gì để go-live:
-   - Bước 1: Tạo Google Sheets theo SETUP.md mục A
-   - Bước 2: Apps Script theo SETUP.md mục B  
-   - Bước 3: Cloudinary theo mục C
-   - Bước 4: Điền config.js
-   - Bước 5: git add, commit, push
-   - Bước 6: Settings → Pages → Source branch main
-   - Bước 7: Mở URL, test trên điện thoại
-
-Báo cáo "🎉 Hoàn tất dự án" và liệt kê tất cả file đã tạo + ngắn gọn mô tả mỗi file.
+Sau khi xong, báo cáo. Chờ tôi nói "ok B17".
 ```
 
 ---
 
-## PROMPT BỔ SUNG — Khi cần sửa/thêm
-
-### Prompt khi muốn thêm 1 loại khảo sát mới
+## PROMPT 14 — B17: Final review & tổng kết
 
 ```
-Tôi muốn thêm 1 loại khảo sát mới: "Sửa chữa móng trụ" (key: sua_mong).
-Trường: [liệt kê các trường y như format mục 5 CLAUDE.md].
-Sheet name trong Google Sheets: "17. Sua mong".
+Thực hiện B17. Tổng kết dự án.
+
+1. Đi qua checklist chất lượng mục 19 CLAUDE.md, tick từng mục. Liệt kê mục nào chưa đạt + lý do.
+
+2. Cập nhật README.md:
+   - Link demo: https://<user>.github.io/khaosat
+   - Bảng 15 loại KS.
+   - Section "Cho KTV": 5 bước dùng app.
+   - Section "Cho Admin": KPI / Manage / Report đường dẫn + quyền.
+   - Known Issues (từ B16).
+
+3. Tạo CHANGELOG.md v1.0.0 ngày hôm nay:
+   - Features: 15 loại form, 4 role auth, KPI, Manage (soft-delete), Report, PWA, offline queue.
+
+4. In cây thư mục cuối cùng.
+
+5. In "NEXT STEPS" để go-live:
+   - Hoàn tất SETUP.md bước A→J.
+   - git push.
+   - GitHub Pages enable.
+   - Test login với 4 user mẫu.
+   - Test submit thật 1 form mỗi loại.
+   - Test xoá + khôi phục.
+   - Test KPI tháng hiện tại.
+   - Test report.
+
+6. Báo cáo "Hoàn tất dự án v1.0" + liệt kê mọi file đã tạo với mô tả 1 dòng.
+```
+
+---
+
+## PROMPT BỔ SUNG — Khi cần sửa/thêm sau này
+
+### A. Thêm 1 loại khảo sát mới
+
+```
+Thêm loại khảo sát "<tên>" key=<key>. Sheet name: "<sheet>".
+Fields: [paste theo format mục 5 CLAUDE.md].
 
 Yêu cầu:
-1. Cập nhật CLAUDE.md mục 4 (thêm vào bảng) và mục 5 (thêm schema 5.16)
-2. Cập nhật apps-script/Code.gs SHEET_MAP
-3. Cập nhật js/schemas.js
-4. Tạo sheet mới trong Google Sheets (hướng dẫn tôi làm thủ công)
-5. Không thay đổi file khác.
-
+1. Update CLAUDE.md mục 4 (bảng) + mục 5 (schema mới).
+2. Update apps-script/Code.gs SHEET_MAP.
+3. Update js/schemas.js.
+4. Hướng dẫn tôi thủ công tạo sheet mới trong Google Sheets + 6 cột bonus + conditional format.
+5. KHÔNG đụng file khác.
 Sau khi xong báo cáo.
 ```
 
-### Prompt khi muốn đổi UX/UI
+### B. Thêm/sửa/xoá user
 
 ```
-Tôi muốn thay đổi UI:
-- [mô tả thay đổi cụ thể]
+[Admin task]
+1. Tôi muốn tạo user mới: username=X, full_name=Y, role=Z.
+2. Trên Apps Script script.google.com, mở Code.gs, chạy hàm `hashPassword("mật-khẩu-mới")` → copy hash.
+3. Paste vào sheet `taikhoan` cột password_hash.
+4. Set active=TRUE.
 
-Phạm vi ảnh hưởng: chỉ js/form-renderer.js + css/style.css (KHÔNG đụng schema, KHÔNG đụng Apps Script, KHÔNG đụng config).
-
-Sau khi xong test lại như Prompt 9 nhưng chỉ phần UI.
+(Hoặc) Tôi muốn vô hiệu hoá user X: set active=FALSE trong sheet `taikhoan`.
 ```
 
-### Prompt khi gặp bug
+### C. Đổi mật khẩu user
 
 ```
-Khi tôi submit form "Thay trụ", gặp lỗi: [paste log từ console hoặc Apps Script Executions].
+Tôi muốn đổi mật khẩu user X.
+Trên Apps Script: chạy `hashPassword("mật-khẩu-mới")` → copy hash → paste vào sheet `taikhoan` row của user X cột password_hash. Token cũ vẫn còn hạn 8h, sau đó user phải đăng nhập lại.
+```
+
+### D. Đổi UX/UI
+
+```
+Muốn thay đổi UI: [mô tả cụ thể].
+Phạm vi: chỉ js/form-renderer.js + css/style.css + file HTML liên quan.
+KHÔNG đụng schemas, Apps Script, config.
+Sau khi xong test lại tương đương B16 nhưng chỉ phần UI.
+```
+
+### E. Bug
+
+```
+Khi tôi <hành động>, gặp lỗi: [paste console log hoặc Apps Script Executions].
 
 Yêu cầu:
-1. Phân tích nguyên nhân
-2. Đề xuất fix (chưa code)
-3. Sau khi tôi OK mới sửa
+1. Phân tích nguyên nhân (đọc CLAUDE.md mục liên quan, đọc code thực tế).
+2. Đề xuất fix (CHƯA code).
+3. Đợi tôi duyệt mới sửa.
 
-KHÔNG đoán mò, KHÔNG sửa rộng. Chỉ fix đúng bug.
+KHÔNG đoán mò, KHÔNG sửa ngoài phạm vi bug.
 ```
 
-### Prompt khi muốn thêm tính năng đăng nhập (tương lai)
+### F. Rotate URL Apps Script (khi nghi bị spam)
 
 ```
-Hiện tại app không có đăng nhập. Tôi muốn thêm Google Login để mỗi KTV phải đăng nhập trước khi submit, và "Người khảo sát" auto lấy từ email Google.
+Nghi Apps Script bị spam (xem Apps Script Executions thấy nhiều fail login).
 
-Yêu cầu thiết kế (CHƯA code):
-- Cách integrate Google Identity Services
-- Ảnh hưởng đến luồng offline (làm sao biết user khi offline)?
-- Có cần whitelist email nhân viên LAVIPCO không?
-- Tác động đến Apps Script (có cần verify token không)?
+Yêu cầu:
+1. Hướng dẫn tôi re-deploy Apps Script với version mới (Manage Deployments → New version).
+2. Copy URL mới.
+3. Cập nhật js/config.js → push.
+4. URL cũ tự vô hiệu trong vài giờ.
 
-Trả lời thiết kế trước, sau khi tôi duyệt mới code.
+KHÔNG cần đổi salt (token cũ vẫn verify được). Chỉ đổi salt khi muốn invalidate hết token đang dùng.
 ```
 
 ---
 
 ## CHIẾN LƯỢC SỬ DỤNG
 
-### Nếu dùng Claude Code (CLI trong terminal)
-- Mỗi prompt = 1 message. Đợi Claude làm xong rồi mới gửi prompt tiếp.
-- Claude Code tự tạo file, bạn không cần copy paste code.
-- Sau Prompt 10, repo đã sẵn sàng — chỉ cần config + push.
-
-### Nếu dùng Claude.ai (web)
-- Trong message Prompt 0, upload kèm `CLAUDE.md` + `khao_sat_tang_cuong_den.xlsx`.
-- Các prompt sau không cần upload lại (Claude nhớ context trong cùng chat).
-- Sau mỗi prompt, Claude trả về code/file → bạn copy paste vào repo local.
-- Nếu chat quá dài, có thể bị giới hạn → bắt đầu chat mới và upload lại CLAUDE.md + những file đã tạo.
-
 ### Quy tắc vàng
-1. **Luôn xác nhận checkpoint** trước khi cho Claude làm tiếp. Đừng để Claude làm 1 mạch B1→B13 — dễ sai và khó debug.
-2. **Đọc code trước khi commit** — Claude có thể bịa, đặc biệt với lookups (102 phường / 903 TĐK).
-3. **Test ngay sau mỗi bước**:
-   - Sau B3 (Apps Script): paste vào script.google.com, thử chạy doPost với mock data.
-   - Sau B5 (schemas): in `console.log(SCHEMAS)` trong browser console.
-   - Sau B7 (renderer): mở `form.html?type=tang_cuong_den` xem có render đúng không.
-4. **Nếu Claude tự ý thêm tính năng không có trong CLAUDE.md** — yêu cầu xoá đi. Giữ scope.
-5. **Backup mỗi checkpoint**: commit Git sau mỗi prompt thành công, dễ rollback.
+1. **Mỗi PROMPT chạy đến cùng**. Không gửi PROMPT tiếp khi PROMPT trước chưa được xác nhận.
+2. **Đọc code Claude tạo trước khi commit**. Đặc biệt lookups.js (102 phường, 903 TĐK) và schemas.js (label tiếng Việt).
+3. **Test sau mỗi mốc lớn**:
+   - Sau B3 (Code.gs): paste vào script.google.com, chạy thử `hashPassword("test")` xem có hash trả về không.
+   - Sau B5 (schemas.js): `python -m http.server` rồi `console.log(SCHEMAS)` trong browser.
+   - Sau B8 (login.html): test login với user mẫu thật trong sheet `taikhoan`.
+   - Sau B11 (recent.html): test luồng login → submit 1 form → recent.html thấy bản ghi.
+4. **Commit Git sau mỗi PROMPT thành công** — dễ rollback nếu PROMPT sau sai.
+5. **Nếu Claude bịa dữ liệu (đặc biệt lookups)**: gửi prompt "Bạn đang bịa. Đọc thực tế từ file Excel sheet X từ row Y. In 10 mục đầu để tôi verify trước khi tiếp".
+
+### Khi Claude lệch hướng
+
+```
+DỪNG. Bạn đang làm sai mục [X] CLAUDE.md.
+Đọc lại mục [X], cụ thể: [chỉ rõ chỗ sai và phải làm gì].
+KHÔNG sửa rộng — chỉ fix phần lệch.
+```
+
+### Nếu chat quá dài, bắt đầu chat mới
+
+1. Upload lại CLAUDE.md + PROMPTS.md.
+2. Upload các file đã tạo từ chat cũ.
+3. Bắt đầu bằng prompt:
+   ```
+   Đây là chat tiếp tục dự án `khaosat` SAPULICO. Đính kèm:
+   - CLAUDE.md (nguồn chân lý)
+   - PROMPTS.md (kịch bản đang theo)
+   - <các file đã tạo>
+   Tôi đã hoàn thành đến PROMPT N. Giờ tiếp tục PROMPT N+1: [dán nguyên văn].
+   ```
 
 ---
 
-## CÁCH XỬ LÝ KHI CLAUDE HIỂU SAI
-
-Nếu Claude bắt đầu code lệch yêu cầu, gửi prompt sửa lỗi NGẮN:
-
-```
-DỪNG. Bạn đang làm sai mục [X]. Đọc lại CLAUDE.md mục [Y] và sửa lại.
-Cụ thể: [chỉ rõ chỗ sai và phải làm gì].
-```
-
-Hoặc nếu Claude bịa dữ liệu:
-
-```
-Bạn đang bịa danh sách phường. Mở file khao_sat_tang_cuong_den.xlsx 
-sheet "Phường-Xã 2025" và đọc THỰC TẾ từ row 5. 
-In ra 10 mục đầu để tôi verify trước khi tiếp tục.
-```
-
----
-
-**Hết.** Lưu file này lại để dùng dài hạn. Khi cần redo project hoặc onboard người khác, chỉ cần đưa `CLAUDE.md` + `PROMPTS.md` này là đủ.
+**Hết.** Lưu file này dài hạn. Để onboard người mới hoặc redo dự án, chỉ cần `CLAUDE.md` + `PROMPTS.md` + file Excel gốc.
