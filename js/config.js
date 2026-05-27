@@ -8,8 +8,8 @@ export const CONFIG = {
   // Google Sheets CSV publish URL (read-only)
   sheetsCsvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRajzWe7TR5VPW5QOzYAOdZJoqRRbQpk4iO4GKOT4rd7GUQj87fTsPAll6cCC6bkcpEyMs5FYg_JMrH/pub?output=csv',
 
-  // Cloudinary — điền sau khi tạo unsigned preset
-  cloudinaryName: 'your-cloud-name',
+  // Cloudinary — cloud name lấy từ Dashboard, preset là tên unsigned preset đã tạo
+  cloudinaryName: 'dmlsqbe8c',
   cloudinaryPreset: 'khaosat_unsigned',
 
   // Tham số ảnh
