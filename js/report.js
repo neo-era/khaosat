@@ -1,6 +1,6 @@
 // js/report.js — Trang báo cáo: 3 vùng A bảng tổng quan / B biểu đồ cột chồng / C pivot KTV×Loại.
 
-import { apiReport } from './api.js';
+import { apiReport, apiUsers } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { showToast, escapeHtml } from './utils.js';
 
@@ -16,6 +16,7 @@ const TYPE_COLORS = [
 
 export async function initReport() {
   buildTypeFilter();
+  await buildUserFilter();
   bindEvents();
   applyPreset('this-month');
   await loadReport();
@@ -32,9 +33,30 @@ function buildTypeFilter() {
   }
 }
 
+async function buildUserFilter() {
+  const sel = document.getElementById('filter-usernames');
+  if (!sel) return;
+  try {
+    const res = await apiUsers();
+    const users = (res.users || []).filter(u => u.role !== 'demo');
+    for (const u of users) {
+      const opt = document.createElement('option');
+      opt.value = u.username;
+      opt.textContent = u.full_name + ' (@' + u.username + ')';
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    // Im lặng, để dropdown rỗng = "tất cả KTV"
+  }
+}
+
 function bindEvents() {
   document.getElementById('btn-load').onclick = loadReport;
   document.getElementById('btn-export').onclick = exportCsv;
+  const bx = document.getElementById('btn-export-xlsx');
+  const bp = document.getElementById('btn-export-pdf');
+  if (bx) bx.onclick = exportXlsx;
+  if (bp) bp.onclick = exportPdf;
   document.querySelectorAll('[data-preset]').forEach(b => {
     b.onclick = () => { applyPreset(b.dataset.preset); loadReport(); };
   });
@@ -61,6 +83,8 @@ function applyPreset(p) {
 async function loadReport() {
   const sel = document.getElementById('filter-types');
   const types = Array.from(sel.selectedOptions).map(o => o.value);
+  const selU = document.getElementById('filter-usernames');
+  const usernames = selU ? Array.from(selU.selectedOptions).map(o => o.value) : [];
   const from = document.getElementById('filter-from').value;
   const to = document.getElementById('filter-to').value;
   const status = document.getElementById('filter-status').value;
@@ -73,6 +97,7 @@ async function loadReport() {
   try {
     const res = await apiReport({
       types: types.length === SCHEMA_KEYS.length ? undefined : types,
+      usernames: usernames.length > 0 ? usernames : undefined,
       from: from || undefined,
       to: to ? to + 'T23:59:59' : undefined,
       status,
@@ -83,6 +108,10 @@ async function loadReport() {
     renderAreaB(res.areaB || [], types);
     renderAreaC(res.areaC || [], types);
     document.getElementById('btn-export').disabled = false;
+    const bx = document.getElementById('btn-export-xlsx');
+    const bp = document.getElementById('btn-export-pdf');
+    if (bx) bx.disabled = false;
+    if (bp) bp.disabled = false;
   } catch (e) {
     showToast('Lỗi tải báo cáo: ' + e.message, 'error', 4000);
   } finally {
@@ -297,4 +326,148 @@ function csvEscape(v) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;
+}
+
+/** Export Excel — 3 sheet riêng cho 3 vùng. */
+function exportXlsx() {
+  if (!state.data) return;
+  if (typeof XLSX === 'undefined') { showToast('SheetJS chưa load', 'error'); return; }
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const allTypes = Object.keys(SCHEMAS);
+  const wb = XLSX.utils.book_new();
+
+  // Sheet A: Tổng quan
+  const headerA = ['Loại', 'Tổng bản', 'Có ảnh', 'Có GPS', 'TB ảnh/bản', 'Đã xoá'];
+  const rowsA = state.data.areaA.map(r => {
+    const sc = SCHEMAS[r.type];
+    return [sc ? sc.name : r.type, r.total, r.has_photo, r.has_gps, r.avg_photos_per_record, r.deleted];
+  });
+  const wsA = XLSX.utils.aoa_to_sheet([
+    ['Vùng A — Tổng quan theo loại'],
+    ['Xuất lúc: ' + new Date().toLocaleString('vi-VN')],
+    [],
+    headerA,
+    ...rowsA
+  ]);
+  wsA['!cols'] = [{wch:30},{wch:10},{wch:10},{wch:10},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsA, 'A-Tong quan');
+
+  // Sheet B: Timeseries
+  const headerB = ['Bucket', ...allTypes.map(t => SCHEMAS[t].name)];
+  const rowsB = state.data.areaB.map(r => [r.bucket, ...allTypes.map(t => r[t] || 0)]);
+  const wsB = XLSX.utils.aoa_to_sheet([
+    ['Vùng B — Phân bố theo thời gian'],
+    [],
+    headerB,
+    ...rowsB
+  ]);
+  wsB['!cols'] = [{wch:14}, ...allTypes.map(() => ({wch:14}))];
+  XLSX.utils.book_append_sheet(wb, wsB, 'B-Timeseries');
+
+  // Sheet C: Pivot
+  const headerC = ['Username', 'Họ tên', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'];
+  const rowsC = state.data.areaC.map(r => [
+    r.username, r.full_name,
+    ...allTypes.map(t => r[t] || 0),
+    r.total
+  ]);
+  const wsC = XLSX.utils.aoa_to_sheet([
+    ['Vùng C — Pivot KTV × Loại'],
+    [],
+    headerC,
+    ...rowsC
+  ]);
+  wsC['!cols'] = [{wch:12},{wch:24}, ...allTypes.map(() => ({wch:14})), {wch:10}];
+  XLSX.utils.book_append_sheet(wb, wsC, 'C-Pivot KTV');
+
+  XLSX.writeFile(wb, 'bao-cao-' + dateStr + '.xlsx');
+}
+
+/** Export PDF — A4 landscape, 3 vùng trên 3 trang. */
+function exportPdf() {
+  if (!state.data) return;
+  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('jsPDF chưa load', 'error'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const allTypes = Object.keys(SCHEMAS);
+  const dateStr = new Date().toLocaleString('vi-VN');
+
+  // === Trang 1: Vùng A ===
+  drawPdfHeader(doc, 'Vung A — Tong quan theo loai', dateStr);
+  doc.autoTable({
+    startY: 28,
+    head: [['Loai', 'Tong ban', 'Co anh', 'Co GPS', 'TB anh/ban', 'Da xoa']],
+    body: state.data.areaA.map(r => {
+      const sc = SCHEMAS[r.type];
+      return [sc ? sc.name : r.type, r.total, r.has_photo, r.has_gps, r.avg_photos_per_record, r.deleted];
+    }),
+    styles: { fontSize: 9, cellPadding: 2 },
+    headStyles: { fillColor: [29, 78, 216] },
+    columnStyles: {
+      0: { cellWidth: 80 },
+      1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' },
+      4: { halign: 'right' }, 5: { halign: 'right', textColor: [192, 0, 0] }
+    },
+    didDrawPage: pdfFooter(doc)
+  });
+
+  // === Trang 2: Vùng B Timeseries ===
+  doc.addPage();
+  drawPdfHeader(doc, 'Vung B — Phan bo theo thoi gian', dateStr);
+  doc.autoTable({
+    startY: 28,
+    head: [['Bucket', ...allTypes.map(t => SCHEMAS[t].name)]],
+    body: state.data.areaB.map(r => [r.bucket, ...allTypes.map(t => r[t] || 0)]),
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    headStyles: { fillColor: [29, 78, 216], fontSize: 7 },
+    columnStyles: { 0: { cellWidth: 22, fontStyle: 'bold' } },
+    didDrawPage: pdfFooter(doc)
+  });
+
+  // === Trang 3: Vùng C Pivot ===
+  doc.addPage();
+  drawPdfHeader(doc, 'Vung C — Pivot KTV x Loai', dateStr);
+  doc.autoTable({
+    startY: 28,
+    head: [['User', 'Ho ten', ...allTypes.map(t => SCHEMAS[t].name), 'Tong']],
+    body: state.data.areaC.map(r => [
+      r.username, r.full_name,
+      ...allTypes.map(t => r[t] || 0),
+      r.total
+    ]),
+    styles: { fontSize: 7, cellPadding: 1.5 },
+    headStyles: { fillColor: [29, 78, 216], fontSize: 7 },
+    columnStyles: {
+      0: { cellWidth: 16 },
+      1: { cellWidth: 32 },
+      [2 + allTypes.length]: { fontStyle: 'bold', halign: 'right' }
+    },
+    didDrawPage: pdfFooter(doc)
+  });
+
+  doc.save('bao-cao-' + new Date().toISOString().slice(0, 10) + '.pdf');
+}
+
+function drawPdfHeader(doc, title, dateStr) {
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SAPULICO — Bao cao khao sat', 14, 14);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text(title, 14, 21);
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text('Xuat luc: ' + dateStr, doc.internal.pageSize.getWidth() - 14, 14, { align: 'right' });
+  doc.setTextColor(0);
+}
+
+function pdfFooter(doc) {
+  return (data) => {
+    const pageCount = doc.internal.getNumberOfPages();
+    const pageNum = data.pageNumber;
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('Trang ' + pageNum + '/' + pageCount + ' — SAPULICO 2026',
+      doc.internal.pageSize.getWidth() - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' });
+  };
 }

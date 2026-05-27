@@ -7,6 +7,9 @@
   <link rel="manifest" href="manifest.json">
   <title>Báo cáo tổng hợp — SAPULICO</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.7.1/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -22,10 +25,14 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-lg shadow-sm p-3 mb-3">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-2">
         <div>
           <label class="block text-xs text-gray-600 mb-1">Loại khảo sát</label>
           <select id="filter-types" multiple size="3" class="w-full px-2 py-1 border rounded text-sm"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">KTV (Ctrl-click chọn nhiều)</label>
+          <select id="filter-usernames" multiple size="3" class="w-full px-2 py-1 border rounded text-sm"></select>
         </div>
         <div>
           <label class="block text-xs text-gray-600 mb-1">Trạng thái</label>
@@ -58,9 +65,11 @@
         <button data-preset="this-quarter" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Quý này</button>
         <button data-preset="this-year" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Năm nay</button>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <button id="btn-load" class="bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" style="min-height:44px">🔄 Tải báo cáo</button>
-        <button id="btn-export" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📥 Xuất CSV</button>
+        <button id="btn-export" class="bg-gray-200 text-gray-800 px-3 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📥 CSV</button>
+        <button id="btn-export-xlsx" class="bg-green-600 text-white px-3 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📊 Excel</button>
+        <button id="btn-export-pdf" class="bg-red-600 text-white px-3 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📄 PDF</button>
       </div>
     </div>
 

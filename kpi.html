@@ -7,6 +7,9 @@
   <link rel="manifest" href="manifest.json">
   <title>KPI tháng — SAPULICO</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.7.1/dist/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
 
@@ -25,7 +28,9 @@
       <label class="text-sm text-gray-700">Tháng:</label>
       <select id="month-select" class="px-3 py-2 border rounded-lg" style="min-height:44px"></select>
       <button id="btn-load" class="bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" style="min-height:44px">🔄 Tải KPI</button>
-      <button id="btn-export" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📥 Xuất CSV</button>
+      <button id="btn-export" class="bg-gray-200 text-gray-800 px-3 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📥 CSV</button>
+      <button id="btn-export-xlsx" class="bg-green-600 text-white px-3 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📊 Excel</button>
+      <button id="btn-export-pdf" class="bg-red-600 text-white px-3 py-2 rounded-lg font-medium" style="min-height:44px" disabled>📄 PDF</button>
     </div>
 
     <div id="summary" class="text-xs text-gray-600 mb-2"></div>

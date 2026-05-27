@@ -93,6 +93,8 @@
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initManage } from './js/manage.js';
+    import { apiUsers } from './js/api.js';
+    import { showToast } from './js/utils.js';
 
     const user = requireAuth('manage');
     document.getElementById('header-user').textContent = user.full_name;
@@ -104,10 +106,17 @@
     };
     document.getElementById('lightbox-close').onclick = () => document.getElementById('lightbox').classList.add('hidden');
 
-    // Lấy danh sách user để filter (TODO: gọi endpoint riêng, tạm dùng list từ taikhoan)
-    // Hiện tại pass mảng rỗng → user filter empty (chỉ default "tất cả")
-    // Có thể mở rộng sau bằng endpoint apiUsers()
-    initManage([]);
+    // Load danh sách user để populate dropdown filter
+    (async () => {
+      let users = [];
+      try {
+        const res = await apiUsers();
+        users = res.users || [];
+      } catch (e) {
+        showToast('Không tải được danh sách KTV: ' + e.message, 'warning', 4000);
+      }
+      initManage(users);
+    })();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

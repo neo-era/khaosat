@@ -2,6 +2,7 @@
 
 import { apiList, apiDelete, apiRestore } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
+import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDate, formatVnDateOnly } from './utils.js';
 
 const state = {
@@ -118,6 +119,9 @@ function renderTable() {
       </td>
       <td class="px-2 py-2 text-right whitespace-nowrap">
         <button class="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded mr-1 btn-view">Xem</button>
+        ${!isDeleted && hasPermission('edit')
+          ? `<button class="text-xs px-2 py-1 bg-yellow-50 text-yellow-700 rounded mr-1 btn-edit">Sửa</button>`
+          : ''}
         ${isDeleted
           ? `<button class="text-xs px-2 py-1 bg-green-50 text-green-700 rounded btn-restore">Khôi phục</button>`
           : `<button class="text-xs px-2 py-1 bg-red-50 text-red-700 rounded btn-delete">Xoá</button>`}
@@ -127,6 +131,10 @@ function renderTable() {
     tr.querySelector('.btn-view').onclick = () => openDetail(r);
     const photoBtn = tr.querySelector('[data-photos]');
     if (photoBtn) photoBtn.onclick = () => openLightbox(JSON.parse(photoBtn.dataset.photos));
+    const editBtn = tr.querySelector('.btn-edit');
+    if (editBtn) editBtn.onclick = () => {
+      location.href = 'form.html?type=' + encodeURIComponent(r._type) + '&edit=' + encodeURIComponent(r['STT']);
+    };
     const delBtn = tr.querySelector('.btn-delete');
     if (delBtn) delBtn.onclick = () => confirmDelete(r);
     const resBtn = tr.querySelector('.btn-restore');

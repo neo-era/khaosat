@@ -44,11 +44,20 @@ export async function apiSubmit(type, data, photos = []) {
   });
 }
 
-export async function apiList({ type, username, from, to, includeDeleted, status } = {}) {
+export async function apiList({ type, username, stt, from, to, includeDeleted, status } = {}) {
   return postJson({
     action: 'list',
     token: requireToken(),
-    type, username, from, to, includeDeleted, status
+    type, username, stt, from, to, includeDeleted, status
+  });
+}
+
+/** Sửa bản ghi (admin/user role có quyền edit). photos=undefined → giữ nguyên; photos=[urls] → ghi đè. */
+export async function apiUpdate(type, stt, data, photos) {
+  return postJson({
+    action: 'update',
+    token: requireToken(),
+    type, stt, data, photos
   });
 }
 
@@ -71,6 +80,21 @@ export async function apiReport({ types, from, to, usernames, status, groupBy } 
     action: 'report',
     token: requireToken(),
     types, from, to, usernames, status, groupBy
+  });
+}
+
+/** Trả danh sách user active (cho dropdown filter ở manage/report). */
+export async function apiUsers() {
+  return postJson({ action: 'users', token: requireToken() });
+}
+
+/** Reset password user (chỉ admin/role có users_manage). */
+export async function apiResetPassword(username, new_password) {
+  return postJson({
+    action: 'reset_password',
+    token: requireToken(),
+    username,
+    new_password
   });
 }
 
