@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title id="page-title">Khảo sát SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Sticky header chung -->
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-2xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html"
+         class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center"
+         style="min-height:44px; min-width:44px"
+         title="Về trang chủ">←</a>
+      <span id="header-title" class="text-sm font-semibold text-gray-800 flex-1 truncate"></span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[120px] truncate"></span>
+      <button id="btn-logout"
+              class="text-sm px-3 text-gray-600 hover:bg-gray-100 rounded"
+              style="min-height:44px"
+              title="Đăng xuất">Thoát</button>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-3 py-4 pb-24">
+    <div id="form-container"></div>
+  </main>
+
+  <script type="module">
+    import { requireAuth, logout } from './js/auth.js';
+    import { SCHEMAS } from './js/schemas.js';
+    import { renderForm } from './js/form-renderer.js';
+    import { showToast } from './js/utils.js';
+
+    // 1. Check auth (throw + redirect login nếu chưa)
+    const user = requireAuth();
+
+    // 2. Parse URL ?type=
+    const params = new URLSearchParams(location.search);
+    const type = params.get('type');
+
+    if (!type || !SCHEMAS[type]) {
+      showToast('Loại khảo sát không hợp lệ: ' + (type || '(rỗng)'), 'error', 2500);
+      setTimeout(() => location.replace('index.html'), 1500);
+    } else {
+      const schema = SCHEMAS[type];
+
+      // 3. Set page title + header
+      document.getElementById('page-title').textContent = schema.name + ' — Khảo sát SAPULICO';
+      document.getElementById('header-title').textContent = (schema.icon || '📋') + ' ' + schema.name;
+      document.getElementById('header-user').textContent = user.full_name + ' (' + user.role + ')';
+      document.getElementById('btn-logout').onclick = () => {
+        if (confirm('Đăng xuất khỏi tài khoản ' + user.username + '?')) logout();
+      };
+
+      // 4. Render form
+      const container = document.getElementById('form-container');
+      renderForm(container, type).catch(err => {
+        console.error('renderForm error:', err);
+        showToast('Lỗi render form: ' + err.message, 'error', 4000);
+      });
+
+      // 5. Đăng ký service worker (best-effort, không chặn UX nếu fail)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {
+          // Im lặng — sw.js sẽ tạo ở B14
+        });
+      }
+    }
+  </script>
+</body>
+</html>

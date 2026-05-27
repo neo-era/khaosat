@@ -83,7 +83,13 @@ Người setup (1 lần duy nhất): xem `SETUP.md`.
 
 ## Known Issues
 
-_(Cập nhật sau khi hoàn tất test)_
+- **`js/config.js → cloudinaryName`** đang là placeholder `your-cloud-name`. Cập nhật giá trị thật từ Cloudinary Dashboard (SETUP.md Bước E) trước khi đi live, nếu không nút "Chụp ảnh" sẽ fail upload.
+- **Trang `manage.html` — dropdown filter KTV** hiện rỗng (chỉ "Tất cả"). Workaround: dùng bộ lọc khác (loại / thời gian / search) hoặc mở Google Sheets xem trực tiếp. Sẽ thêm endpoint `apiUsers()` trong v1.1.
+- **Khi xoá bản ghi (soft-delete) → ảnh Cloudinary xoá vĩnh viễn**, không khôi phục được. Đây là design intent (giải phóng storage Cloudinary free 25GB).
+- **Apps Script `kpi` / `report` có thể chậm 3–8 giây** khi data >1000 bản. Nếu vượt 6 phút (quota free) sẽ timeout — chia nhỏ filter (chỉ 1 tháng/lần).
+- **Token TTL 8 tiếng**. KTV làm việc xuyên đêm cần đăng nhập lại lúc sáng. Có thể tăng trong `js/config.js → sessionTimeoutHours` (nhưng cũng phải đổi `TOKEN_TTL_MS` trong Code.gs).
+- **Sheet `Audit` chỉ tự tạo khi có lần delete/restore đầu tiên**. Trước đó sẽ không thấy sheet này — đúng design, không phải bug.
+- **Repo PUBLIC trên GitHub** → URL Apps Script + Sheets CSV bị lộ. Bảo vệ qua token + role + rate limit. Đặt mật khẩu KTV mạnh ≥10 ký tự.
 
 ---
 

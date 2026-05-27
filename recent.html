@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Khảo sát hôm nay — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-2xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px" title="Về trang chủ">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">🕐 Khảo sát hôm nay</span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[150px] truncate"></span>
+    </div>
+  </header>
+
+  <main class="max-w-2xl mx-auto px-3 py-4 pb-24">
+    <div id="info-row" class="text-xs text-gray-500 mb-3"></div>
+    <div id="empty-state" class="hidden bg-white rounded-lg p-8 text-center text-gray-500 shadow-sm">
+      <div class="text-5xl mb-3">📭</div>
+      <p class="text-sm">Hôm nay chưa có bản khảo sát nào.</p>
+      <a href="index.html" class="inline-block mt-4 text-blue-700 font-medium underline">← Về trang chủ chọn loại KS</a>
+    </div>
+    <div id="list" class="space-y-2"></div>
+
+    <!-- Modal chi tiết -->
+    <div id="detail-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2">
+      <div class="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        <div class="flex items-center justify-between p-3 border-b">
+          <span id="detail-title" class="font-semibold text-gray-800"></span>
+          <button id="detail-close" class="text-2xl w-10 h-10 hover:bg-gray-100 rounded">✕</button>
+        </div>
+        <div id="detail-body" class="p-3 overflow-y-auto flex-1 text-sm"></div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { getSubmittedToday } from './js/storage.js';
+    import { SCHEMAS } from './js/schemas.js';
+    import { escapeHtml, formatVnDate } from './js/utils.js';
+
+    const user = requireAuth();
+    document.getElementById('header-user').textContent = user.full_name;
+
+    const list = getSubmittedToday();
+    const listEl = document.getElementById('list');
+    const emptyEl = document.getElementById('empty-state');
+    const infoEl = document.getElementById('info-row');
+
+    if (list.length === 0) {
+      emptyEl.classList.remove('hidden');
+    } else {
+      infoEl.textContent = `${list.length} bản ghi hôm nay (chỉ lưu trong điện thoại — Google Sheets là nguồn chính)`;
+      // Sort mới nhất lên đầu
+      list.sort((a, b) => (b._at || 0) - (a._at || 0));
+      for (const r of list) {
+        listEl.appendChild(renderCard(r));
+      }
+    }
+
+    function renderCard(r) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'w-full bg-white rounded-lg shadow-sm hover:shadow-md p-3 flex items-center gap-3 text-left transition active:scale-[0.99]';
+      card.style.minHeight = '64px';
+      card.innerHTML = `
+        <div class="text-3xl flex-shrink-0">${escapeHtml(r.icon || '📋')}</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-gray-800 truncate">${escapeHtml(r.name || r.type)} — STT #${escapeHtml(String(r.stt))}</div>
+          <div class="text-xs text-gray-500 truncate">${escapeHtml(r.tuyen_duong || r.vi_tri || '(chưa có tuyến/vị trí)')}</div>
+          <div class="text-xs text-gray-400">${formatVnDate(r._at)}</div>
+        </div>
+        ${r.photo_count > 0 ? `<div class="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-600 flex-shrink-0">📷 ${r.photo_count}</div>` : ''}
+      `;
+      card.onclick = () => openDetail(r);
+      return card;
+    }
+
+    function openDetail(r) {
+      const schema = SCHEMAS[r.type];
+      document.getElementById('detail-title').textContent = `${schema ? schema.icon : '📋'} ${r.name || r.type} — STT #${r.stt}`;
+      const body = document.getElementById('detail-body');
+      body.innerHTML = '';
+      if (!r.data) {
+        body.innerHTML = '<p class="text-gray-500">Không có chi tiết.</p>';
+      } else {
+        const dl = document.createElement('dl');
+        dl.className = 'grid grid-cols-1 gap-2';
+        for (const [label, value] of Object.entries(r.data)) {
+          if (value === '' || value === null || value === undefined) continue;
+          const row = document.createElement('div');
+          row.className = 'border-b border-gray-100 pb-1';
+          row.innerHTML = `
+            <dt class="text-xs text-gray-500">${escapeHtml(label)}</dt>
+            <dd class="text-sm text-gray-800 break-words">${escapeHtml(String(value))}</dd>
+          `;
+          dl.appendChild(row);
+        }
+        body.appendChild(dl);
+      }
+      document.getElementById('detail-modal').classList.remove('hidden');
+    }
+
+    document.getElementById('detail-close').onclick = () => {
+      document.getElementById('detail-modal').classList.add('hidden');
+    };
+    document.getElementById('detail-modal').onclick = (e) => {
+      if (e.target.id === 'detail-modal') {
+        document.getElementById('detail-modal').classList.add('hidden');
+      }
+    };
+
+    // Service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
