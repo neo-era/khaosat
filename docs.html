@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Tài liệu tham khảo — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-5xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">📚 Tài liệu tham khảo</span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[150px] truncate"></span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-3 py-4 pb-24">
+
+    <!-- Search + Add -->
+    <div class="bg-white rounded-lg shadow-sm p-3 mb-3 flex flex-wrap items-center gap-2">
+      <input id="search" type="text" placeholder="🔍 Tìm theo tiêu đề, mô tả, URL..." class="flex-1 px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+      <select id="filter-category" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+        <option value="">📚 Tất cả mục</option>
+      </select>
+      <button id="btn-add" class="hidden bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" style="min-height:44px">+ Thêm tài liệu</button>
+    </div>
+
+    <div id="loading" class="hidden text-center py-8 text-gray-500">
+      <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-700 rounded-full"></div>
+      <p class="mt-2 text-sm">Đang tải...</p>
+    </div>
+
+    <div id="docs-container" class="space-y-4"></div>
+
+    <p id="empty-state" class="hidden text-center text-gray-500 py-8 text-sm">📭 Chưa có tài liệu nào.</p>
+  </main>
+
+  <!-- Dialog Thêm tài liệu -->
+  <div id="add-dialog" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2">
+    <div class="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full max-w-lg flex flex-col">
+      <div class="flex items-center justify-between p-3 border-b">
+        <span class="font-semibold text-gray-800">+ Thêm tài liệu</span>
+        <button id="dialog-close" class="text-2xl w-10 h-10 hover:bg-gray-100 rounded">✕</button>
+      </div>
+      <form id="add-form" class="p-3 space-y-3" novalidate>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tiêu đề <span class="text-red-600">*</span></label>
+          <input id="f-title" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" style="min-height:44px" placeholder="vd: QCVN 07:2024/BXD Tiêu chuẩn chiếu sáng">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">URL <span class="text-red-600">*</span></label>
+          <input id="f-url" type="url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" style="min-height:44px" placeholder="https://...">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Phân loại <span class="text-red-600">*</span></label>
+          <select id="f-category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" style="min-height:44px"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+          <textarea id="f-description" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="(tuỳ chọn) mô tả ngắn"></textarea>
+        </div>
+        <div id="form-error" class="hidden text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2"></div>
+        <button id="btn-save" type="submit" class="w-full bg-blue-700 text-white py-3 rounded-lg font-medium disabled:bg-gray-400" style="min-height:44px">Lưu</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, hasPermission, isFullAccess } from './js/auth.js';
+    import { initDocs } from './js/docs.js';
+
+    const user = requireAuth();
+    document.getElementById('header-user').textContent = user.full_name;
+
+    // Hiện nút Thêm chỉ với admin/user (isFullAccess)
+    if (isFullAccess(user.role)) {
+      document.getElementById('btn-add').classList.remove('hidden');
+    }
+
+    document.getElementById('dialog-close').onclick = () => document.getElementById('add-dialog').classList.add('hidden');
+    document.getElementById('add-dialog').onclick = (e) => {
+      if (e.target.id === 'add-dialog') document.getElementById('add-dialog').classList.add('hidden');
+    };
+
+    initDocs(user);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

@@ -140,6 +140,13 @@ const TAIKHOAN_HEADER = ['username', 'password_hash', 'full_name', 'role', 'acti
 const KPI_TARGETS_HEADER = ['param', 'value'];
 const PHAN_QUYEN_HEADER = ['vaiTro', 'submit', 'delete', 'kpi', 'manage', 'report', 'moTa'];
 const AUDIT_HEADER = ['timestamp', 'action', 'username', 'target_sheet', 'target_stt', 'note'];
+const NOTIFICATION_TARGETS_HEADER = ['email', 'enabled', 'only_types'];
+const TAILIEU_HEADER = ['id', 'title', 'category', 'url', 'description', 'added_by', 'added_at'];
+const DOC_CATEGORIES = ['Văn bản pháp luật', 'Tiêu chuẩn kỹ thuật',
+                       'Đảng - Nhà nước - Chính phủ', 'Hướng dẫn nội bộ', 'Khác'];
+const SCHEDULE_HEADER = ['id', 'ktv_username', 'ngay', 'loai_ks', 'khu_vuc',
+                         'ghi_chu', 'status', 'created_by', 'created_at'];
+const SCHEDULE_STATUSES = ['pending', 'done', 'skipped'];
 
 const KPI_DEFAULTS = [
   ['target_submissions_per_month', 50],
@@ -666,6 +673,641 @@ function migrateTaikhoan() {
 }
 
 /**
+ * Tạo sheet `tailieu` (idempotent) — admin chạy 1 lần khi triển khai v1.2.5.
+ * Seed 5 link mặc định nếu sheet trống.
+ */
+function initDocsSheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName('tailieu');
+  const result = { ok: true, created: false, seeded: 0 };
+  if (!sheet) {
+    sheet = ss.insertSheet('tailieu');
+    sheet.getRange(1, 1, 1, TAILIEU_HEADER.length).setValues([TAILIEU_HEADER]);
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 70);    // id
+    sheet.setColumnWidth(2, 250);   // title
+    sheet.setColumnWidth(3, 160);   // category
+    sheet.setColumnWidth(4, 280);   // url
+    sheet.setColumnWidth(5, 300);   // description
+    result.created = true;
+  }
+
+  // Seed nếu chưa có dòng nào
+  if (sheet.getLastRow() < 2) {
+    const now = nowVnString();
+    const seed = [
+      ['Cổng Thông tin Chính phủ', 'Đảng - Nhà nước - Chính phủ', 'https://chinhphu.vn', 'Cổng thông tin điện tử Chính phủ nước CHXHCN Việt Nam'],
+      ['Báo điện tử Đảng Cộng sản Việt Nam', 'Đảng - Nhà nước - Chính phủ', 'https://dangcongsan.vn', 'Báo điện tử của Đảng Cộng sản Việt Nam'],
+      ['Bộ Công Thương', 'Đảng - Nhà nước - Chính phủ', 'https://moit.gov.vn', 'Bộ Công Thương Việt Nam'],
+      ['UBND TP.HCM', 'Đảng - Nhà nước - Chính phủ', 'https://hochiminhcity.gov.vn', 'Uỷ ban Nhân dân Thành phố Hồ Chí Minh'],
+      ['Sở Xây dựng TP.HCM', 'Đảng - Nhà nước - Chính phủ', 'https://soxaydung.hochiminhcity.gov.vn', 'Sở Xây dựng TPHCM — cơ quan quản lý chiếu sáng đô thị']
+    ];
+    const rows = seed.map(s => [Utilities.getUuid().slice(0, 8), s[0], s[1], s[2], s[3], 'system', now]);
+    sheet.getRange(2, 1, rows.length, TAILIEU_HEADER.length).setValues(rows);
+    result.seeded = rows.length;
+  }
+
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+/**
+ * action=docs_list — đọc sheet tailieu. Mọi role có thể xem.
+ */
+function handleDocsList(body) {
+  verifyToken(body.token);  // chỉ cần login
+  const sheet = getSpreadsheet().getSheetByName('tailieu');
+  if (!sheet) return { ok: true, docs: [], categories: DOC_CATEGORIES };
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { ok: true, docs: [], categories: DOC_CATEGORIES };
+  const header = data[0].map(String);
+  const idx = {};
+  TAILIEU_HEADER.forEach(h => { idx[h] = header.indexOf(h); });
+  const docs = [];
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][idx.id] || '').trim();
+    if (!id) continue;
+    docs.push({
+      id: id,
+      title: String(data[i][idx.title] || ''),
+      category: String(data[i][idx.category] || 'Khác'),
+      url: String(data[i][idx.url] || ''),
+      description: String(data[i][idx.description] || ''),
+      added_by: String(data[i][idx.added_by] || ''),
+      added_at: String(data[i][idx.added_at] || '')
+    });
+  }
+  return { ok: true, docs: docs, categories: DOC_CATEGORIES };
+}
+
+/**
+ * action=docs_create — chỉ admin/user (full access).
+ * Body: { token, title, url, category, description? }
+ */
+function handleDocsCreate(body) {
+  const auth = verifyToken(body.token);
+  if (!isFullAccess(auth.role)) return { ok: false, error: 'forbidden' };
+
+  const title = String(body.title || '').trim();
+  const url = String(body.url || '').trim();
+  const category = String(body.category || 'Khác').trim();
+  const description = String(body.description || '').trim();
+
+  if (!title) return { ok: false, error: 'Thiếu tiêu đề' };
+  if (!url || !/^https?:\/\//i.test(url)) return { ok: false, error: 'URL không hợp lệ (phải bắt đầu http:// hoặc https://)' };
+  if (DOC_CATEGORIES.indexOf(category) < 0) return { ok: false, error: 'Category không hợp lệ: ' + category };
+
+  // Đảm bảo sheet tồn tại (lazy init)
+  let sheet = getSpreadsheet().getSheetByName('tailieu');
+  if (!sheet) {
+    initDocsSheet();
+    sheet = getSpreadsheet().getSheetByName('tailieu');
+  }
+
+  const id = Utilities.getUuid().slice(0, 8);
+  const row = [id, title, category, url, description, auth.username, nowVnString()];
+  sheet.appendRow(row);
+  appendAuditLog('docs_create', auth.username, 'tailieu', id, 'title=' + title);
+  return { ok: true, id: id };
+}
+
+/**
+ * action=docs_delete — chỉ admin/user.
+ * Body: { token, id }
+ */
+function handleDocsDelete(body) {
+  const auth = verifyToken(body.token);
+  if (!isFullAccess(auth.role)) return { ok: false, error: 'forbidden' };
+
+  const id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'Thiếu id' };
+
+  const sheet = getSpreadsheet().getSheetByName('tailieu');
+  if (!sheet) return { ok: false, error: 'Sheet tailieu chưa khởi tạo' };
+  const data = sheet.getDataRange().getValues();
+  const idxId = data[0].indexOf('id');
+  if (idxId < 0) return { ok: false, error: 'Sheet thiếu cột id' };
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idxId]).trim() === id) {
+      sheet.deleteRow(i + 1);
+      appendAuditLog('docs_delete', auth.username, 'tailieu', id, '');
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'Không tìm thấy id ' + id };
+}
+
+// =====================================================================
+// LỊCH CÔNG TÁC — sheet `lichcongtac` + 4 endpoint (v2.0.5)
+// =====================================================================
+
+/** Tạo sheet `lichcongtac` (idempotent). */
+function initScheduleSheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName('lichcongtac');
+  if (sheet) {
+    Logger.log('Sheet lichcongtac đã có — skip');
+    return { ok: true, created: false };
+  }
+  sheet = ss.insertSheet('lichcongtac');
+  sheet.getRange(1, 1, 1, SCHEDULE_HEADER.length).setValues([SCHEDULE_HEADER]);
+  sheet.setFrozenRows(1);
+  sheet.setColumnWidth(1, 80);
+  sheet.setColumnWidth(2, 120);
+  sheet.setColumnWidth(3, 100);
+  sheet.setColumnWidth(4, 140);
+  sheet.setColumnWidth(5, 200);
+  sheet.setColumnWidth(6, 250);
+  // Data validation status
+  try {
+    const rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(SCHEDULE_STATUSES, true).setAllowInvalid(false).build();
+    sheet.getRange(2, 7, 1000, 1).setDataValidation(rule);
+  } catch (e) { /* ignore */ }
+  Logger.log('Đã tạo sheet lichcongtac.');
+  return { ok: true, created: true };
+}
+
+/** Helper: đọc sheet thành array of objects. */
+function _readScheduleRows() {
+  const sheet = getSpreadsheet().getSheetByName('lichcongtac');
+  if (!sheet) return { sheet: null, rows: [], header: null };
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { sheet, rows: [], header: data[0] ? data[0].map(String) : SCHEDULE_HEADER };
+  const header = data[0].map(String);
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    const obj = { _rowIndex: i + 1 };
+    header.forEach((h, j) => {
+      let v = data[i][j];
+      if (h === 'ngay' && v instanceof Date) v = Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+      else if (h === 'created_at' && v instanceof Date) v = Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');
+      obj[h] = v;
+    });
+    rows.push(obj);
+  }
+  return { sheet, rows, header };
+}
+
+/**
+ * action=schedule_list — body { token, from?, to?, ktv_username?, status?, loai_ks? }
+ * Bất kỳ role nào đăng nhập đều gọi được, nhưng user1 server-filter chỉ thấy của mình.
+ */
+function handleScheduleList(body) {
+  const auth = verifyToken(body.token);
+  if (auth.role === 'demo') return { ok: false, error: 'Tài khoản demo không xem lịch' };
+
+  const { rows } = _readScheduleRows();
+
+  // Filter
+  const ktvFilter = body.ktv_username ? String(body.ktv_username).trim() : null;
+  const restrictToSelf = !can(auth.role, 'schedule_write');
+  const targetKtv = restrictToSelf ? auth.username : ktvFilter;
+
+  const fromD = body.from ? String(body.from) : null;
+  const toD = body.to ? String(body.to) : null;
+  const status = body.status ? String(body.status).trim() : null;
+  const loaiKs = body.loai_ks ? String(body.loai_ks).trim() : null;
+
+  const filtered = rows.filter(r => {
+    if (targetKtv && String(r.ktv_username || '').trim() !== targetKtv) return false;
+    const ngay = String(r.ngay || '');
+    if (fromD && ngay < fromD) return false;
+    if (toD && ngay > toD) return false;
+    if (status && String(r.status || '') !== status) return false;
+    if (loaiKs && String(r.loai_ks || '') !== loaiKs) return false;
+    return true;
+  }).map(r => {
+    const c = Object.assign({}, r);
+    delete c._rowIndex;
+    return c;
+  });
+
+  return { ok: true, items: filtered, scope: restrictToSelf ? 'self' : 'all' };
+}
+
+/**
+ * action=schedule_create — body { token, items: [{ktv_username, ngay, loai_ks, khu_vuc, ghi_chu}] }
+ * Permission: schedule_write.
+ */
+function handleScheduleCreate(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'schedule_write')) return { ok: false, error: 'forbidden' };
+
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (items.length === 0) return { ok: false, error: 'Thiếu danh sách items' };
+
+  let sheet = getSpreadsheet().getSheetByName('lichcongtac');
+  if (!sheet) { initScheduleSheet(); sheet = getSpreadsheet().getSheetByName('lichcongtac'); }
+
+  const now = nowVnString();
+  const created = [];
+  for (const it of items) {
+    const ktv = String(it.ktv_username || '').trim();
+    const ngay = String(it.ngay || '').trim();
+    const loai_ks = String(it.loai_ks || '').trim();
+    if (!ktv) return { ok: false, error: 'Thiếu ktv_username' };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ngay)) return { ok: false, error: 'ngay phải dạng YYYY-MM-DD' };
+    if (loai_ks && !SHEET_MAP[loai_ks]) return { ok: false, error: 'loai_ks không hợp lệ: ' + loai_ks };
+
+    const id = Utilities.getUuid().slice(0, 8);
+    const row = [
+      id, ktv, ngay, loai_ks, String(it.khu_vuc || ''),
+      String(it.ghi_chu || ''), 'pending', auth.username, now
+    ];
+    sheet.appendRow(row);
+    created.push(id);
+  }
+
+  appendAuditLog('schedule_create', auth.username, 'lichcongtac',
+    String(created.length), 'ids=' + created.join(','));
+
+  return { ok: true, created_ids: created, count: created.length };
+}
+
+/**
+ * action=schedule_update — body { token, id, fields: {status?, ngay?, ...} }
+ * Permission: schedule_write (admin/user) HOẶC chính user1 update status item của mình.
+ */
+function handleScheduleUpdate(body) {
+  const auth = verifyToken(body.token);
+  const id = String(body.id || '').trim();
+  const fields = body.fields || {};
+  if (!id) return { ok: false, error: 'Thiếu id' };
+
+  const { sheet, rows, header } = _readScheduleRows();
+  if (!sheet) return { ok: false, error: 'Sheet lichcongtac chưa khởi tạo' };
+
+  const item = rows.find(r => String(r.id) === id);
+  if (!item) return { ok: false, error: 'Không tìm thấy id ' + id };
+
+  // Quyền: admin/user (schedule_write) → sửa mọi field. user1 → chỉ status của item mình.
+  const fullWrite = can(auth.role, 'schedule_write');
+  if (!fullWrite) {
+    if (String(item.ktv_username) !== auth.username) {
+      return { ok: false, error: 'Bạn chỉ có thể sửa lịch của chính mình' };
+    }
+    const keys = Object.keys(fields);
+    if (keys.length !== 1 || keys[0] !== 'status') {
+      return { ok: false, error: 'Chỉ được sửa field status' };
+    }
+  }
+
+  const changes = [];
+  const ALLOWED = ['ktv_username', 'ngay', 'loai_ks', 'khu_vuc', 'ghi_chu', 'status'];
+  for (const k of Object.keys(fields)) {
+    if (ALLOWED.indexOf(k) < 0) continue;
+    if (k === 'status' && SCHEDULE_STATUSES.indexOf(String(fields[k])) < 0) {
+      return { ok: false, error: 'status không hợp lệ: ' + fields[k] };
+    }
+    if (k === 'loai_ks' && fields[k] && !SHEET_MAP[fields[k]]) {
+      return { ok: false, error: 'loai_ks không hợp lệ: ' + fields[k] };
+    }
+    if (k === 'ngay' && fields[k] && !/^\d{4}-\d{2}-\d{2}$/.test(String(fields[k]))) {
+      return { ok: false, error: 'ngay phải dạng YYYY-MM-DD' };
+    }
+    const col = header.indexOf(k);
+    if (col < 0) continue;
+    sheet.getRange(item._rowIndex, col + 1).setValue(fields[k]);
+    changes.push(k + '=' + fields[k]);
+  }
+  if (changes.length === 0) return { ok: true, message: 'Không có thay đổi' };
+
+  appendAuditLog('schedule_update', auth.username, 'lichcongtac', id, changes.join(', '));
+  return { ok: true, id: id, changes: changes };
+}
+
+/**
+ * action=schedule_delete — body { token, id }
+ * Permission: schedule_write.
+ */
+function handleScheduleDelete(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'schedule_write')) return { ok: false, error: 'forbidden' };
+
+  const id = String(body.id || '').trim();
+  if (!id) return { ok: false, error: 'Thiếu id' };
+
+  const { sheet, rows } = _readScheduleRows();
+  if (!sheet) return { ok: false, error: 'Sheet lichcongtac chưa khởi tạo' };
+
+  const item = rows.find(r => String(r.id) === id);
+  if (!item) return { ok: false, error: 'Không tìm thấy id ' + id };
+
+  sheet.deleteRow(item._rowIndex);
+  appendAuditLog('schedule_delete', auth.username, 'lichcongtac', id, '');
+  return { ok: true };
+}
+
+/**
+ * Tạo sheet `notification_targets` (idempotent) — admin chạy 1 lần khi triển khai v1.2.3.
+ * Sau khi tạo, admin tự thêm email vào sheet.
+ */
+function extendNotificationTargetsSheet() {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName('notification_targets');
+  if (sheet) {
+    Logger.log('Sheet notification_targets đã tồn tại — skip');
+    return { ok: true, created: false };
+  }
+  sheet = ss.insertSheet('notification_targets');
+  sheet.getRange(1, 1, 1, NOTIFICATION_TARGETS_HEADER.length).setValues([NOTIFICATION_TARGETS_HEADER]);
+  // Seed 1 email mẫu (admin tự sửa)
+  sheet.getRange(2, 1, 1, 3).setValues([['admin@sapulico.local', true, '']]);
+  sheet.setFrozenRows(1);
+  // Checkbox cho cột enabled
+  try {
+    const cb = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+    sheet.getRange(2, 2, 50, 1).setDataValidation(cb);
+  } catch (e) { /* ignore */ }
+  sheet.setColumnWidth(1, 250);
+  sheet.setColumnWidth(3, 250);
+  Logger.log('Đã tạo sheet notification_targets. Sửa danh sách email + bật/tắt enabled trong sheet.');
+  // Xoá cache
+  CacheService.getScriptCache().remove('notify_targets');
+  return { ok: true, created: true };
+}
+
+// =====================================================================
+// IMPORT LEGACY DATA — chuyển data từ file xlsx cũ vào sheet target
+// =====================================================================
+
+/** Header row của sheet TCNoi trong file Excel gốc nằm ở row 2 (CLAUDE.md mục 7). */
+const SOURCE_HEADER_ROW = { tc_noi: 2 };
+
+/**
+ * Chuyển data từ file Excel `khao sat tang cuong den.xlsx` sang sheet hiện tại.
+ *
+ * Cách dùng:
+ * 1. Upload file xlsx lên Google Drive.
+ * 2. Right-click → Mở bằng Google Sheets (Drive tự convert).
+ * 3. Copy ID của file Google Sheets vừa tạo (URL: /d/<ID>/edit).
+ * 4. Trong Apps Script editor: chạy `importLegacyData('<ID>')` qua execution log,
+ *    HOẶC sửa hàm `runImportLegacy()` bên dưới rồi chạy nó.
+ *
+ * Hành vi:
+ * - Với mỗi sheet trong SHEET_MAP, đọc data tương ứng từ source.
+ * - Map cột theo TÊN HEADER (case-sensitive, NGUYÊN VĂN). Cột nào không có trong source → để rỗng.
+ * - Server tự gán: STT (sequential), Submitted At = '(imported)', Username = 'imported',
+ *   User Agent = 'xlsx-import', Deleted At/By = rỗng.
+ * - Người khảo sát giữ nguyên từ source nếu có.
+ * - **SKIP** sheet target đã có data (chỉ header) trừ khi `force=true`.
+ *
+ * @param {string} sourceId — ID Google Sheets nguồn (đã convert từ xlsx)
+ * @param {boolean} [force=false] — nếu true: xoá data target trước khi import
+ */
+function importLegacyData(sourceId, force) {
+  if (!sourceId) throw new Error('Truyền sourceId: importLegacyData("abc123...")');
+  const source = SpreadsheetApp.openById(sourceId);
+  const target = getSpreadsheet();
+  const result = { ok: true, by_sheet: {} };
+
+  Object.keys(SHEET_MAP).forEach(type => {
+    const sheetName = SHEET_MAP[type];
+    const sourceSheet = source.getSheetByName(sheetName);
+    const targetSheet = target.getSheetByName(sheetName);
+    const rec = { source_rows: 0, imported: 0, skipped: 0 };
+
+    if (!sourceSheet) {
+      rec.error = 'source sheet không tồn tại';
+      result.by_sheet[sheetName] = rec;
+      return;
+    }
+    if (!targetSheet) {
+      rec.error = 'target sheet không tồn tại (chạy initSheets trước)';
+      result.by_sheet[sheetName] = rec;
+      return;
+    }
+
+    // Force clear data target nếu yêu cầu
+    if (force === true && targetSheet.getLastRow() > 1) {
+      const numRows = targetSheet.getLastRow() - 1;
+      const numCols = targetSheet.getLastColumn();
+      targetSheet.getRange(2, 1, numRows, numCols).clearContent();
+      rec.cleared_old = numRows;
+    }
+
+    // Skip nếu target đã có data (idempotent)
+    if (!force && targetSheet.getLastRow() > 1) {
+      rec.error = 'target đã có data — dùng force=true để ghi đè';
+      result.by_sheet[sheetName] = rec;
+      return;
+    }
+
+    // Đọc source
+    const headerRowSrc = SOURCE_HEADER_ROW[type] || 1;
+    const srcLastRow = sourceSheet.getLastRow();
+    const srcLastCol = sourceSheet.getLastColumn();
+    if (srcLastRow <= headerRowSrc || srcLastCol < 1) {
+      result.by_sheet[sheetName] = rec;
+      return;
+    }
+    const srcHeader = sourceSheet.getRange(headerRowSrc, 1, 1, srcLastCol).getValues()[0]
+      .map(v => String(v).trim());
+    const srcRows = sourceSheet.getRange(headerRowSrc + 1, 1, srcLastRow - headerRowSrc, srcLastCol).getValues();
+    rec.source_rows = srcRows.length;
+
+    // Header target (đã có 6 cột bonus)
+    const tgtHeader = targetSheet.getRange(1, 1, 1, targetSheet.getLastColumn()).getValues()[0]
+      .map(String);
+
+    // Map srcLabel → srcColIndex
+    const srcIdx = {};
+    srcHeader.forEach((h, i) => { if (h) srcIdx[h] = i; });
+
+    // Build rows
+    const rowsToWrite = [];
+    let sttCounter = 1;  // STT bắt đầu từ 1
+    for (const sr of srcRows) {
+      // Skip row trống hoàn toàn
+      const allEmpty = sr.every(c => c === '' || c === null);
+      if (allEmpty) { rec.skipped++; continue; }
+      // Skip nếu row chỉ có whitespace ở STT cell + tất cả khác rỗng
+      const firstNonEmpty = sr.find(c => c !== '' && c !== null && String(c).trim());
+      if (!firstNonEmpty) { rec.skipped++; continue; }
+
+      const newRow = tgtHeader.map(label => {
+        // Server-managed mặc định
+        if (label === 'STT') return sttCounter;
+        if (label === 'Submitted At') return '(imported)';
+        if (label === 'User Agent') return 'xlsx-import';
+        if (label === 'Username') return 'imported';
+        if (label === 'Deleted At' || label === 'Deleted By') return '';
+
+        // Map từ source theo NGUYÊN VĂN label
+        if (srcIdx[label] !== undefined) {
+          let v = sr[srcIdx[label]];
+          // Convert Date → string yyyy-MM-dd HH:mm:ss cho consistency
+          if (v instanceof Date) {
+            v = Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');
+          }
+          return v;
+        }
+        return '';
+      });
+      rowsToWrite.push(newRow);
+      sttCounter++;
+    }
+
+    if (rowsToWrite.length > 0) {
+      targetSheet.getRange(2, 1, rowsToWrite.length, tgtHeader.length).setValues(rowsToWrite);
+      rec.imported = rowsToWrite.length;
+    }
+    result.by_sheet[sheetName] = rec;
+    Logger.log(sheetName + ': nhập ' + rec.imported + '/' + rec.source_rows +
+               ' (skip rỗng: ' + rec.skipped + ')');
+  });
+
+  appendAuditLog('import_legacy', 'system', '*', '*',
+    'total_imported=' + Object.values(result.by_sheet).reduce((s, r) => s + (r.imported || 0), 0));
+  Logger.log('=== TỔNG KẾT ===\n' + JSON.stringify(result, null, 2));
+  return result;
+}
+
+/**
+ * Helper — admin sửa SOURCE_ID rồi chạy hàm này (tránh phải truyền tham số qua console).
+ * Sau khi sửa, dropdown chọn `runImportLegacy` → ▶ Run.
+ */
+function runImportLegacy() {
+  // ⚠️ SỬA ID DƯỚI ĐÂY trước khi chạy:
+  const SOURCE_ID = 'PASTE_GOOGLE_SHEETS_ID_CỦA_FILE_XLSX_VÀO_ĐÂY';
+  const FORCE = false;  // true = xoá data target trước (dùng khi muốn import lại)
+
+  if (SOURCE_ID === 'PASTE_GOOGLE_SHEETS_ID_CỦA_FILE_XLSX_VÀO_ĐÂY') {
+    throw new Error('Sửa SOURCE_ID trong hàm runImportLegacy() trước khi chạy.');
+  }
+  return importLegacyData(SOURCE_ID, FORCE);
+}
+
+// =====================================================================
+// BACKUP — copy Google Sheets sang Drive folder hàng tuần (v2.0.4)
+// =====================================================================
+
+const BACKUP_FOLDER_NAME = 'khaosat-backup';
+const BACKUP_KEEP_WEEKS = 12;
+
+/**
+ * Cài đặt time-driven trigger: chạy weeklyBackup mỗi thứ Hai 00:00.
+ * Admin chạy 1 lần khi triển khai v2.0.4. Idempotent (xoá trigger cũ trước).
+ */
+function setupBackupTrigger() {
+  let removed = 0;
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const t of triggers) {
+    if (t.getHandlerFunction() === 'weeklyBackup') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  }
+  ScriptApp.newTrigger('weeklyBackup')
+    .timeBased()
+    .everyWeeks(1)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(0)
+    .create();
+  Logger.log('Đã cài trigger weeklyBackup chạy mỗi thứ Hai 00:00. Removed ' + removed + ' trigger cũ.');
+  return { ok: true, removed_old: removed, message: 'Trigger sẽ chạy lần đầu vào thứ Hai gần nhất' };
+}
+
+/**
+ * Handler được trigger gọi mỗi tuần — tạo bản copy Google Sheets vào folder khaosat-backup.
+ * Cũng xoá file backup cũ hơn BACKUP_KEEP_WEEKS tuần.
+ */
+function weeklyBackup() {
+  const ssId = getProp('SPREADSHEET_ID');
+  if (!ssId) {
+    Logger.log('Backup fail: chưa set SPREADSHEET_ID');
+    return { ok: false, error: 'missing SPREADSHEET_ID' };
+  }
+
+  // Lấy hoặc tạo folder backup
+  let folder;
+  const folders = DriveApp.getFoldersByName(BACKUP_FOLDER_NAME);
+  if (folders.hasNext()) {
+    folder = folders.next();
+  } else {
+    folder = DriveApp.createFolder(BACKUP_FOLDER_NAME);
+    Logger.log('Đã tạo folder mới: ' + BACKUP_FOLDER_NAME);
+  }
+
+  // Copy spreadsheet
+  const sourceFile = DriveApp.getFileById(ssId);
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  const backupName = 'khaosat-' + today;
+  const copy = sourceFile.makeCopy(backupName, folder);
+
+  // Dọn dẹp file cũ hơn BACKUP_KEEP_WEEKS tuần
+  const cutoff = Date.now() - BACKUP_KEEP_WEEKS * 7 * 86400000;
+  const filesInFolder = folder.getFiles();
+  const deletedNames = [];
+  while (filesInFolder.hasNext()) {
+    const f = filesInFolder.next();
+    if (f.getId() === copy.getId()) continue;  // skip just-created
+    if (f.getDateCreated().getTime() < cutoff) {
+      const fname = f.getName();
+      f.setTrashed(true);
+      deletedNames.push(fname);
+    }
+  }
+
+  const summary = 'backup_id=' + copy.getId() + ' deleted_old=' + deletedNames.length;
+  appendAuditLog('backup', 'system', 'spreadsheet', backupName, summary);
+  Logger.log('✅ Backup OK: ' + backupName + ' (id=' + copy.getId() + '). ' +
+             'Deleted ' + deletedNames.length + ' file cũ: ' + deletedNames.join(', '));
+  return { ok: true, backup_id: copy.getId(), file_name: backupName, folder_id: folder.getId(), deleted_old: deletedNames.length };
+}
+
+/**
+ * Chạy backup ngay lập tức (admin test thủ công thay vì đợi trigger).
+ */
+function runBackupNow() {
+  return weeklyBackup();
+}
+
+/**
+ * Liệt kê các backup hiện có trong folder.
+ */
+function listBackups() {
+  const folders = DriveApp.getFoldersByName(BACKUP_FOLDER_NAME);
+  if (!folders.hasNext()) {
+    Logger.log('Folder ' + BACKUP_FOLDER_NAME + ' chưa tồn tại — chạy runBackupNow() trước.');
+    return { ok: true, backups: [] };
+  }
+  const folder = folders.next();
+  const files = folder.getFiles();
+  const out = [];
+  while (files.hasNext()) {
+    const f = files.next();
+    out.push({
+      name: f.getName(),
+      id: f.getId(),
+      created: Utilities.formatDate(f.getDateCreated(), TZ, 'yyyy-MM-dd HH:mm'),
+      size_kb: Math.round(f.getSize() / 1024)
+    });
+  }
+  out.sort((a, b) => b.created.localeCompare(a.created));
+  Logger.log(JSON.stringify(out, null, 2));
+  return { ok: true, folder_url: folder.getUrl(), backups: out };
+}
+
+/**
+ * Xoá toàn bộ backup trigger (admin chạy nếu muốn dừng backup tự động).
+ */
+function disableBackupTrigger() {
+  let removed = 0;
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const t of triggers) {
+    if (t.getHandlerFunction() === 'weeklyBackup') {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  }
+  Logger.log('Đã xoá ' + removed + ' trigger backup.');
+  return { ok: true, removed: removed };
+}
+
+/**
  * Quét tất cả sheet khảo sát, so sánh header thực tế với HEADERS.
  * Báo lỗi nếu lệch.
  */
@@ -721,6 +1363,15 @@ function doPost(e) {
       case 'report':  return jsonResponse(handleReport(body));
       case 'users':   return jsonResponse(handleUsers(body));
       case 'reset_password': return jsonResponse(handleResetPassword(body));
+      case 'user_create':  return jsonResponse(handleUserCreate(body));
+      case 'user_update':  return jsonResponse(handleUserUpdate(body));
+      case 'docs_list':    return jsonResponse(handleDocsList(body));
+      case 'docs_create':  return jsonResponse(handleDocsCreate(body));
+      case 'docs_delete':  return jsonResponse(handleDocsDelete(body));
+      case 'schedule_list':   return jsonResponse(handleScheduleList(body));
+      case 'schedule_create': return jsonResponse(handleScheduleCreate(body));
+      case 'schedule_update': return jsonResponse(handleScheduleUpdate(body));
+      case 'schedule_delete': return jsonResponse(handleScheduleDelete(body));
       case 'update':  return jsonResponse(handleUpdate(body));
       default:        return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
@@ -810,6 +1461,23 @@ function handleSubmit(body) {
   });
 
   sheet.appendRow(row);
+  const newRowNum = sheet.getLastRow();
+
+  // Notification email cho admin/user có quyền notify_admin (best-effort, không chặn submit)
+  try {
+    // Build data object có cả server-assigned fields cho email
+    const fullData = Object.assign({}, dataIn, {
+      'STT': stt,
+      'Người khảo sát': auth.full_name,
+      'Ảnh (URLs)': photos.join('|'),
+      'Submitted At': submittedAt,
+      'Username': auth.username
+    });
+    notifyAdmins(type, sheetName, fullData, stt, auth, newRowNum, sheet.getSheetId());
+  } catch (e) {
+    Logger.log('notify fail (silent): ' + e);
+  }
+
   return { ok: true, stt: stt, sheet: sheetName, timestamp: submittedAt };
 }
 
@@ -1124,15 +1792,142 @@ function handleResetPassword(body) {
   return { ok: true, message: 'Đã reset mật khẩu cho ' + target };
 }
 
+const VALID_ROLES = ['admin', 'user', 'user1', 'demo'];
+
+/**
+ * action=user_create — tạo user mới.
+ * Body: { token, username, password, full_name, role, active }
+ * Permission: users_manage.
+ */
+function handleUserCreate(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'users_manage')) return { ok: false, error: 'forbidden' };
+
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
+  const full_name = String(body.full_name || '').trim();
+  const role = String(body.role || '').trim();
+  const active = body.active !== false;
+
+  // Validate
+  if (!username) return { ok: false, error: 'Thiếu username' };
+  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) return { ok: false, error: 'Username chỉ chứa chữ/số/dấu chấm/gạch dưới/gạch ngang' };
+  if (password.length < 8) return { ok: false, error: 'Mật khẩu phải ≥ 8 ký tự' };
+  if (password.toLowerCase() === username.toLowerCase()) return { ok: false, error: 'Mật khẩu không được trùng username' };
+  if (!full_name) return { ok: false, error: 'Thiếu họ tên' };
+  if (VALID_ROLES.indexOf(role) < 0) return { ok: false, error: 'Role không hợp lệ: ' + role };
+
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
+  const data = sheet.getDataRange().getValues();
+  const header = data[0].map(String);
+  const idxU = header.indexOf('username');
+  if (idxU < 0) return { ok: false, error: 'Sheet thiếu cột username' };
+
+  // Check unique (case-insensitive)
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idxU]).trim().toLowerCase() === username.toLowerCase()) {
+      return { ok: false, error: 'Username "' + username + '" đã tồn tại' };
+    }
+  }
+
+  // Build row theo header thực tế
+  const idxHash = header.indexOf('password_hash');
+  const idxName = header.indexOf('full_name');
+  const idxRole = header.indexOf('role');
+  const idxA = header.indexOf('active');
+  const idxC = header.indexOf('created_at');
+
+  const newRow = new Array(header.length).fill('');
+  newRow[idxU] = username;
+  if (idxHash >= 0) newRow[idxHash] = hashPassword(password);
+  if (idxName >= 0) newRow[idxName] = full_name;
+  if (idxRole >= 0) newRow[idxRole] = role;
+  if (idxA >= 0) newRow[idxA] = active;
+  if (idxC >= 0) newRow[idxC] = nowVnString();
+  sheet.appendRow(newRow);
+
+  appendAuditLog('user_create', auth.username, 'taikhoan', username,
+    'role=' + role + ' active=' + active);
+
+  return { ok: true, username: username, message: 'Đã tạo user ' + username };
+}
+
+/**
+ * action=user_update — sửa full_name/role/active. KHÔNG đổi username.
+ * Body: { token, username, full_name?, role?, active? }
+ * Permission: users_manage.
+ */
+function handleUserUpdate(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'users_manage')) return { ok: false, error: 'forbidden' };
+
+  const username = String(body.username || '').trim();
+  if (!username) return { ok: false, error: 'Thiếu username' };
+
+  // Cấm tự vô hiệu hoá chính mình (tránh lockout)
+  if (username === auth.username && body.active === false) {
+    return { ok: false, error: 'Không thể tự vô hiệu hoá tài khoản đang đăng nhập' };
+  }
+
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
+  const data = sheet.getDataRange().getValues();
+  const header = data[0].map(String);
+  const idxU = header.indexOf('username');
+
+  let rowIdx = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idxU]).trim() === username) { rowIdx = i + 1; break; }
+  }
+  if (rowIdx < 0) return { ok: false, error: 'Không tìm thấy user: ' + username };
+
+  const changes = [];
+
+  if (body.full_name !== undefined) {
+    const v = String(body.full_name).trim();
+    if (!v) return { ok: false, error: 'full_name không được rỗng' };
+    const idx = header.indexOf('full_name');
+    if (idx >= 0) {
+      sheet.getRange(rowIdx, idx + 1).setValue(v);
+      changes.push('full_name');
+    }
+  }
+  if (body.role !== undefined) {
+    const v = String(body.role).trim();
+    if (VALID_ROLES.indexOf(v) < 0) return { ok: false, error: 'Role không hợp lệ: ' + v };
+    const idx = header.indexOf('role');
+    if (idx >= 0) {
+      sheet.getRange(rowIdx, idx + 1).setValue(v);
+      changes.push('role=' + v);
+    }
+  }
+  if (body.active !== undefined) {
+    const idx = header.indexOf('active');
+    if (idx >= 0) {
+      sheet.getRange(rowIdx, idx + 1).setValue(body.active === true);
+      changes.push('active=' + (body.active === true));
+    }
+  }
+
+  if (changes.length === 0) return { ok: true, message: 'Không có thay đổi', changes: [] };
+
+  appendAuditLog('user_update', auth.username, 'taikhoan', username, changes.join(', '));
+
+  return { ok: true, username: username, changes: changes };
+}
+
 /**
  * action=users — trả danh sách user active để frontend populate dropdown filter.
  * Yêu cầu permission `manage` HOẶC `report`.
  */
 function handleUsers(body) {
   const auth = verifyToken(body.token);
-  if (!can(auth.role, 'manage') && !can(auth.role, 'report')) {
+  // Cho phép nếu có 1 trong: manage / report / users_manage
+  if (!can(auth.role, 'manage') && !can(auth.role, 'report') && !can(auth.role, 'users_manage')) {
     return { ok: false, error: 'forbidden' };
   }
+  const includeInactive = body.include_inactive === true;
   const sheet = getSpreadsheet().getSheetByName('taikhoan');
   if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
   const data = sheet.getDataRange().getValues();
@@ -1142,16 +1937,19 @@ function handleUsers(body) {
   const idxN = header.indexOf('full_name');
   const idxR = header.indexOf('role');
   const idxA = header.indexOf('active');
+  const idxC = header.indexOf('created_at');
   const users = [];
   for (let i = 1; i < data.length; i++) {
     const active = idxA >= 0 ? data[i][idxA] === true : true;
-    if (!active) continue;
+    if (!includeInactive && !active) continue;
     const u = String(data[i][idxU] || '').trim();
     if (!u) continue;
     users.push({
       username: u,
       full_name: String(data[i][idxN] || ''),
-      role: String(data[i][idxR] || '')
+      role: String(data[i][idxR] || ''),
+      active: active,
+      created_at: idxC >= 0 ? String(data[i][idxC] || '') : ''
     });
   }
   return { ok: true, users: users };
@@ -1170,6 +1968,7 @@ function handleReport(body) {
   const areaA = {};  // type -> {total, has_photo, has_gps, photo_count, deleted}
   const areaB = {};  // bucket -> {type -> count}
   const areaC = {};  // username -> {type -> count, total, full_name}
+  const areaD = {};  // phuong -> {type -> count, total} (heatmap)
 
   types.forEach(t => { areaA[t] = { type: t, total: 0, has_photo: 0, has_gps: 0, photo_count: 0, deleted: 0 }; });
 
@@ -1209,6 +2008,15 @@ function handleReport(body) {
       }
       areaC[username][t]++;
       areaC[username].total++;
+
+      // Area D — heatmap theo Phường × Loại
+      const phuong = String(row['Phường'] || '').trim() || '(không có)';
+      if (!areaD[phuong]) {
+        areaD[phuong] = { phuong: phuong, total: 0 };
+        types.forEach(tt => { areaD[phuong][tt] = 0; });
+      }
+      areaD[phuong][t]++;
+      areaD[phuong].total++;
     });
   });
 
@@ -1236,13 +2044,15 @@ function handleReport(body) {
     return row;
   });
   const areaCArr = Object.values(areaC).sort((a, b) => b.total - a.total);
+  const areaDArr = Object.values(areaD).sort((a, b) => b.total - a.total);
 
   return {
     ok: true,
     filter: { types, from, to, usernames, status, groupBy },
     areaA: areaAArr,
     areaB: areaBArr,
-    areaC: areaCArr
+    areaC: areaCArr,
+    areaD: areaDArr
   };
 }
 
@@ -1363,6 +2173,130 @@ function getOptionalFields(type) {
   const skip = ['STT', 'ngày khảo sát', 'Ngày khảo sát', 'Người khảo sát',
                 'kinh độ', 'vĩ độ', 'Link Google Map', 'link', 'Bản vẽ'];
   return HEADERS[type].filter(h => skip.indexOf(h) < 0);
+}
+
+// =====================================================================
+// NOTIFICATION — gửi email cho admin khi có submission mới
+// =====================================================================
+
+/** Đọc sheet notification_targets với cache 60s. */
+function getNotificationTargets() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('notify_targets');
+  if (cached) return JSON.parse(cached);
+  let out = [];
+  try {
+    const sheet = getSpreadsheet().getSheetByName('notification_targets');
+    if (!sheet) return [];
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    const header = data[0].map(String);
+    const idxE = header.indexOf('email');
+    const idxOn = header.indexOf('enabled');
+    const idxT = header.indexOf('only_types');
+    for (let i = 1; i < data.length; i++) {
+      const email = String(data[i][idxE] || '').trim();
+      if (!email || email.indexOf('@') < 0) continue;
+      const enabled = idxOn >= 0 ? data[i][idxOn] === true : true;
+      if (!enabled) continue;
+      const types = idxT >= 0
+        ? String(data[i][idxT] || '').split(',').map(s => s.trim()).filter(s => s)
+        : [];
+      out.push({ email: email, only_types: types });
+    }
+  } catch (e) {
+    Logger.log('getNotificationTargets fail: ' + e);
+  }
+  cache.put('notify_targets', JSON.stringify(out), 60);
+  return out;
+}
+
+/**
+ * Gửi email cho danh sách admin khi có submission mới.
+ * Best-effort: lỗi không chặn submit (try/catch silent).
+ * @param {string} type      type-key
+ * @param {string} sheetName
+ * @param {object} data      dữ liệu đã ghi
+ * @param {number} stt
+ * @param {object} user      { username, full_name }
+ * @param {number} rowNum    số row vừa append (1-based)
+ * @param {number} sheetId   sheet.getSheetId() để tạo link
+ */
+function notifyAdmins(type, sheetName, data, stt, user, rowNum, sheetId) {
+  try {
+    const targets = getNotificationTargets();
+    if (targets.length === 0) return;
+
+    // Filter only_types nếu có
+    const relevant = targets.filter(t =>
+      t.only_types.length === 0 || t.only_types.indexOf(type) >= 0
+    );
+    if (relevant.length === 0) return;
+
+    const tuyen = data['Tuyến đường'] || data['Vị trí'] || '';
+    const subject = '[SAPULICO KS] ' + type + ' STT #' + stt +
+      (tuyen ? ' — ' + tuyen : '');
+
+    // Build link đến row trong Google Sheets
+    const ssId = getProp('SPREADSHEET_ID');
+    const rowLink = 'https://docs.google.com/spreadsheets/d/' + ssId +
+      '/edit?gid=' + sheetId + '#gid=' + sheetId + '&range=A' + rowNum;
+
+    // HTML body
+    const importantFields = ['Tuyến đường', 'Vị trí', 'Quận', 'Phường', 'Tủ điều khiển',
+                             'Số đèn dự kiến', 'Số lượng', 'Số đèn hiện hữu', 'Người khảo sát', 'ngày khảo sát', 'Ngày khảo sát'];
+    let rowsHtml = '';
+    importantFields.forEach(f => {
+      const v = data[f];
+      if (v === undefined || v === null || v === '') return;
+      rowsHtml += '<tr><td style="padding:6px 10px; background:#f3f4f6; font-weight:600; width:160px">' +
+        escapeHtmlGs(f) + '</td><td style="padding:6px 10px">' + escapeHtmlGs(String(v)) + '</td></tr>';
+    });
+    const photoUrls = String(data['Ảnh (URLs)'] || '').split('|').filter(u => u);
+    let photoHtml = '';
+    if (photoUrls.length > 0) {
+      photoHtml = '<p style="margin-top:12px"><strong>Ảnh đính kèm (' + photoUrls.length + '):</strong></p><p>' +
+        photoUrls.slice(0, 4).map(u =>
+          '<a href="' + u + '"><img src="' + u + '" style="max-width:120px; max-height:120px; margin:4px; border-radius:4px"></a>'
+        ).join('') + '</p>';
+    }
+
+    const html = `
+      <div style="font-family:Arial,sans-serif; max-width:600px">
+        <div style="background:#1d4ed8; color:white; padding:12px 16px; border-radius:8px 8px 0 0">
+          <h2 style="margin:0; font-size:18px">SAPULICO — Có bản khảo sát mới</h2>
+        </div>
+        <div style="border:1px solid #e5e7eb; border-top:0; padding:16px; border-radius:0 0 8px 8px">
+          <p style="margin:0 0 12px">Loại: <strong>${escapeHtmlGs(sheetName)}</strong> · STT <strong>#${stt}</strong></p>
+          <p style="margin:0 0 12px; color:#666; font-size:13px">KTV: <strong>${escapeHtmlGs(user.full_name)}</strong> (@${escapeHtmlGs(user.username)})</p>
+          <table style="border-collapse:collapse; width:100%; font-size:14px; border:1px solid #e5e7eb">${rowsHtml}</table>
+          ${photoHtml}
+          <p style="margin-top:16px">
+            <a href="${rowLink}" style="background:#1d4ed8; color:white; padding:8px 16px; text-decoration:none; border-radius:6px; display:inline-block">📊 Mở trong Google Sheets</a>
+          </p>
+          <p style="margin-top:12px; font-size:11px; color:#999">
+            Bạn nhận email này vì là người nhận được cấu hình trong sheet <code>notification_targets</code>.
+            Tắt bằng cách bỏ tick <code>enabled</code> trong sheet đó.
+          </p>
+        </div>
+      </div>
+    `;
+
+    relevant.forEach(t => {
+      try {
+        GmailApp.sendEmail(t.email, subject, '', { htmlBody: html, name: 'SAPULICO KS Bot' });
+      } catch (e) {
+        Logger.log('Email fail ' + t.email + ': ' + e.message);
+      }
+    });
+  } catch (e) {
+    Logger.log('notifyAdmins error: ' + e);
+  }
+}
+
+/** Escape HTML đơn giản cho Apps Script (không có DOM). */
+function escapeHtmlGs(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function inMonth(date, monthKey) {

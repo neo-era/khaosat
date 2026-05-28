@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Bản đồ khảo sát — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet core + markercluster -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <style>
+    /* Marker icon emoji */
+    .ks-marker {
+      background: white;
+      border: 2px solid #1d4ed8;
+      border-radius: 50%;
+      width: 36px !important;
+      height: 36px !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .ks-marker.deleted {
+      border-color: #dc2626;
+      opacity: 0.55;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+  <header class="sticky top-0 bg-white shadow-sm z-50">
+    <div class="max-w-7xl mx-auto px-2 py-1 flex items-center gap-2">
+      <a href="index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">🗺️ Bản đồ khảo sát</span>
+      <span id="marker-count" class="text-xs text-gray-600"></span>
+      <span id="header-user" class="text-xs text-gray-600 hidden sm:inline-block max-w-[150px] truncate"></span>
+    </div>
+    <!-- Filter bar -->
+    <div class="max-w-7xl mx-auto px-2 pb-2 border-t border-gray-100">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-1 pt-2">
+        <select id="filter-type" class="px-2 py-1 border rounded text-sm" style="min-height:44px">
+          <option value="">📋 Tất cả loại</option>
+        </select>
+        <select id="filter-user" class="px-2 py-1 border rounded text-sm" style="min-height:44px">
+          <option value="">👤 Tất cả KTV</option>
+        </select>
+        <select id="filter-status" class="px-2 py-1 border rounded text-sm" style="min-height:44px">
+          <option value="active">✅ Đang hoạt động</option>
+          <option value="deleted">🗑️ Đã xoá</option>
+          <option value="all">📦 Tất cả</option>
+        </select>
+        <input id="filter-from" type="date" class="px-2 py-1 border rounded text-sm" style="min-height:44px">
+        <div class="flex gap-1">
+          <input id="filter-to" type="date" class="flex-1 px-2 py-1 border rounded text-sm" style="min-height:44px">
+          <button id="btn-load" class="bg-blue-700 text-white px-3 rounded font-medium text-sm" style="min-height:44px">Tải</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 relative">
+    <div id="loading" class="hidden absolute inset-0 flex items-center justify-center z-40 bg-white/80">
+      <div class="text-center">
+        <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-300 border-t-blue-700 rounded-full"></div>
+        <p class="mt-2 text-sm text-gray-600">Đang tải marker...</p>
+      </div>
+    </div>
+    <div id="map" style="height: calc(100vh - 130px); min-height: 400px;"></div>
+  </main>
+
+  <!-- Modal chi tiết -->
+  <div id="detail-modal" class="hidden fixed inset-0 bg-black/50 z-[1000] flex items-end sm:items-center justify-center p-2">
+    <div class="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between p-3 border-b">
+        <span id="detail-title" class="font-semibold text-gray-800 truncate"></span>
+        <button id="detail-close" class="text-2xl w-10 h-10 hover:bg-gray-100 rounded">✕</button>
+      </div>
+      <div id="detail-body" class="p-3 overflow-y-auto flex-1 text-sm"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initMap } from './js/map.js';
+
+    const user = requireAuth('map');
+    document.getElementById('header-user').textContent = user.full_name;
+
+    // Modal close
+    document.getElementById('detail-close').onclick = () => document.getElementById('detail-modal').classList.add('hidden');
+    document.getElementById('detail-modal').onclick = (e) => {
+      if (e.target.id === 'detail-modal') document.getElementById('detail-modal').classList.add('hidden');
+    };
+
+    initMap(user);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

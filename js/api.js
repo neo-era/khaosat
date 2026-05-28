@@ -83,9 +83,79 @@ export async function apiReport({ types, from, to, usernames, status, groupBy } 
   });
 }
 
-/** Trả danh sách user active (cho dropdown filter ở manage/report). */
-export async function apiUsers() {
-  return postJson({ action: 'users', token: requireToken() });
+/** Trả danh sách user. Mặc định chỉ active=TRUE. Truyền {includeInactive: true} để xem cả disabled (cho users.html). */
+export async function apiUsers({ includeInactive } = {}) {
+  return postJson({
+    action: 'users',
+    token: requireToken(),
+    include_inactive: includeInactive === true
+  });
+}
+
+/** Tạo user mới (chỉ users_manage). */
+export async function apiUserCreate({ username, password, full_name, role, active }) {
+  return postJson({
+    action: 'user_create',
+    token: requireToken(),
+    username, password, full_name, role, active
+  });
+}
+
+/** Sửa user (full_name/role/active). Username KHÔNG đổi. */
+export async function apiUserUpdate({ username, full_name, role, active }) {
+  return postJson({
+    action: 'user_update',
+    token: requireToken(),
+    username, full_name, role, active
+  });
+}
+
+// ===== Tài liệu tham khảo =====
+
+export async function apiDocsList() {
+  return postJson({ action: 'docs_list', token: requireToken() });
+}
+
+export async function apiDocsCreate({ title, url, category, description }) {
+  return postJson({
+    action: 'docs_create',
+    token: requireToken(),
+    title, url, category, description
+  });
+}
+
+export async function apiDocsDelete(id) {
+  return postJson({ action: 'docs_delete', token: requireToken(), id });
+}
+
+// ===== Lịch công tác =====
+
+export async function apiScheduleList({ from, to, ktv_username, status, loai_ks } = {}) {
+  return postJson({
+    action: 'schedule_list',
+    token: requireToken(),
+    from, to, ktv_username, status, loai_ks
+  });
+}
+
+export async function apiScheduleCreate(items) {
+  return postJson({
+    action: 'schedule_create',
+    token: requireToken(),
+    items
+  });
+}
+
+export async function apiScheduleUpdate(id, fields) {
+  return postJson({
+    action: 'schedule_update',
+    token: requireToken(),
+    id, fields
+  });
+}
+
+export async function apiScheduleDelete(id) {
+  return postJson({ action: 'schedule_delete', token: requireToken(), id });
 }
 
 /** Reset password user (chỉ admin/role có users_manage). */

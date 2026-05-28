@@ -1,8 +1,8 @@
 // js/report.js — Trang báo cáo: 3 vùng A bảng tổng quan / B biểu đồ cột chồng / C pivot KTV×Loại.
 
-import { apiReport, apiUsers } from './api.js';
+import { apiReport, apiUsers, apiList } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
-import { showToast, escapeHtml } from './utils.js';
+import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
 
 const state = {
   data: null  // { areaA, areaB, areaC }
@@ -107,6 +107,7 @@ async function loadReport() {
     renderAreaA(res.areaA || []);
     renderAreaB(res.areaB || [], types);
     renderAreaC(res.areaC || [], types);
+    renderAreaD(res.areaD || [], types);
     document.getElementById('btn-export').disabled = false;
     const bx = document.getElementById('btn-export-xlsx');
     const bp = document.getElementById('btn-export-pdf');
@@ -271,6 +272,115 @@ function renderAreaC(rows, types) {
 }
 
 // =====================================================================
+// AREA D — Heatmap Phường × Loại
+// =====================================================================
+function renderAreaD(rows, types) {
+  const div = document.getElementById('areaD');
+  if (rows.length === 0) {
+    div.innerHTML = '<p class="text-sm text-gray-500 p-4">Không có dữ liệu</p>';
+    return;
+  }
+  const usedTypes = types.length > 0 && types.length < SCHEMA_KEYS.length ? types : SCHEMA_KEYS;
+
+  // Tìm max cell để tính scale màu
+  let max = 1;
+  for (const r of rows) {
+    for (const t of usedTypes) {
+      if ((r[t] || 0) > max) max = r[t];
+    }
+  }
+
+  let html = '<table class="w-full text-sm min-w-[700px]"><thead class="bg-gray-100 border-b"><tr>';
+  html += '<th class="px-2 py-2 text-left text-xs font-semibold sticky left-0 bg-gray-100">Phường</th>';
+  for (const t of usedTypes) {
+    html += `<th class="px-1 py-2 text-center text-xs font-semibold" title="${escapeHtml(SCHEMAS[t] ? SCHEMAS[t].name : t)}">${SCHEMAS[t] ? SCHEMAS[t].icon : '📋'}</th>`;
+  }
+  html += '<th class="px-2 py-2 text-right text-xs font-bold">Tổng</th></tr></thead><tbody>';
+
+  for (const r of rows) {
+    html += `<tr class="border-b">
+      <td class="px-2 py-2 text-sm font-medium sticky left-0 bg-white">${escapeHtml(r.phuong)}</td>`;
+    for (const t of usedTypes) {
+      const c = r[t] || 0;
+      const cls = heatClass(c, max);
+      html += `<td class="text-center font-mono text-sm cursor-pointer hover:opacity-80 ${cls.bg} ${cls.text}"
+        data-phuong="${escapeHtml(r.phuong)}" data-type="${escapeHtml(t)}" data-count="${c}">${c > 0 ? c : '·'}</td>`;
+    }
+    html += `<td class="px-2 py-2 text-right font-bold font-mono">${r.total}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  div.innerHTML = html;
+
+  // Bind click drill-down
+  div.querySelectorAll('td[data-phuong]').forEach(cell => {
+    cell.onclick = () => {
+      const count = parseInt(cell.dataset.count, 10);
+      if (!count) return;
+      openDrillDown(cell.dataset.phuong, cell.dataset.type);
+    };
+  });
+}
+
+function heatClass(count, max) {
+  if (count === 0) return { bg: 'bg-gray-50', text: 'text-gray-300' };
+  const pct = count / max;
+  if (pct >= 0.9) return { bg: 'bg-red-700', text: 'text-white' };
+  if (pct >= 0.75) return { bg: 'bg-red-600', text: 'text-white' };
+  if (pct >= 0.6) return { bg: 'bg-red-500', text: 'text-white' };
+  if (pct >= 0.45) return { bg: 'bg-red-400', text: 'text-white' };
+  if (pct >= 0.3) return { bg: 'bg-red-300', text: 'text-gray-900' };
+  if (pct >= 0.15) return { bg: 'bg-red-200', text: 'text-gray-900' };
+  return { bg: 'bg-red-100', text: 'text-gray-900' };
+}
+
+/** Drill-down: tải bản ghi của 1 ô (phuong + type) và hiện trong modal. */
+async function openDrillDown(phuong, type) {
+  const schema = SCHEMAS[type];
+  const modal = document.getElementById('drill-modal');
+  const title = document.getElementById('drill-title');
+  const body = document.getElementById('drill-body');
+  title.textContent = (schema ? schema.icon : '📋') + ' ' + (schema ? schema.name : type) + ' — ' + phuong;
+  body.innerHTML = '<div class="text-center text-gray-500 py-4">⏳ Đang tải...</div>';
+  modal.classList.remove('hidden');
+
+  try {
+    const filter = state.data ? state.data.filter : {};
+    const res = await apiList({
+      type: type,
+      from: filter.from || undefined,
+      to: filter.to || undefined,
+      status: filter.status || 'active'
+    });
+    const rows = (res.rows || []).filter(r => String(r['Phường'] || '').trim() === phuong);
+
+    if (rows.length === 0) {
+      body.innerHTML = '<p class="text-gray-500 text-center py-4">Không có bản ghi nào khớp.</p>';
+      return;
+    }
+
+    let html = `<p class="text-xs text-gray-500 mb-2">${rows.length} bản ghi:</p>`;
+    html += '<div class="space-y-1">';
+    for (const r of rows.slice(0, 100)) {
+      const tuyen = r['Tuyến đường'] || r['Vị trí'] || '—';
+      const ktv = r['Người khảo sát'] || r['Username'] || '?';
+      const date = r['Submitted At'] ? formatVnDateOnly(r['Submitted At']) : '';
+      const isDeleted = !!r['Deleted At'];
+      html += `<div class="border-b border-gray-100 py-2 ${isDeleted ? 'opacity-60 line-through' : ''}">
+        <div class="text-sm"><strong>STT #${escapeHtml(String(r['STT']))}</strong> · ${escapeHtml(tuyen)}</div>
+        <div class="text-xs text-gray-500">${escapeHtml(ktv)} · ${escapeHtml(date)}</div>
+      </div>`;
+    }
+    if (rows.length > 100) {
+      html += `<p class="text-xs text-gray-500 mt-2">(Hiển thị 100 đầu / ${rows.length} tổng)</p>`;
+    }
+    html += '</div>';
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<p class="text-red-600 text-center py-4">Lỗi: ' + escapeHtml(e.message) + '</p>';
+  }
+}
+
+// =====================================================================
 // EXPORT CSV
 // =====================================================================
 function exportCsv() {
@@ -307,6 +417,19 @@ function exportCsv() {
       ...allTypes.map(t => r[t] || 0),
       r.total
     ].join(','));
+  }
+
+  // D
+  if (state.data.areaD && state.data.areaD.length > 0) {
+    sections.push('\n## Vùng D — Heatmap Phường × Loại');
+    sections.push(['Phường', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'].map(csvEscape).join(','));
+    for (const r of state.data.areaD) {
+      sections.push([
+        csvEscape(r.phuong),
+        ...allTypes.map(t => r[t] || 0),
+        r.total
+      ].join(','));
+    }
   }
 
   const csv = sections.join('\n');
@@ -380,6 +503,20 @@ function exportXlsx() {
   wsC['!cols'] = [{wch:12},{wch:24}, ...allTypes.map(() => ({wch:14})), {wch:10}];
   XLSX.utils.book_append_sheet(wb, wsC, 'C-Pivot KTV');
 
+  // Sheet D: Heatmap Phường
+  if (state.data.areaD && state.data.areaD.length > 0) {
+    const headerD = ['Phường', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'];
+    const rowsD = state.data.areaD.map(r => [r.phuong, ...allTypes.map(t => r[t] || 0), r.total]);
+    const wsD = XLSX.utils.aoa_to_sheet([
+      ['Vùng D — Heatmap Phường × Loại'],
+      [],
+      headerD,
+      ...rowsD
+    ]);
+    wsD['!cols'] = [{wch:28}, ...allTypes.map(() => ({wch:14})), {wch:10}];
+    XLSX.utils.book_append_sheet(wb, wsD, 'D-Heatmap');
+  }
+
   XLSX.writeFile(wb, 'bao-cao-' + dateStr + '.xlsx');
 }
 
@@ -444,6 +581,28 @@ function exportPdf() {
     },
     didDrawPage: pdfFooter(doc)
   });
+
+  // === Trang 4: Vùng D Heatmap (nếu có) ===
+  if (state.data.areaD && state.data.areaD.length > 0) {
+    doc.addPage();
+    drawPdfHeader(doc, 'Vung D — Heatmap Phuong x Loai', dateStr);
+    doc.autoTable({
+      startY: 28,
+      head: [['Phuong', ...allTypes.map(t => SCHEMAS[t].name), 'Tong']],
+      body: state.data.areaD.map(r => [
+        r.phuong,
+        ...allTypes.map(t => r[t] || 0),
+        r.total
+      ]),
+      styles: { fontSize: 7, cellPadding: 1.5 },
+      headStyles: { fillColor: [29, 78, 216], fontSize: 7 },
+      columnStyles: {
+        0: { cellWidth: 35 },
+        [1 + allTypes.length]: { fontStyle: 'bold', halign: 'right' }
+      },
+      didDrawPage: pdfFooter(doc)
+    });
+  }
 
   doc.save('bao-cao-' + new Date().toISOString().slice(0, 10) + '.pdf');
 }
