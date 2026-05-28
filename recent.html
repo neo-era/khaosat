@@ -44,6 +44,7 @@
     import { getSubmittedToday } from './js/storage.js';
     import { SCHEMAS } from './js/schemas.js';
     import { escapeHtml, formatVnDate } from './js/utils.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth();
     document.getElementById('header-user').textContent = user.full_name;
@@ -116,6 +117,7 @@
       }
     };
 
+    initHelp('ktv');
     // Service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

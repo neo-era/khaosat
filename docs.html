@@ -72,6 +72,7 @@
   <script type="module">
     import { requireAuth, hasPermission, isFullAccess } from './js/auth.js';
     import { initDocs } from './js/docs.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth();
     document.getElementById('header-user').textContent = user.full_name;
@@ -87,6 +88,7 @@
     };
 
     initDocs(user);
+    initHelp('chung');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

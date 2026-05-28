@@ -92,6 +92,7 @@
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initMyKpi } from './js/my-kpi.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth();  // chỉ check login, không check permission cụ thể
     if (user.role === 'demo') {
@@ -101,6 +102,7 @@
       document.getElementById('header-user').textContent = user.full_name;
       initMyKpi(user);
     }
+    initHelp('ktv');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

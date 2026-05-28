@@ -112,6 +112,7 @@
   <script type="module">
     import { requireAuth, hasPermission } from './js/auth.js';
     import { initSchedule } from './js/schedule.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth();
     if (user.role === 'demo') {
@@ -129,6 +130,7 @@
 
       initSchedule(user);
     }
+    initHelp('chung');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

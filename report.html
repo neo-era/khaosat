@@ -164,6 +164,7 @@
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initReport, initRawExport } from './js/report.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth('report');
     document.getElementById('header-user').textContent = user.full_name;
@@ -176,6 +177,7 @@
 
     initReport();
     initRawExport();
+    initHelp('admin');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

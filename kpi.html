@@ -79,6 +79,7 @@
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initKpi, sortBy } from './js/kpi.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth('kpi');
     document.getElementById('header-user').textContent = user.full_name;
@@ -99,6 +100,7 @@
     };
 
     initKpi();
+    initHelp('admin');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

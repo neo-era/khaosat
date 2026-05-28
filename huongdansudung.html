@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <title>Hướng dẫn sử dụng — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    .section-anchor { scroll-margin-top: 64px; }
+    details > summary { cursor: pointer; list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] > summary .chevron { transform: rotate(90deg); }
+    .chevron { transition: transform 0.2s; display: inline-block; }
+    @media print {
+      header, nav, .no-print { display: none !important; }
+      main { padding: 0 !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800">
+
+  <!-- Header -->
+  <header class="sticky top-0 bg-white shadow-sm z-40 no-print">
+    <div class="max-w-5xl mx-auto px-3 py-2 flex items-center gap-3">
+      <a href="index.html" class="text-xl w-11 h-11 flex items-center justify-center rounded hover:bg-gray-100">←</a>
+      <span class="text-xl">💡</span>
+      <h1 class="text-base font-bold text-blue-900 flex-1">Hướng dẫn sử dụng — SAPULICO</h1>
+      <button onclick="window.print()" class="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 border rounded hidden sm:block">🖨️ In</button>
+    </div>
+    <!-- Tab bar -->
+    <div class="max-w-5xl mx-auto px-3 pb-1 flex gap-1 overflow-x-auto">
+      <button data-tab="ktv"   onclick="switchTab('ktv')"   class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">👷 KTV hiện trường</button>
+      <button data-tab="admin" onclick="switchTab('admin')" class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">🏢 Quản lý (Admin)</button>
+      <button data-tab="chung" onclick="switchTab('chung')" class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">⚙️ Tính năng chung</button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-3 py-4 pb-24">
+
+    <!-- ══════════════════════════════════════════
+         TAB 1 — KTV HIỆN TRƯỜNG
+    ══════════════════════════════════════════ -->
+    <div id="tab-ktv" class="tab-content space-y-4">
+
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <p class="text-sm text-blue-800">
+          <strong>Dành cho: Kỹ thuật viên (role <code>user1</code>)</strong> — nhập khảo sát hiện trường, xem lại bản ghi trong ngày, theo dõi KPI cá nhân.
+        </p>
+      </div>
+
+      <!-- 1. Cài app -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="cai-app">
+        <div class="bg-blue-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📱</span>
+          <h2 class="font-semibold">1. Cài app lên điện thoại (Add to Home Screen)</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm">
+          <p>App chạy trên trình duyệt, nhưng có thể thêm vào màn hình chính như app thật, không cần tải từ App Store.</p>
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium hover:bg-gray-100">
+              <span class="text-lg">🤖</span> Android (Chrome)
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <ol class="list-decimal list-inside px-4 py-3 space-y-2 text-gray-700">
+              <li>Mở Chrome, vào địa chỉ app (nhận từ quản lý)</li>
+              <li>Nhấn biểu tượng <strong>⋮</strong> (3 chấm) góc trên phải</li>
+              <li>Chọn <strong>"Thêm vào màn hình chính"</strong></li>
+              <li>Nhấn <strong>"Thêm"</strong> — biểu tượng "KS Đèn" xuất hiện trên màn hình</li>
+            </ol>
+          </details>
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium hover:bg-gray-100">
+              <span class="text-lg">🍎</span> iPhone / iPad (Safari)
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <ol class="list-decimal list-inside px-4 py-3 space-y-2 text-gray-700">
+              <li>Mở Safari (phải dùng Safari, không dùng Chrome trên iOS)</li>
+              <li>Vào địa chỉ app</li>
+              <li>Nhấn biểu tượng <strong>Chia sẻ</strong> (hộp có mũi tên lên) ở thanh dưới</li>
+              <li>Cuộn xuống, chọn <strong>"Thêm vào Màn hình chính"</strong></li>
+              <li>Nhấn <strong>"Thêm"</strong></li>
+            </ol>
+          </details>
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+            ⚡ Sau khi thêm vào màn hình, app mở full-screen không có thanh địa chỉ. Dùng nút ← trong app để điều hướng.
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Đăng nhập -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="dang-nhap">
+        <div class="bg-blue-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🔐</span>
+          <h2 class="font-semibold">2. Đăng nhập</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm">
+          <ol class="list-decimal list-inside space-y-2 text-gray-700">
+            <li>Mở app → trang đăng nhập hiện ra tự động</li>
+            <li>Nhập <strong>Tên đăng nhập</strong> và <strong>Mật khẩu</strong> (nhận từ quản lý)</li>
+            <li>Tích <strong>"Nhớ đăng nhập"</strong> để không cần nhập lại mỗi ngày (token giữ 8 tiếng)</li>
+            <li>Nhấn <strong>"Đăng nhập"</strong></li>
+          </ol>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
+              <strong>Sai 5 lần liên tiếp</strong> → tài khoản bị khoá 5 phút tự động.
+              Liên hệ quản lý nếu quên mật khẩu.
+            </div>
+            <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
+              Đăng nhập thành công → vào thẳng trang chủ. Họ tên bạn hiện trên header.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Trang chủ -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="trang-chu">
+        <div class="bg-blue-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🏠</span>
+          <h2 class="font-semibold">3. Trang chủ — chọn loại khảo sát</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm">
+          <p>Trang chủ hiện lưới <strong>15 loại khảo sát</strong>. Nhấn vào loại cần nhập:</p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+            <div class="border rounded-lg p-2 text-center">💡 Tăng cường đèn</div>
+            <div class="border rounded-lg p-2 text-center">🔌 Ngầm hóa</div>
+            <div class="border rounded-lg p-2 text-center">🔦 Thay đèn</div>
+            <div class="border rounded-lg p-2 text-center">📦 Hộp kín nước</div>
+            <div class="border rounded-lg p-2 text-center">🪢 Thay cáp nổi</div>
+            <div class="border rounded-lg p-2 text-center">🧵 Cáp luồn cần</div>
+            <div class="border rounded-lg p-2 text-center">⛓️ Thay cáp ngầm</div>
+            <div class="border rounded-lg p-2 text-center">🦯 Thay cần đèn</div>
+            <div class="border rounded-lg p-2 text-center">🏗️ Thay trụ</div>
+            <div class="border rounded-lg p-2 text-center">🪔 Chóa đèn</div>
+            <div class="border rounded-lg p-2 text-center">🛡️ Nắp trụ</div>
+            <div class="border rounded-lg p-2 text-center">🗄️ Vỏ tủ ĐK</div>
+            <div class="border rounded-lg p-2 text-center">🛣️ TC đèn kc xa</div>
+            <div class="border rounded-lg p-2 text-center">🔢 Decal số trụ</div>
+            <div class="border rounded-lg p-2 text-center">⛏️ Nâng móng</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Nhập khảo sát -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="nhap-ks">
+        <div class="bg-blue-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📝</span>
+          <h2 class="font-semibold">4. Nhập form khảo sát</h2>
+        </div>
+        <div class="p-4 space-y-4 text-sm">
+
+          <div class="space-y-3">
+            <h3 class="font-semibold text-gray-800 flex items-center gap-2"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">A</span> Lấy GPS tự động</h3>
+            <p class="text-gray-700">Khi mở form, app <strong>tự xin quyền GPS</strong> và lấy vị trí ngay. Trạng thái hiện ở đầu form:</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div class="border border-blue-200 bg-blue-50 rounded-lg p-2">🔵 <strong>Đang lấy GPS...</strong><br>Đứng yên, đợi vài giây</div>
+              <div class="border border-green-200 bg-green-50 rounded-lg p-2">🟢 <strong>Đã có GPS (sai số Xm)</strong><br>Sẵn sàng nhập form</div>
+              <div class="border border-red-200 bg-red-50 rounded-lg p-2">🔴 <strong>Không có GPS</strong><br>Kiểm tra quyền vị trí trên điện thoại</div>
+            </div>
+            <p class="text-gray-600 text-xs">Nhấn nút <strong>"Lấy lại GPS"</strong> nếu vị trí chưa đúng hoặc cần cập nhật.</p>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="font-semibold text-gray-800 flex items-center gap-2"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">B</span> Điền các trường thông tin</h3>
+            <ul class="space-y-2 text-gray-700">
+              <li class="flex gap-2"><span class="text-red-500 font-bold flex-shrink-0">*</span><span>Trường có dấu <strong>*</strong> đỏ = bắt buộc phải điền trước khi lưu.</span></li>
+              <li class="flex gap-2"><span class="text-gray-400 flex-shrink-0">—</span><span><strong>Tuyến đường, Quận, Phường, Tủ điều khiển</strong>: bắt buộc trên mọi form.</span></li>
+              <li class="flex gap-2"><span class="text-gray-400 flex-shrink-0">—</span><span><strong>Quận</strong>: chọn trước → danh sách <strong>Phường</strong> tự lọc theo quận đã chọn.</span></li>
+              <li class="flex gap-2"><span class="text-gray-400 flex-shrink-0">—</span><span><strong>Tủ điều khiển</strong>: gõ vài ký tự để gợi ý từ danh sách 903 TĐK. Nếu TĐK mới chưa có trong danh sách, gõ tự do.</span></li>
+              <li class="flex gap-2"><span class="text-gray-400 flex-shrink-0">—</span><span><strong>Người khảo sát</strong>: tự điền tên bạn, chỉ đọc — không sửa được.</span></li>
+            </ul>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="font-semibold text-gray-800 flex items-center gap-2"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">C</span> Chụp ảnh hiện trường</h3>
+            <ul class="space-y-2 text-gray-700">
+              <li>Nhấn nút <strong>"📷 Chụp / Chọn ảnh"</strong> để thêm ảnh (có thể chụp mới hoặc chọn từ thư viện).</li>
+              <li>Cho phép nhiều ảnh. Ảnh tự động <strong>nén xuống ~500KB</strong> trước khi gửi.</li>
+              <li>Thumbnail hiện ngay sau khi chọn. Nhấn <strong>✕</strong> để xoá ảnh không cần.</li>
+              <li>Upload diễn ra ngay — thanh tiến trình xanh cho biết trạng thái.</li>
+              <li><strong>Chờ tất cả ảnh upload xong</strong> rồi mới nhấn Lưu (nút Lưu tự khoá khi đang upload).</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3">
+            <h3 class="font-semibold text-gray-800 flex items-center gap-2"><span class="bg-blue-100 text-blue-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">D</span> Lưu bản ghi</h3>
+            <ol class="list-decimal list-inside space-y-1 text-gray-700">
+              <li>Điền đủ các trường bắt buộc (*)</li>
+              <li>Nhấn nút <strong>"💾 Lưu"</strong> (màu xanh, cuối trang)</li>
+              <li>Thành công → toast <em>"Đã lưu, STT #N"</em> xuất hiện</li>
+              <li>Chọn <strong>"Nhập tiếp loại này"</strong> hoặc <strong>"Về trang chủ"</strong></li>
+            </ol>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800 space-y-1">
+              <p><strong>Nháp tự động:</strong> Form tự lưu nháp mỗi 5 giây. Nếu thoát nhầm → mở lại form → chọn <em>"Khôi phục bản nháp"</em>.</p>
+              <p><strong>Offline:</strong> Không có mạng → bản ghi vào <em>hàng chờ</em>. Khi có mạng trở lại, app tự gửi. Số bản chờ hiện trên header.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Xem lại hôm nay -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="xem-hom-nay">
+        <div class="bg-blue-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🕐</span>
+          <h2 class="font-semibold">5. Xem khảo sát hôm nay</h2>
+        </div>
+        <div class="p-4 space-y-2 text-sm text-gray-700">
+          <p>Vào menu → <strong>"Khảo sát hôm nay"</strong> (hoặc <code>recent.html</code>).</p>
+          <ul class="list-disc list-inside space-y-1">
+            <li>Hiện danh sách tất cả bản bạn đã nộp trong ngày.</li>
+            <li>Mỗi thẻ: loại KS, tuyến đường, STT, số ảnh, thời gian nộp.</li>
+            <li>Nhấn vào thẻ → xem chi tiết tất cả trường (chỉ đọc).</li>
+            <li>Dùng để kiểm tra lại trước khi kết thúc ca làm việc.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 6. KPI cá nhân -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="kpi-ca-nhan">
+        <div class="bg-blue-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🎯</span>
+          <h2 class="font-semibold">6. KPI của tôi</h2>
+        </div>
+        <div class="p-4 space-y-2 text-sm text-gray-700">
+          <p>Vào menu → <strong>"KPI của tôi"</strong> (hoặc <code>my-kpi.html</code>).</p>
+          <p>Xem điểm KPI cá nhân theo tháng — 5 chỉ tiêu:</p>
+          <div class="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs text-center">
+            <div class="border rounded-lg p-2"><strong>Tần suất</strong><br>40%<br>Tổng bản/tháng</div>
+            <div class="border rounded-lg p-2"><strong>Chất lượng</strong><br>30%<br>% có ảnh + GPS</div>
+            <div class="border rounded-lg p-2"><strong>Đa dạng</strong><br>15%<br>Số loại KS khác nhau</div>
+            <div class="border rounded-lg p-2"><strong>Đầy đủ</strong><br>10%<br>% trường tùy chọn đã điền</div>
+            <div class="border rounded-lg p-2"><strong>Ổn định</strong><br>5%<br>Số ngày làm việc</div>
+          </div>
+          <div class="grid grid-cols-4 gap-2 text-xs text-center mt-1">
+            <div class="bg-green-100 text-green-700 rounded-lg p-1 font-bold">A ≥ 85</div>
+            <div class="bg-teal-100 text-teal-700 rounded-lg p-1 font-bold">B 70–84</div>
+            <div class="bg-yellow-100 text-yellow-700 rounded-lg p-1 font-bold">C 55–69</div>
+            <div class="bg-red-100 text-red-700 rounded-lg p-1 font-bold">D &lt; 55</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /tab-ktv -->
+
+
+    <!-- ══════════════════════════════════════════
+         TAB 2 — QUẢN LÝ (ADMIN/USER)
+    ══════════════════════════════════════════ -->
+    <div id="tab-admin" class="tab-content space-y-4 hidden">
+
+      <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
+        <p class="text-sm text-purple-800">
+          <strong>Dành cho: Quản lý văn phòng (role <code>admin</code> / <code>user</code>)</strong> — xem KPI toàn đội, quản lý bản ghi, xuất báo cáo.
+        </p>
+      </div>
+
+      <!-- KPI tổng -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="kpi-tong">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📊</span>
+          <h2 class="font-semibold">1. Trang KPI tổng (kpi.html)</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm text-gray-700">
+          <p>Vào menu → <strong>"KPI tổng (tất cả KTV)"</strong>. Chọn tháng → nhấn <strong>"Tải dữ liệu"</strong>.</p>
+          <ul class="list-disc list-inside space-y-1">
+            <li>Bảng hiện điểm KPI tất cả KTV trong tháng, sort theo Tổng giảm dần.</li>
+            <li>Nhấn tên KTV → modal chi tiết: danh sách bản ghi + biểu đồ số bản theo ngày.</li>
+            <li>Nhấn header cột để sắp xếp theo chỉ tiêu đó.</li>
+          </ul>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded">📥 CSV — tải bảng KPI dạng CSV</span>
+            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded">📊 Excel — tải file .xlsx</span>
+            <span class="bg-gray-100 text-gray-700 px-3 py-1 rounded">📄 PDF — tải báo cáo PDF</span>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+            KPI chỉ tính bản ghi <strong>chưa bị xoá</strong>. Bản đã soft-delete không được đếm.
+          </div>
+        </div>
+      </div>
+
+      <!-- Quản lý bản ghi -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="quan-ly-ban-ghi">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🗂️</span>
+          <h2 class="font-semibold">2. Quản lý bản ghi (manage.html)</h2>
+        </div>
+        <div class="p-4 space-y-4 text-sm text-gray-700">
+
+          <div>
+            <h3 class="font-semibold mb-2">Tìm kiếm bản ghi</h3>
+            <ul class="list-disc list-inside space-y-1">
+              <li>Filter theo: Loại KS, KTV, khoảng ngày, trạng thái, từ khóa tự do.</li>
+              <li>Nhấn <strong>"Tìm"</strong> → bảng kết quả hiện bên dưới (50 bản/trang).</li>
+              <li>Nhấn ảnh → mở lightbox xem ảnh đính kèm.</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-2">Sửa bản ghi ✏️</h3>
+            <ol class="list-decimal list-inside space-y-1">
+              <li>Nhấn nút <strong>"✏️ Sửa"</strong> trên dòng bản ghi cần sửa.</li>
+              <li>Form mở với dữ liệu đã điền sẵn, có banner <em>"Đang sửa bản ghi STT #N"</em>.</li>
+              <li>Sửa các trường cần thiết → nhấn <strong>"💾 Cập nhật"</strong>.</li>
+              <li>STT và người khảo sát gốc <strong>không thay đổi</strong>.</li>
+            </ol>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-2">Xoá bản ghi 🗑️</h3>
+            <ol class="list-decimal list-inside space-y-1">
+              <li>Nhấn <strong>"Xoá"</strong> → hộp thoại xác nhận 2 bước.</li>
+              <li>Đọc kỹ cảnh báo: <em>"Ảnh đính kèm sẽ bị xoá VĨNH VIỄN khỏi Cloudinary"</em>.</li>
+              <li>Nhấn <strong>"Xoá vĩnh viễn ảnh + soft-delete data"</strong> để xác nhận.</li>
+            </ol>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800 mt-2">
+              <strong>Soft-delete</strong>: dữ liệu chữ được giữ lại trong Google Sheets (cột "Deleted At" có giá trị, row tô màu xám). Chỉ ảnh Cloudinary bị xoá thật sự.
+            </div>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-2">Khôi phục bản đã xoá 🔄</h3>
+            <ol class="list-decimal list-inside space-y-1">
+              <li>Chọn filter <strong>"Trạng thái: Đã xoá"</strong> → tìm bản cần khôi phục.</li>
+              <li>Nhấn <strong>"Khôi phục"</strong>.</li>
+              <li>Dữ liệu chữ phục hồi bình thường. <strong>Ảnh không khôi phục được</strong> (đã xoá Cloudinary).</li>
+            </ol>
+          </div>
+
+          <div>
+            <h3 class="font-semibold mb-2">Xoá hàng loạt</h3>
+            <ul class="list-disc list-inside space-y-1">
+              <li>Tích checkbox đầu hàng những bản cần xoá → nhấn <strong>"Xoá đã chọn"</strong>.</li>
+              <li>Xác nhận → xoá tất cả cùng lúc.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Báo cáo tổng hợp -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="bao-cao">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📈</span>
+          <h2 class="font-semibold">3. Báo cáo tổng hợp (report.html)</h2>
+        </div>
+        <div class="p-4 space-y-4 text-sm text-gray-700">
+
+          <p>Vào menu → <strong>"Báo cáo tổng hợp"</strong>. Đặt bộ lọc → nhấn <strong>"Tải báo cáo"</strong>.</p>
+
+          <div>
+            <h3 class="font-semibold mb-2">Bộ lọc</h3>
+            <ul class="list-disc list-inside space-y-1 text-xs">
+              <li><strong>Loại KS</strong>: Ctrl-click để chọn nhiều. Không chọn = tất cả.</li>
+              <li><strong>KTV</strong>: Ctrl-click để chọn nhiều. Không chọn = tất cả KTV.</li>
+              <li><strong>Thời gian</strong>: nhập tay hoặc dùng preset nhanh (Tháng này / Tháng trước / Quý này / Năm nay).</li>
+              <li><strong>Group by</strong>: Ngày / Tuần / Tháng / Quý — ảnh hưởng đến biểu đồ cột.</li>
+            </ul>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="border rounded-lg p-3">
+              <p class="font-medium text-sm mb-1">📊 Vùng A — Tổng quan</p>
+              <p class="text-xs text-gray-600">Bảng 1 dòng/loại KS: tổng bản, có ảnh, có GPS, đã xoá.</p>
+            </div>
+            <div class="border rounded-lg p-3">
+              <p class="font-medium text-sm mb-1">📉 Vùng B — Biểu đồ thời gian</p>
+              <p class="text-xs text-gray-600">Cột chồng theo loại, trục X = thời gian. Hover để xem chi tiết.</p>
+            </div>
+            <div class="border rounded-lg p-3">
+              <p class="font-medium text-sm mb-1">🔢 Vùng C — Pivot KTV × Loại</p>
+              <p class="text-xs text-gray-600">Bảng chéo: click số để xem danh sách bản ghi cụ thể.</p>
+            </div>
+            <div class="border rounded-lg p-3">
+              <p class="font-medium text-sm mb-1">🔥 Vùng D — Heatmap Phường × Loại</p>
+              <p class="text-xs text-gray-600">Màu đỏ đậm = nhiều bản ghi. Click cell để drill-down.</p>
+            </div>
+          </div>
+
+          <div class="border border-green-200 bg-green-50 rounded-lg p-3">
+            <p class="font-semibold text-sm text-green-800 mb-2">📤 Xuất dữ liệu thô theo cấu trúc sheet</p>
+            <p class="text-xs text-gray-700 mb-2">Cuộn xuống cuối trang báo cáo — section <em>"Xuất dữ liệu thô"</em>.</p>
+            <ul class="list-disc list-inside text-xs space-y-1 text-gray-700">
+              <li>Chọn loại KS cần xuất, khoảng ngày, trạng thái.</li>
+              <li><strong>Xuất Excel (.xlsx)</strong>: mỗi loại KS = 1 tab riêng, cột y hệt Google Sheets.</li>
+              <li><strong>Xuất CSV</strong>: mỗi loại = 1 file .csv riêng, mở được bằng Excel.</li>
+              <li>Phù hợp để nộp hồ sơ hoặc đối chiếu với file Excel gốc.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quản lý user -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="quan-ly-user">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">👥</span>
+          <h2 class="font-semibold">4. Quản lý tài khoản (users.html)</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm text-gray-700">
+          <p class="text-xs bg-purple-50 border border-purple-200 text-purple-800 rounded-lg p-2">
+            Chỉ role <strong>admin</strong> — user thường không vào được.
+          </p>
+          <ul class="list-disc list-inside space-y-1">
+            <li><strong>Tạo user mới</strong>: nhấn "+ Thêm user" → điền username, mật khẩu (≥8 ký tự), họ tên, role.</li>
+            <li><strong>Sửa thông tin</strong>: nhấn "✏️ Sửa" → đổi họ tên hoặc role.</li>
+            <li><strong>Reset mật khẩu</strong>: nhấn "🔑 Reset PWD" → nhập mật khẩu mới 2 lần.</li>
+            <li><strong>Vô hiệu hoá</strong>: nhấn "🚫 Vô hiệu" → user không đăng nhập được (không xoá dữ liệu lịch sử).</li>
+            <li><strong>Kích hoạt lại</strong>: nhấn "✅ Kích hoạt" để mở khoá.</li>
+          </ul>
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+            Username <strong>không thể đổi</strong> sau khi tạo. Nếu cần đổi username, hãy tạo tài khoản mới + vô hiệu tài khoản cũ.
+          </div>
+        </div>
+      </div>
+
+      <!-- Lịch công tác -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="lich-cong-tac">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📅</span>
+          <h2 class="font-semibold">5. Lịch công tác (schedule.html)</h2>
+        </div>
+        <div class="p-4 space-y-2 text-sm text-gray-700">
+          <ul class="list-disc list-inside space-y-1">
+            <li>Admin/user tạo lịch phân công: KTV nào, ngày nào, loại KS nào, khu vực nào.</li>
+            <li>KTV vào <strong>"Lịch công tác"</strong> xem việc của mình hôm nay/tuần này.</li>
+            <li>Khi submit form xong, lịch công tác tương ứng <strong>tự đánh dấu "Đã xong"</strong>.</li>
+            <li>Trạng thái: <span class="text-blue-600 font-medium">Pending</span> / <span class="text-green-600 font-medium">Done</span> / <span class="text-gray-500 font-medium">Skipped</span>.</li>
+          </ul>
+        </div>
+      </div>
+
+    </div><!-- /tab-admin -->
+
+
+    <!-- ══════════════════════════════════════════
+         TAB 3 — TÍNH NĂNG CHUNG
+    ══════════════════════════════════════════ -->
+    <div id="tab-chung" class="tab-content space-y-4 hidden">
+
+      <div class="bg-gray-100 border border-gray-300 rounded-xl p-4">
+        <p class="text-sm text-gray-700">
+          Tính năng dùng cho <strong>tất cả role</strong> (trừ demo): bản đồ, tài liệu, làm việc offline, câu hỏi thường gặp.
+        </p>
+      </div>
+
+      <!-- Bản đồ -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="ban-do">
+        <div class="bg-gray-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🗺️</span>
+          <h2 class="font-semibold">Bản đồ khảo sát (map.html)</h2>
+        </div>
+        <div class="p-4 space-y-2 text-sm text-gray-700">
+          <p>Xem vị trí GPS của các bản khảo sát trên bản đồ TP.HCM.</p>
+          <ul class="list-disc list-inside space-y-1">
+            <li>Filter theo loại, KTV (nếu admin), khoảng ngày, trạng thái.</li>
+            <li>Zoom out → các điểm gần nhau tự gộp (cluster). Zoom in → tách ra từng điểm.</li>
+            <li>Nhấn vào điểm → popup: loại KS, STT, KTV, tuyến đường. Nhấn "Mở chi tiết" để xem full.</li>
+            <li>KTV chỉ thấy điểm của mình. Admin/user thấy tất cả.</li>
+          </ul>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+            Chỉ bản ghi có GPS mới hiển thị trên bản đồ. Loại "Hộp kín nước (HKN)" không có GPS nên không có điểm trên bản đồ.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tài liệu tham khảo -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="tai-lieu">
+        <div class="bg-gray-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📚</span>
+          <h2 class="font-semibold">Tài liệu tham khảo (docs.html)</h2>
+        </div>
+        <div class="p-4 space-y-2 text-sm text-gray-700">
+          <ul class="list-disc list-inside space-y-1">
+            <li>Danh sách văn bản pháp luật, tiêu chuẩn kỹ thuật, hướng dẫn nội bộ.</li>
+            <li>Tìm kiếm nhanh bằng ô search. Lọc theo danh mục.</li>
+            <li>Nhấn tên tài liệu → mở link trực tiếp.</li>
+            <li>Admin/user có thể <strong>thêm/xoá</strong> tài liệu mới. KTV chỉ xem.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Offline -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="offline">
+        <div class="bg-gray-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📵</span>
+          <h2 class="font-semibold">Làm việc khi không có mạng (Offline)</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm text-gray-700">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="border rounded-lg p-3 space-y-1">
+              <p class="font-semibold text-sm">Khi mất mạng</p>
+              <ul class="list-disc list-inside text-xs space-y-1">
+                <li>Chấm đỏ xuất hiện trên header</li>
+                <li>Vẫn mở được form và nhập dữ liệu bình thường</li>
+                <li>Nhấn Lưu → bản ghi vào <strong>hàng chờ</strong> offline</li>
+                <li>Badge <em>"📥 N"</em> trên header cho biết số bản đang chờ</li>
+              </ul>
+            </div>
+            <div class="border rounded-lg p-3 space-y-1">
+              <p class="font-semibold text-sm">Khi có mạng trở lại</p>
+              <ul class="list-disc list-inside text-xs space-y-1">
+                <li>Chấm xanh trên header</li>
+                <li>App <strong>tự động gửi</strong> tất cả bản trong hàng chờ</li>
+                <li>Badge về 0 sau khi sync xong</li>
+                <li>Nếu token hết hạn (>8h) → đăng nhập lại trước khi sync</li>
+              </ul>
+            </div>
+          </div>
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+            <strong>Lưu ý ảnh:</strong> Ảnh được upload ngay khi chọn (cần mạng). Nếu mất mạng sau khi chụp ảnh nhưng trước khi lưu form, bản ghi sẽ được lưu offline nhưng <strong>không có ảnh đính kèm</strong>.
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 role -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="phan-quyen">
+        <div class="bg-gray-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🔑</span>
+          <h2 class="font-semibold">Phân quyền 4 role</h2>
+        </div>
+        <div class="p-4 text-sm overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead>
+              <tr class="bg-gray-100">
+                <th class="border px-3 py-2 text-left">Role</th>
+                <th class="border px-3 py-2">Nhập KS</th>
+                <th class="border px-3 py-2">Xoá</th>
+                <th class="border px-3 py-2">KPI</th>
+                <th class="border px-3 py-2">Quản lý</th>
+                <th class="border px-3 py-2">Báo cáo</th>
+                <th class="border px-2 py-2 text-left">Mô tả</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="border px-3 py-2 font-bold text-purple-700">admin</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-2 py-2">Quản lý văn phòng — toàn quyền</td>
+              </tr>
+              <tr class="bg-gray-50">
+                <td class="border px-3 py-2 font-bold text-purple-600">user</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-2 py-2">Quản lý phụ (cùng quyền admin)</td>
+              </tr>
+              <tr>
+                <td class="border px-3 py-2 font-bold text-blue-700">user1</td>
+                <td class="border px-3 py-2 text-center">✅</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-2 py-2">KTV hiện trường — chỉ nhập</td>
+              </tr>
+              <tr class="bg-gray-50">
+                <td class="border px-3 py-2 font-bold text-gray-500">demo</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-3 py-2 text-center">❌</td>
+                <td class="border px-2 py-2">Chỉ xem form (đào tạo)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FAQ -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="faq">
+        <div class="bg-gray-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">❓</span>
+          <h2 class="font-semibold">Câu hỏi thường gặp</h2>
+        </div>
+        <div class="p-4 space-y-3">
+
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium text-sm hover:bg-gray-100">
+              Nhập sai thông tin, làm sao sửa lại?
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <p class="px-4 py-3 text-sm text-gray-700">Liên hệ quản lý (admin/user). Họ vào trang <strong>Quản lý bản ghi</strong> → tìm STT → nhấn <strong>"✏️ Sửa"</strong> để chỉnh thông tin.</p>
+          </details>
+
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium text-sm hover:bg-gray-100">
+              Nộp xong rồi nhưng không thấy trong Google Sheets?
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <p class="px-4 py-3 text-sm text-gray-700">Kiểm tra mạng, sau đó vào <strong>"Khảo sát hôm nay"</strong> xem bản ghi có trong danh sách không. Nếu không thấy, kiểm tra badge hàng chờ trên header — có thể bản đang chờ sync.</p>
+          </details>
+
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium text-sm hover:bg-gray-100">
+              GPS không lấy được, phải làm gì?
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <div class="px-4 py-3 text-sm text-gray-700 space-y-1">
+              <p>Kiểm tra theo thứ tự:</p>
+              <ol class="list-decimal list-inside space-y-1">
+                <li>Đảm bảo app đang mở qua HTTPS (GitHub Pages)</li>
+                <li>Cài đặt điện thoại → cho phép quyền Vị trí cho trình duyệt</li>
+                <li>Tắt/bật GPS trên điện thoại</li>
+                <li>Ra ngoài trời, tránh che khuất</li>
+                <li>Nhấn <strong>"Lấy lại GPS"</strong></li>
+              </ol>
+            </div>
+          </details>
+
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium text-sm hover:bg-gray-100">
+              Token hết hạn sau bao lâu?
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <p class="px-4 py-3 text-sm text-gray-700">8 tiếng kể từ lần đăng nhập. Nếu chọn "Nhớ đăng nhập", token lưu trong bộ nhớ điện thoại. Sau 8 tiếng, app tự chuyển về trang đăng nhập.</p>
+          </details>
+
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium text-sm hover:bg-gray-100">
+              Tài khoản bị khoá, phải làm gì?
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <p class="px-4 py-3 text-sm text-gray-700">Nếu sai mật khẩu 5 lần liên tiếp, tài khoản tự khoá 5 phút. Đợi 5 phút rồi thử lại. Nếu quên mật khẩu, liên hệ admin để reset.</p>
+          </details>
+
+          <details class="border rounded-lg overflow-hidden">
+            <summary class="flex items-center gap-2 px-4 py-3 bg-gray-50 font-medium text-sm hover:bg-gray-100">
+              File CSV xuất ra bị lỗi font tiếng Việt?
+              <span class="chevron ml-auto text-gray-400">▶</span>
+            </summary>
+            <div class="px-4 py-3 text-sm text-gray-700 space-y-1">
+              <p>Mở file CSV bằng Excel đúng cách:</p>
+              <ol class="list-decimal list-inside space-y-1">
+                <li>Mở Excel → tab <strong>Data</strong> → <strong>"From Text/CSV"</strong></li>
+                <li>Chọn file .csv → Encoding: <strong>UTF-8</strong></li>
+                <li>Delimiter: <strong>| (Other)</strong></li>
+                <li>Load → dữ liệu tiếng Việt hiển thị đúng</li>
+              </ol>
+              <p class="text-xs text-gray-500 mt-1">Hoặc dùng nút <strong>"Xuất Excel (.xlsx)"</strong> — không cần cấu hình encoding.</p>
+            </div>
+          </details>
+
+        </div>
+      </div>
+
+      <!-- Liên hệ -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="bg-gray-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">📞</span>
+          <h2 class="font-semibold">Liên hệ hỗ trợ</h2>
+        </div>
+        <div class="p-4 text-sm text-gray-700 space-y-1">
+          <p>Gặp sự cố không giải quyết được, liên hệ quản trị hệ thống SAPULICO:</p>
+          <p class="font-medium">📧 admin@sapulico.local</p>
+          <p class="text-xs text-gray-500 mt-2">Khi liên hệ, cung cấp: username, loại thiết bị, mô tả lỗi, ảnh chụp màn hình (nếu có).</p>
+        </div>
+      </div>
+
+    </div><!-- /tab-chung -->
+
+  </main>
+
+  <!-- Nút về đầu trang -->
+  <button id="back-top"
+    onclick="window.scrollTo({top:0,behavior:'smooth'})"
+    class="no-print hidden fixed bottom-6 right-4 bg-blue-700 text-white w-11 h-11 rounded-full shadow-lg flex items-center justify-center text-lg hover:bg-blue-800 z-30">↑</button>
+
+  <script>
+    // Tab switching
+    function switchTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-700', 'text-white');
+        btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+      });
+      document.getElementById('tab-' + name).classList.remove('hidden');
+      const activeBtn = document.querySelector('[data-tab="' + name + '"]');
+      activeBtn.classList.add('bg-blue-700', 'text-white');
+      activeBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+      localStorage.setItem('hd_tab', name);
+    }
+
+    // Khởi tạo tab từ hash URL hoặc localStorage
+    const hash = location.hash.replace('#', '');
+    const tabMap = { ktv: 'ktv', admin: 'admin', chung: 'chung' };
+    const saved  = tabMap[hash] || tabMap[localStorage.getItem('hd_tab')] || 'ktv';
+    switchTab(saved);
+
+    // Back-to-top button
+    const backTop = document.getElementById('back-top');
+    window.addEventListener('scroll', () => {
+      backTop.classList.toggle('hidden', window.scrollY < 300);
+    }, { passive: true });
+
+    // Cập nhật hash khi chuyển tab
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        history.replaceState(null, '', '#' + btn.dataset.tab);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -37,6 +37,7 @@
     import { SCHEMAS } from './js/schemas.js';
     import { renderForm } from './js/form-renderer.js';
     import { showToast } from './js/utils.js';
+    import { initHelp } from './js/help.js';
 
     // 1. Check auth (throw + redirect login nếu chưa)
     const user = requireAuth();
@@ -66,6 +67,7 @@
         showToast('Lỗi render form: ' + err.message, 'error', 4000);
       });
 
+      initHelp('ktv');
       // 5. Đăng ký service worker (best-effort, không chặn UX nếu fail)
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js').catch(() => {
