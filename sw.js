@@ -13,6 +13,10 @@ const SHELL = [
   './my-kpi.html',
   './manage.html',
   './report.html',
+  './map.html',
+  './users.html',
+  './docs.html',
+  './schedule.html',
   './manifest.json',
   './js/config.js',
   './js/utils.js',
@@ -27,7 +31,11 @@ const SHELL = [
   './js/kpi.js',
   './js/my-kpi.js',
   './js/manage.js',
-  './js/report.js'
+  './js/report.js',
+  './js/map.js',
+  './js/users.js',
+  './js/docs.js',
+  './js/schedule.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -50,8 +58,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
-  // Network only cho Apps Script + Cloudinary
-  if (url.includes('script.google.com') || url.includes('cloudinary.com') || url.includes('googleusercontent.com')) {
+  // Network only cho Apps Script + Cloudinary + Nominatim + OSM tile + Leaflet CDN
+  if (url.includes('script.google.com') || url.includes('cloudinary.com') ||
+      url.includes('googleusercontent.com') || url.includes('nominatim.openstreetmap.org') ||
+      url.includes('tile.openstreetmap.org') || url.includes('unpkg.com/leaflet')) {
     event.respondWith(fetch(event.request));
     return;
   }

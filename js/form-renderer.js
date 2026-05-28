@@ -13,10 +13,10 @@ import { SCHEMAS } from './schemas.js';
 import { PHUONG_XA, QUAN_LIST, TDK_LIST } from './lookups.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
-import { apiSubmit, apiUpdate, apiList, uploadImage } from './api.js';
+import { apiSubmit, apiUpdate, apiList, uploadImage, apiScheduleList, apiScheduleUpdate } from './api.js';
 import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
 import { compressImage, createThumbnail } from './camera.js';
-import { getCurrentPosition } from './gps.js';
+import { getCurrentPosition, reverseGeocode } from './gps.js';
 import { showToast, escapeHtml, uuid, formatVnDate } from './utils.js';
 
 // State module-scoped (1 form 1 lúc trên page)
@@ -74,6 +74,51 @@ export async function renderForm(containerEl, schemaKey) {
     refreshGps();              // async, không await
     await maybeRestoreDraft();
     startAutosave();
+    showScheduleBadge();       // v2.0.5: hiện badge nếu có việc hôm nay
+  }
+}
+
+/** Sau khi submit thành công, tự đánh dấu schedule item pending hôm nay → done (smart-match loai_ks). */
+async function autoMarkScheduleDone() {
+  if (!state.user || state.user.role === 'demo') return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await apiScheduleList({
+      from: today, to: today, status: 'pending', ktv_username: state.user.username
+    });
+    // Tìm item match loai_ks (ưu tiên match cụ thể, fallback item không có loai_ks)
+    const items = res.items || [];
+    let target = items.find(i => i.loai_ks === state.schemaKey);
+    if (!target) target = items.find(i => !i.loai_ks);
+    if (!target) return;
+    await apiScheduleUpdate(target.id, { status: 'done' });
+    // Không show toast riêng — toast success submit đã đủ; chỉ log
+    console.log('Auto-marked schedule item done:', target.id);
+  } catch (e) {
+    // Im lặng
+  }
+}
+
+/** Hiển thị badge nhỏ ở đầu form nếu KTV có lịch pending hôm nay match schemaKey. */
+async function showScheduleBadge() {
+  if (!state.user || state.user.role === 'demo') return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await apiScheduleList({
+      from: today, to: today, status: 'pending', ktv_username: state.user.username
+    });
+    const items = (res.items || []).filter(i => !i.loai_ks || i.loai_ks === state.schemaKey);
+    if (items.length === 0) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'bg-blue-50 border-l-4 border-blue-500 text-blue-900 p-3 mb-3 rounded text-sm';
+    const allCount = (res.items || []).length;
+    const matchCount = items.length;
+    banner.innerHTML = `📋 <strong>Việc hôm nay:</strong> bạn có ${matchCount}/${allCount} lịch khớp loại "${escapeHtml(SCHEMAS[state.schemaKey].name)}"
+      &middot; <a href="schedule.html" class="underline">xem lịch</a>`;
+    state.container.insertBefore(banner, state.container.firstChild);
+  } catch (e) {
+    // Im lặng, không phá UX khi schedule sheet chưa có
   }
 }
 
@@ -280,9 +325,48 @@ function renderField(field) {
     input.inputMode = 'decimal';
     input.className = baseInputClass;
   } else if (t === 'textarea') {
+    // Wrap textarea + nút mic Web Speech API (chỉ thêm nếu trình duyệt hỗ trợ)
+    const taWrap = document.createElement('div');
+    taWrap.className = 'space-y-1';
+
     input = document.createElement('textarea');
     input.rows = 3;
     input.className = baseInputClass;
+    taWrap.appendChild(input);
+
+    if (typeof getSpeechRecognition === 'function' && getSpeechRecognition()) {
+      const micRow = document.createElement('div');
+      micRow.className = 'flex items-center gap-2 text-xs';
+      const micBtn = document.createElement('button');
+      micBtn.type = 'button';
+      micBtn.className = 'px-3 py-1 bg-blue-50 border border-blue-300 text-blue-700 rounded hover:bg-blue-100';
+      micBtn.style.minHeight = '36px';
+      micBtn.textContent = '🎤 Ghi âm';
+      micBtn.title = 'Ghi chú giọng nói (tiếng Việt)';
+      const micStatus = document.createElement('span');
+      micStatus.className = 'text-gray-500 italic flex-1 truncate';
+      micRow.appendChild(micBtn);
+      micRow.appendChild(micStatus);
+      taWrap.appendChild(micRow);
+      attachVoiceRecognition(input, micBtn, micStatus);
+    }
+
+    // Set id/dataset trực tiếp lên textarea (skip block dưới)
+    input.id = 'f-' + field.key;
+    input.name = field.key;
+    input.dataset.key = field.key;
+    input.dataset.label = field.label;
+    if (field.required) input.required = true;
+    if (field.hint && !input.placeholder) input.placeholder = field.hint;
+
+    wrap.appendChild(taWrap);
+    if (field.hint) {
+      const small = document.createElement('div');
+      small.className = 'text-xs text-gray-500 mt-1';
+      small.textContent = field.hint;
+      wrap.appendChild(small);
+    }
+    return wrap;
   } else if (t === 'select') {
     input = document.createElement('select');
     input.className = baseInputClass;
@@ -318,10 +402,37 @@ function renderField(field) {
     blank.textContent = '-- chọn quận trước --';
     input.appendChild(blank);
   } else if (t === 'tdk') {
+    // Wrap input + nút Scan QR cạnh nhau
+    const tdkWrap = document.createElement('div');
+    tdkWrap.className = 'flex gap-1';
     input = document.createElement('input');
     input.type = 'text';
     input.setAttribute('list', 'tdk-list');
-    input.className = baseInputClass;
+    input.className = baseInputClass + ' flex-1';
+    tdkWrap.appendChild(input);
+    const scanBtn = document.createElement('button');
+    scanBtn.type = 'button';
+    scanBtn.className = 'px-3 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-100 flex-shrink-0';
+    scanBtn.style.minHeight = '44px';
+    scanBtn.title = 'Quét QR dán trên TĐK';
+    scanBtn.textContent = '📷 Scan';
+    scanBtn.onclick = () => openQrScanner(input);
+    tdkWrap.appendChild(scanBtn);
+    // input nằm trong tdkWrap → append vào field-wrap thay cho input thường
+    input.id = 'f-' + field.key;
+    input.name = field.key;
+    input.dataset.key = field.key;
+    input.dataset.label = field.label;
+    if (field.required) input.required = true;
+    if (field.hint && !input.placeholder) input.placeholder = field.hint;
+    wrap.appendChild(tdkWrap);
+    if (field.hint) {
+      const small = document.createElement('div');
+      small.className = 'text-xs text-gray-500 mt-1';
+      small.textContent = field.hint;
+      wrap.appendChild(small);
+    }
+    return wrap;
   } else if (t === 'image_url') {
     // Block đặc biệt: input file ẩn + nút chụp + thumbnail preview
     const wrapImg = document.createElement('div');
@@ -392,13 +503,17 @@ function renderGpsBlock() {
   div.id = 'gps-block';
   div.className = 'bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4';
   div.innerHTML = `
-    <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center justify-between gap-2">
       <div class="flex-1 min-w-0">
         <div class="text-xs text-gray-500 mb-1">📍 GPS</div>
         <div id="gps-info" class="text-sm font-mono text-gray-700">Đang lấy GPS...</div>
       </div>
-      <button id="btn-gps-refresh" type="button" class="px-3 py-2 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100" style="min-height:44px">🔄 Lấy lại</button>
+      <div class="flex flex-col gap-1 flex-shrink-0">
+        <button id="btn-gps-refresh" type="button" class="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100" style="min-height:44px">🔄 Lấy lại</button>
+        <button id="btn-gps-geocode" type="button" class="px-3 py-1 text-xs bg-blue-50 border border-blue-300 text-blue-700 rounded hover:bg-blue-100" title="Tự điền Tuyến đường + Hẻm từ tọa độ GPS hiện tại">🗺️ Tự điền địa chỉ</button>
+      </div>
     </div>
+    <div id="geocode-result" class="hidden mt-2 text-xs text-blue-700"></div>
   `;
   return div;
 }
@@ -429,6 +544,8 @@ function bindEvents() {
   document.getElementById('photo-input').onchange = handleFileSelect;
   const gpsBtn = document.getElementById('btn-gps-refresh');
   if (gpsBtn) gpsBtn.onclick = refreshGps;
+  const geocodeBtn = document.getElementById('btn-gps-geocode');
+  if (geocodeBtn) geocodeBtn.onclick = () => applyReverseGeocode(true);  // force = ghi đè dù field đã có giá trị
 
   // Quận → cập nhật phường
   const quanEl = state.container.querySelector('[data-key="quan"]');
@@ -500,10 +617,63 @@ async function refreshGps() {
   try {
     const pos = await getCurrentPosition({ timeout: 15000 });
     state.gps = { status: 'ok', ...pos };
+    updateGpsUI();
+    // Tự động gọi reverse geocoding sau khi có GPS (không ghi đè field đã có)
+    applyReverseGeocode(false);
   } catch (e) {
     state.gps = { status: 'error', error: e.message || 'Không lấy được GPS' };
+    updateGpsUI();
   }
-  updateGpsUI();
+}
+
+/**
+ * Tự điền field Tuyến đường + Hẻm từ tọa độ GPS qua Nominatim.
+ * @param {boolean} force — true: ghi đè dù field đã có giá trị (khi user click button thủ công).
+ */
+async function applyReverseGeocode(force) {
+  if (state.gps.status !== 'ok') {
+    showToast('Chưa có GPS — bấm "🔄 Lấy lại" trước', 'warning');
+    return;
+  }
+  const resultEl = document.getElementById('geocode-result');
+  if (resultEl) {
+    resultEl.classList.remove('hidden');
+    resultEl.textContent = '⏳ Đang tra cứu địa chỉ từ tọa độ...';
+  }
+  try {
+    const r = await reverseGeocode(state.gps.lat, state.gps.lng);
+    const filled = [];
+
+    const tdEl = state.container.querySelector('[data-key="tuyen_duong"]');
+    if (tdEl && r.road && (force || !tdEl.value.trim())) {
+      tdEl.value = r.road;
+      filled.push('Tuyến đường = "' + r.road + '"');
+    }
+
+    const hemEl = state.container.querySelector('[data-key="hem"]');
+    if (hemEl && r.suburb && (force || !hemEl.value.trim())) {
+      hemEl.value = r.suburb;
+      filled.push('Hẻm = "' + r.suburb + '"');
+    }
+
+    if (resultEl) {
+      if (filled.length > 0) {
+        resultEl.innerHTML = '🗺️ Đã điền: ' + filled.map(s => '<strong>' + escapeHtml(s) + '</strong>').join(' · ');
+        resultEl.className = 'mt-2 text-xs text-blue-700';
+      } else if (force) {
+        resultEl.textContent = 'ℹ️ Không có đề xuất mới từ GPS (' + (r.display_name || 'không rõ địa chỉ') + ')';
+        resultEl.className = 'mt-2 text-xs text-gray-500';
+      } else {
+        // Auto mode không có gì điền: ẩn thông báo cho gọn
+        resultEl.classList.add('hidden');
+      }
+    }
+  } catch (e) {
+    if (resultEl) {
+      resultEl.textContent = '❌ Tra cứu thất bại: ' + e.message;
+      resultEl.className = 'mt-2 text-xs text-red-600';
+    }
+  }
 }
 
 function updateGpsUI() {
@@ -860,6 +1030,8 @@ async function handleSubmit() {
       timestamp: res.timestamp,
       data: data
     });
+    // v2.0.5: auto-mark schedule item pending hôm nay → done (smart-match loai_ks)
+    autoMarkScheduleDone();
     showSuccessDialog(res.stt);
   } catch (e) {
     const msg = String(e.message || e);
@@ -894,6 +1066,177 @@ async function handleSubmit() {
     showToast('Lỗi: ' + msg, 'error', 4000);
     btn.disabled = false;
     btn.textContent = origText;
+  }
+}
+
+// =====================================================================
+// VOICE NOTE — tính năng v2.0.2: ghi chú giọng nói qua Web Speech API
+// =====================================================================
+
+/** Trả constructor SpeechRecognition (standard hoặc webkit) hoặc null. */
+function getSpeechRecognition() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+/**
+ * Gắn voice recognition vào textarea + button toggle.
+ * Click → bắt đầu listen. Click lại → stop. Result append vào textarea.
+ */
+function attachVoiceRecognition(textareaEl, btnEl, statusEl) {
+  const SR = getSpeechRecognition();
+  if (!SR) return;
+  let recognition = null;
+  let listening = false;
+
+  btnEl.onclick = () => {
+    if (listening) {
+      if (recognition) recognition.stop();
+      return;
+    }
+    recognition = new SR();
+    recognition.lang = 'vi-VN';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      listening = true;
+      btnEl.textContent = '🔴 Đang nghe... (bấm để dừng)';
+      btnEl.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
+      btnEl.classList.remove('bg-blue-50', 'text-blue-700', 'border-blue-300');
+      statusEl.textContent = 'Nói tiếng Việt...';
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let final = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const r = event.results[i];
+        if (r.isFinal) {
+          final += r[0].transcript;
+        } else {
+          interim += r[0].transcript;
+        }
+      }
+      if (final) {
+        // Append vào textarea, ngăn cách bằng space nếu textarea đã có nội dung
+        const sep = textareaEl.value && !/[\s.,;!?]$/.test(textareaEl.value) ? ' ' : '';
+        textareaEl.value = textareaEl.value + sep + final.trim();
+        textareaEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      statusEl.textContent = interim ? '"' + interim + '"' : 'Nói tiếp...';
+    };
+
+    recognition.onerror = (event) => {
+      statusEl.textContent = '❌ Lỗi: ' + event.error;
+      statusEl.className = 'text-red-600 italic flex-1 truncate text-xs';
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      btnEl.textContent = '🎤 Ghi âm';
+      btnEl.classList.remove('bg-red-100', 'text-red-700', 'border-red-300');
+      btnEl.classList.add('bg-blue-50', 'text-blue-700', 'border-blue-300');
+      if (!/Lỗi/.test(statusEl.textContent)) statusEl.textContent = '';
+      statusEl.className = 'text-gray-500 italic flex-1 truncate';
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      statusEl.textContent = '❌ Không khởi động được: ' + e.message;
+    }
+  };
+}
+
+// =====================================================================
+// QR SCAN — tính năng v2.0.1: scan QR dán trên Tủ điều khiển
+// =====================================================================
+
+/**
+ * Mở modal full-screen với <video> camera + canvas. Detect QR → fill input + đóng.
+ * @param {HTMLInputElement} targetInput — input cần điền giá trị QR
+ */
+async function openQrScanner(targetInput) {
+  if (typeof jsQR !== 'function') {
+    showToast('jsQR chưa load (kiểm tra mạng)', 'error');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Trình duyệt không hỗ trợ camera', 'error');
+    return;
+  }
+
+  // Build modal
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-black z-[1000] flex flex-col';
+  modal.innerHTML = `
+    <div class="flex items-center justify-between p-3 text-white bg-black/80">
+      <span class="text-sm">📷 Đưa camera vào QR trên tủ điều khiển</span>
+      <button id="qr-close" class="text-2xl w-10 h-10 hover:bg-white/10 rounded">✕</button>
+    </div>
+    <div class="flex-1 relative bg-black flex items-center justify-center">
+      <video id="qr-video" class="max-w-full max-h-full" autoplay muted playsinline></video>
+      <canvas id="qr-canvas" class="hidden"></canvas>
+      <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+        <div class="w-64 h-64 border-4 border-blue-400 rounded-lg" style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45)"></div>
+      </div>
+      <div id="qr-status" class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-3 py-1 rounded-full">Đang khởi tạo camera...</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const video = modal.querySelector('#qr-video');
+  const canvas = modal.querySelector('#qr-canvas');
+  const status = modal.querySelector('#qr-status');
+  let stream = null;
+  let rafId = null;
+  let stopped = false;
+
+  const cleanup = () => {
+    stopped = true;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    modal.remove();
+  };
+
+  modal.querySelector('#qr-close').onclick = cleanup;
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    status.textContent = 'Đang quét... đưa QR vào khung xanh';
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const loop = () => {
+      if (stopped) return;
+      if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'dontInvert'
+        });
+        if (code && code.data && code.data.trim()) {
+          targetInput.value = code.data.trim();
+          targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+          showToast('✅ Quét OK: ' + code.data.trim(), 'success', 2500);
+          cleanup();
+          return;
+        }
+      }
+      rafId = requestAnimationFrame(loop);
+    };
+    loop();
+  } catch (err) {
+    status.textContent = '❌ Lỗi camera: ' + (err.message || err.name || 'unknown');
+    status.classList.remove('bg-black/70');
+    status.classList.add('bg-red-700');
+    setTimeout(cleanup, 3000);
   }
 }
 

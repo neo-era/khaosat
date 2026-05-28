@@ -41,11 +41,14 @@
     <ul class="py-2">
       <li><a href="index.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🏠</span> Trang chủ</a></li>
       <li><a href="recent.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🕐</span> Khảo sát hôm nay</a></li>
+      <li class="menu-map hidden"><a href="map.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🗺️</span> Bản đồ khảo sát</a></li>
+      <li><a href="docs.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📚</span> Tài liệu tham khảo</a></li>
+      <li class="menu-schedule hidden"><a href="schedule.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📅</span> Lịch công tác</a></li>
       <li class="menu-my-kpi hidden"><a href="my-kpi.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🎯</span> KPI của tôi</a></li>
       <li class="menu-admin hidden"><a href="kpi.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📊</span> KPI tổng (tất cả KTV)</a></li>
       <li class="menu-admin hidden"><a href="manage.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🗂️</span> Quản lý bản ghi</a></li>
       <li class="menu-admin hidden"><a href="report.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📈</span> Báo cáo tổng hợp</a></li>
-      <li class="menu-users-manage hidden"><button id="btn-reset-pwd" class="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🔑</span> Reset password user</button></li>
+      <li class="menu-users-manage hidden"><a href="users.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">👥</span> Quản lý user</a></li>
       <li class="border-t mt-2"><button id="menu-logout" class="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-red-50 text-red-700" style="min-height:44px"><span class="text-xl">↪</span> Đăng xuất</button></li>
     </ul>
   </nav>
@@ -67,7 +70,7 @@
     import { requireAuth, logout, hasPermission } from './js/auth.js';
     import { SCHEMAS, SCHEMA_KEYS } from './js/schemas.js';
     import { getQueue } from './js/storage.js';
-    import { syncQueue, apiResetPassword } from './js/api.js';
+    import { syncQueue } from './js/api.js';
     import { escapeHtml, showToast } from './js/utils.js';
 
     const user = requireAuth();
@@ -102,6 +105,14 @@
     if (hasPermission('users_manage')) {
       document.querySelectorAll('.menu-users-manage').forEach(el => el.classList.remove('hidden'));
     }
+    // ===== Map: role có quyền map =====
+    if (hasPermission('map')) {
+      document.querySelectorAll('.menu-map').forEach(el => el.classList.remove('hidden'));
+    }
+    // ===== Schedule: mọi role trừ demo =====
+    if (user.role !== 'demo') {
+      document.querySelectorAll('.menu-schedule').forEach(el => el.classList.remove('hidden'));
+    }
 
     // ===== Menu open/close =====
     const menuPanel = document.getElementById('menu-panel');
@@ -121,31 +132,7 @@
       if (confirm('Đăng xuất khỏi tài khoản ' + user.username + '?')) logout();
     };
 
-    // ===== Handler Reset password user (admin only) =====
-    const btnResetPwd = document.getElementById('btn-reset-pwd');
-    if (btnResetPwd) {
-      btnResetPwd.onclick = async () => {
-        const target = (prompt('Reset mật khẩu cho username nào?')|| '').trim();
-        if (!target) return;
-        const newPwd = prompt('Nhập mật khẩu MỚI cho ' + target + ' (≥ 8 ký tự):');
-        if (!newPwd) return;
-        const confirmPwd = prompt('Xác nhận lại mật khẩu mới:');
-        if (newPwd !== confirmPwd) {
-          showToast('Hai lần nhập không khớp', 'error');
-          return;
-        }
-        if (newPwd.length < 8) {
-          showToast('Mật khẩu phải ≥ 8 ký tự', 'error');
-          return;
-        }
-        try {
-          const res = await apiResetPassword(target, newPwd);
-          showToast('✅ ' + (res.message || 'Đã reset password ' + target), 'success', 4000);
-        } catch (e) {
-          showToast('Lỗi: ' + e.message, 'error', 4000);
-        }
-      };
-    }
+    // Reset password đã chuyển vào users.html (v1.2.4)
 
     // ===== Render grid 15 thẻ =====
     const grid = document.getElementById('grid');

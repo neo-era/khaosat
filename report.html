@@ -95,7 +95,25 @@
       <h2 class="text-sm font-semibold text-gray-700 mb-2">🔢 Pivot KTV × Loại</h2>
       <div class="bg-white rounded-lg shadow-sm overflow-x-auto" id="areaC"></div>
     </section>
+
+    <!-- Area D: Heatmap Phường × Loại -->
+    <section class="mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-2">🔥 Heatmap Phường × Loại</h2>
+      <p class="text-xs text-gray-500 mb-2">Màu càng đỏ = càng nhiều bản ghi. Bấm cell để xem chi tiết bản ghi.</p>
+      <div class="bg-white rounded-lg shadow-sm overflow-x-auto" id="areaD"></div>
+    </section>
   </main>
+
+  <!-- Modal drill-down cell heatmap -->
+  <div id="drill-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-2">
+    <div class="bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between p-3 border-b">
+        <span id="drill-title" class="font-semibold text-gray-800 truncate"></span>
+        <button id="drill-close" class="text-2xl w-10 h-10 hover:bg-gray-100 rounded">✕</button>
+      </div>
+      <div id="drill-body" class="p-3 overflow-y-auto flex-1 text-sm"></div>
+    </div>
+  </div>
 
   <script type="module">
     import { requireAuth } from './js/auth.js';
@@ -103,6 +121,12 @@
 
     const user = requireAuth('report');
     document.getElementById('header-user').textContent = user.full_name;
+
+    // Modal close
+    document.getElementById('drill-close').onclick = () => document.getElementById('drill-modal').classList.add('hidden');
+    document.getElementById('drill-modal').onclick = (e) => {
+      if (e.target.id === 'drill-modal') document.getElementById('drill-modal').classList.add('hidden');
+    };
 
     initReport();
 

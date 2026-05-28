@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR Generator TĐK — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+      .qr-cell { page-break-inside: avoid; border: 1px dashed #ccc !important; }
+      .qr-grid { gap: 8mm !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <header class="bg-white shadow-sm sticky top-0 z-40 no-print">
+    <div class="max-w-6xl mx-auto px-3 py-2 flex items-center gap-2">
+      <a href="../index.html" class="text-xl px-2 rounded hover:bg-gray-100 flex items-center justify-center" style="min-height:44px; min-width:44px">←</a>
+      <span class="text-sm font-semibold text-gray-800 flex-1">📷 QR Generator — TĐK</span>
+      <button id="btn-print" class="bg-blue-700 text-white px-4 py-2 rounded font-medium" style="min-height:44px">🖨️ In</button>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-3 py-4">
+
+    <div class="bg-white rounded-lg shadow-sm p-4 mb-4 no-print">
+      <p class="text-sm text-gray-700 mb-2">
+        Dán mỗi dòng = 1 tên TĐK. App sẽ sinh QR cho từng dòng. KTV scan QR ở form → tự điền tên TĐK.
+      </p>
+      <div class="flex gap-2 mb-2 flex-wrap">
+        <button id="btn-load-all" class="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded">📋 Nạp tất cả 903 TĐK từ lookups.js</button>
+        <label class="text-sm flex items-center gap-1">
+          QR size:
+          <select id="qr-size" class="border rounded px-2 py-1 text-sm">
+            <option value="4">Nhỏ (M)</option>
+            <option value="6" selected>Vừa (L)</option>
+            <option value="8">Lớn (XL)</option>
+          </select>
+        </label>
+        <label class="text-sm flex items-center gap-1">
+          Cột/hàng:
+          <select id="qr-cols" class="border rounded px-2 py-1 text-sm">
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+          </select>
+        </label>
+      </div>
+      <textarea id="input-text" rows="8" placeholder="Mỗi dòng = 1 TĐK, vd:&#10;Trần Phú - 3&#10;Trần Phú - 4&#10;Nguyễn Duy Dương - 1"
+        class="w-full px-3 py-2 border border-gray-300 rounded font-mono text-sm"></textarea>
+      <div class="flex gap-2 mt-2">
+        <button id="btn-generate" class="bg-blue-700 text-white px-4 py-2 rounded font-medium">🔧 Sinh QR</button>
+        <button id="btn-clear" class="bg-gray-200 text-gray-800 px-4 py-2 rounded font-medium">Xoá</button>
+        <span id="count" class="self-center text-sm text-gray-600"></span>
+      </div>
+    </div>
+
+    <div id="qr-grid" class="qr-grid grid grid-cols-3 gap-3"></div>
+
+    <p class="no-print text-center text-xs text-gray-500 mt-6">
+      💡 Sau khi sinh QR: bấm "🖨️ In" hoặc Ctrl+P → in giấy A4 → dán lên từng tủ điều khiển ngoài hiện trường.
+    </p>
+  </main>
+
+  <script type="module">
+    import { TDK_LIST } from '../js/lookups.js';
+
+    const grid = document.getElementById('qr-grid');
+    const input = document.getElementById('input-text');
+    const count = document.getElementById('count');
+    const sizeSel = document.getElementById('qr-size');
+    const colsSel = document.getElementById('qr-cols');
+
+    document.getElementById('btn-load-all').onclick = () => {
+      input.value = TDK_LIST.join('\n');
+      count.textContent = TDK_LIST.length + ' TĐK';
+    };
+
+    document.getElementById('btn-clear').onclick = () => {
+      input.value = '';
+      grid.innerHTML = '';
+      count.textContent = '';
+    };
+
+    document.getElementById('btn-generate').onclick = generate;
+    document.getElementById('btn-print').onclick = () => window.print();
+    colsSel.onchange = () => {
+      grid.className = 'qr-grid grid grid-cols-' + colsSel.value + ' gap-3';
+      // Tailwind dynamic class issue — use inline style fallback
+      grid.style.gridTemplateColumns = 'repeat(' + colsSel.value + ', minmax(0, 1fr))';
+    };
+
+    function generate() {
+      const lines = input.value.split('\n').map(s => s.trim()).filter(s => s);
+      if (lines.length === 0) {
+        alert('Nhập ít nhất 1 tên TĐK');
+        return;
+      }
+      grid.innerHTML = '';
+      grid.style.gridTemplateColumns = 'repeat(' + colsSel.value + ', minmax(0, 1fr))';
+      count.textContent = lines.length + ' QR';
+      const cellSize = parseInt(sizeSel.value, 10);
+
+      for (const text of lines) {
+        const cell = document.createElement('div');
+        cell.className = 'qr-cell bg-white border rounded-lg p-3 text-center';
+
+        // Generate QR
+        const qr = qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        const imgTag = qr.createImgTag(cellSize, 4);
+        const wrap = document.createElement('div');
+        wrap.innerHTML = imgTag;
+        const img = wrap.firstChild;
+        img.style.width = '100%';
+        img.style.maxWidth = '200px';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        img.style.margin = '0 auto';
+        cell.appendChild(img);
+
+        // Label
+        const label = document.createElement('div');
+        label.className = 'mt-2 text-sm font-medium text-gray-800 break-words';
+        label.textContent = text;
+        cell.appendChild(label);
+
+        grid.appendChild(cell);
+      }
+    }
+  </script>
+</body>
+</html>
