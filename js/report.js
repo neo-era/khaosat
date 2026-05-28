@@ -1,6 +1,6 @@
-// js/report.js — Trang báo cáo: 3 vùng A bảng tổng quan / B biểu đồ cột chồng / C pivot KTV×Loại.
+// js/report.js — Trang báo cáo: vùng A-D aggregate + Vùng E xuất dữ liệu thô.
 
-import { apiReport, apiUsers, apiList } from './api.js';
+import { apiReport, apiUsers, apiList, apiExportRaw } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
 
@@ -629,4 +629,104 @@ function pdfFooter(doc) {
     doc.text('Trang ' + pageNum + '/' + pageCount + ' — SAPULICO 2026',
       doc.internal.pageSize.getWidth() - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' });
   };
+}
+
+// =====================================================================
+// VÙNG E — Xuất dữ liệu thô theo cấu trúc sheet
+// =====================================================================
+
+/** Khởi tạo section xuất dữ liệu thô: populate select + bind buttons. */
+export function initRawExport() {
+  const sel = document.getElementById('raw-types');
+  if (!sel) return;
+  for (const k of SCHEMA_KEYS) {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = SCHEMAS[k].icon + ' ' + SCHEMAS[k].name;
+    sel.appendChild(opt);
+  }
+  document.getElementById('btn-raw-xlsx').onclick = exportRawXlsx;
+  document.getElementById('btn-raw-csv').onclick  = exportRawCsv;
+}
+
+function getRawParams() {
+  const sel  = document.getElementById('raw-types');
+  const vals = [...sel.selectedOptions].map(o => o.value);
+  return {
+    types:  vals.length ? vals : SCHEMA_KEYS,
+    from:   document.getElementById('raw-from').value  || null,
+    to:     document.getElementById('raw-to').value    || null,
+    status: document.getElementById('raw-status').value
+  };
+}
+
+async function fetchExportRaw() {
+  const msgEl = document.getElementById('raw-status-msg');
+  msgEl.textContent = 'Đang tải dữ liệu từ server...';
+  msgEl.classList.remove('hidden');
+  try {
+    const params = getRawParams();
+    const res = await apiExportRaw(params);
+    msgEl.classList.add('hidden');
+    return res.results;   // [{type, sheetName, headers, rows}, ...]
+  } catch (e) {
+    msgEl.textContent = 'Lỗi: ' + e.message;
+    throw e;
+  }
+}
+
+async function exportRawXlsx() {
+  const XLSX = window.XLSX;
+  if (!XLSX) { alert('Thư viện SheetJS chưa tải'); return; }
+  let results;
+  try { results = await fetchExportRaw(); } catch { return; }
+
+  const wb = XLSX.utils.book_new();
+  let sheetCount = 0;
+  for (const { sheetName, headers, rows } of results) {
+    if (!rows.length) continue;
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    // Freeze row 1
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    // Tên tab tối đa 31 ký tự (giới hạn Excel)
+    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+    sheetCount++;
+  }
+
+  if (sheetCount === 0) { alert('Không có dữ liệu để xuất theo bộ lọc đã chọn'); return; }
+
+  const { from, to } = getRawParams();
+  const filename = 'khaosat-' + (from || 'all') + '_' + (to || 'all') + '.xlsx';
+  XLSX.writeFile(wb, filename);
+}
+
+async function exportRawCsv() {
+  let results;
+  try { results = await fetchExportRaw(); } catch { return; }
+
+  const { from, to } = getRawParams();
+  let downloaded = 0;
+
+  for (const { sheetName, headers, rows } of results) {
+    if (!rows.length) continue;
+    // BOM UTF-8 để Excel Windows mở đúng tiếng Việt; separator | (pipe)
+    const lines = [headers, ...rows].map(row =>
+      row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join('|')
+    );
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = sheetName + '_' + (from || 'all') + '_' + (to || 'all') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    downloaded++;
+    // Tránh trình duyệt block nhiều download liên tiếp
+    if (downloaded < results.filter(r => r.rows.length).length) {
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+
+  if (downloaded === 0) alert('Không có dữ liệu để xuất theo bộ lọc đã chọn');
 }

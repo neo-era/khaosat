@@ -1253,3 +1253,441 @@ Sau khi xong hết, kiểm tra:
 ---
 
 **Hết v1.1+.** Tổng cộng 17 prompt (1 setup + 16 features).
+
+---
+---
+
+# PHẦN III — Bổ sung 2026-05-28 (4 thay đổi từ buổi làm việc hôm nay)
+
+> Tham chiếu **CLAUDE.md đã cập nhật 2026-05-28**. Mỗi prompt độc lập — chạy riêng lẻ, không cần theo thứ tự v1.0 hay v1.1+. Đọc kỹ "TRƯỚC KHI CODE" của từng prompt.
+
+---
+
+## PROMPT P1 — Sửa NO_GPS_TYPES + logic pct_gps trong KPI
+
+### Vấn đề cần sửa
+- `Code.gs` hiện có `const NO_GPS_TYPES = ['hkn', 'vo_tu']` — **sai**: `vo_tu` có field `link_gmap`.
+- Hàm `handleKpi` tính `pct_gps` chỉ kiểm tra cột `kinh độ`/`vĩ độ` — **thiếu**: 12 loại chỉ có cột `link`, không có lat/lng riêng.
+- Xem chi tiết đúng/sai tại **CLAUDE.md mục 5 (bảng GPS) + mục 13 (pct_gps mới)**.
+
+```
+Đọc CLAUDE.md mục 5 (bảng "GPS trên từng loại khảo sát") và mục 13 (chỉ tiêu "Chất lượng dữ liệu").
+
+Thực hiện 2 sửa đổi trong apps-script/Code.gs:
+
+— SỬA 1: Hằng số NO_GPS_TYPES
+Tìm dòng: const NO_GPS_TYPES = ['hkn', 'vo_tu'];
+Sửa thành: const NO_GPS_TYPES = ['hkn'];
+Lý do: vo_tu có field link_gmap (xem CLAUDE.md mục 5 bảng GPS), chỉ hkn thực sự không có GPS.
+
+— SỬA 2: Hàm tính pct_gps trong handleKpi
+Hiện tại code tính pct_gps = % bản có cả "kinh độ" và "vĩ độ" khác rỗng — chỉ đúng cho tang_cuong_den và ngam_hoa.
+Phải tách 2 cách tính:
+
+  // Nhóm A — có cột lat/lng riêng:
+  const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa'];
+  // Nhóm B — chỉ có cột link (link_gmap):
+  const GPS_LINK_TYPES = ['thay_den','tc_noi','cap_luon_can','tc_ngam','thay_can',
+                          'thay_tru','choa_den','nap_tru','vo_tu','tc_den_kc_xa',
+                          'decal_so_tru','nang_mong'];
+  // Không GPS: hkn — bỏ qua khỏi mẫu số
+
+Logic mới trong handleKpi khi tính pct_gps cho từng KTV:
+  Duyệt bản ghi của KTV (đã filter tháng + Deleted At rỗng):
+    - Nếu row thuộc GPS_LATLONG_TYPES → hasGps = (kinh_do !== '' && vi_do !== '')
+    - Nếu row thuộc GPS_LINK_TYPES → tìm cột tên 'link' hoặc 'Link Google Map' → hasGps = (value !== '')
+    - Nếu row thuộc NO_GPS_TYPES (hkn) → bỏ qua (không tính vào mẫu số cũng không tính vào tử số)
+  pct_gps = count_has_gps / count_eligible_rows (eligible = tổng bản trừ bản từ hkn)
+  Nếu count_eligible_rows = 0 → pct_gps = 0.
+
+KHÔNG thay đổi bất kỳ file nào khác.
+Sau khi sửa, in lại đoạn code liên quan (hằng số + đoạn tính pct_gps) để tôi verify.
+Chờ tôi xác nhận trước khi commit.
+```
+
+---
+
+## PROMPT P2 — Vùng D báo cáo: endpoint export_raw + UI
+
+### Mục tiêu
+Thêm chức năng xuất dữ liệu thô với **cấu trúc cột y hệt Google Sheets** theo từng loại KS.
+Xem spec đầy đủ tại **CLAUDE.md mục 15 (Vùng D + Logic export_raw)**.
+
+```
+Đọc kỹ CLAUDE.md mục 15, đặc biệt phần "D. Xuất dữ liệu thô theo cấu trúc sheet" và "Logic server-side action=export_raw".
+
+THỰC HIỆN 3 VIỆC:
+
+— VIỆC 1: apps-script/Code.gs — thêm handler handleExportRaw
+Thêm case 'export_raw' vào switch doPost (cạnh case 'report').
+Implement hàm handleExportRaw(body):
+
+  function handleExportRaw(body) {
+    const auth = verifyToken(body.token);
+    if (!can(auth.role, 'report')) return { ok: false, error: 'forbidden' };
+
+    const types = Array.isArray(body.types) && body.types.length > 0
+      ? body.types
+      : Object.keys(SHEET_MAP);
+    const from = body.from ? new Date(body.from) : null;
+    const to   = body.to   ? new Date(body.to + 'T23:59:59') : null;
+    const usernames = Array.isArray(body.usernames) && body.usernames.length > 0
+      ? body.usernames : null;
+    const status = body.status || 'active'; // 'active'|'deleted'|'all'
+
+    const results = [];
+    const ss = getSpreadsheet();
+
+    for (const type of types) {
+      const sheetName = SHEET_MAP[type];
+      if (!sheetName) continue;
+      const sheet = ss.getSheetByName(sheetName);
+      if (!sheet) continue;
+
+      const allValues = sheet.getDataRange().getValues();
+      if (allValues.length < 2) {
+        results.push({ type, sheetName, headers: allValues[0] || [], rows: [] });
+        continue;
+      }
+
+      const headers = allValues[0].map(String);
+      const idxSubmittedAt = headers.indexOf('Submitted At');
+      const idxUsername    = headers.indexOf('Username');
+      const idxDeletedAt   = headers.indexOf('Deleted At');
+
+      const filtered = [];
+      for (let i = 1; i < allValues.length; i++) {
+        const row = allValues[i];
+        if (!row.some(c => c !== '' && c !== null && c !== undefined)) continue;
+
+        // Filter status
+        const isDeleted = row[idxDeletedAt] !== '' && row[idxDeletedAt] != null;
+        if (status === 'active'  && isDeleted)  continue;
+        if (status === 'deleted' && !isDeleted) continue;
+
+        // Filter date range
+        if ((from || to) && idxSubmittedAt >= 0) {
+          const d = new Date(row[idxSubmittedAt]);
+          if (from && d < from) continue;
+          if (to   && d > to)   continue;
+        }
+
+        // Filter usernames
+        if (usernames && idxUsername >= 0 && !usernames.includes(String(row[idxUsername]))) continue;
+
+        // Serialize: date → string, null → ''
+        const serialized = row.map(v => {
+          if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');
+          return v == null ? '' : v;
+        });
+        filtered.push(serialized);
+      }
+
+      results.push({ type, sheetName, headers, rows: filtered });
+    }
+
+    return { ok: true, results };
+  }
+
+— VIỆC 2: report.html — thêm section Vùng D
+Thêm vào cuối trang (sau vùng C), trước thẻ </main>:
+
+  <section id="sectionD" class="bg-white rounded-xl shadow p-5 hidden">
+    <h2 class="text-lg font-bold text-gray-700 mb-4">D. Xuất dữ liệu thô theo cấu trúc sheet</h2>
+
+    <!-- Bộ lọc riêng cho vùng D -->
+    <div class="flex flex-wrap gap-3 mb-4">
+      <select id="dTypes" multiple class="border rounded-lg px-3 py-2 text-sm" size="5">
+        <!-- 15 option loại KS (dùng SCHEMAS từ schemas.js) -->
+      </select>
+      <div class="flex flex-col gap-2">
+        <label class="text-xs text-gray-500">Từ ngày</label>
+        <input type="date" id="dFrom" class="border rounded-lg px-3 py-2 text-sm">
+        <label class="text-xs text-gray-500">Đến ngày</label>
+        <input type="date" id="dTo"   class="border rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="flex flex-col gap-2">
+        <label class="text-xs text-gray-500">Trạng thái</label>
+        <select id="dStatus" class="border rounded-lg px-3 py-2 text-sm">
+          <option value="active">Đang hoạt động</option>
+          <option value="deleted">Đã xoá</option>
+          <option value="all">Tất cả</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex gap-3">
+      <button id="btnExportXlsx" onclick="exportRawXlsx()"
+        class="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700">
+        📊 Xuất Excel (.xlsx)
+      </button>
+      <button id="btnExportCsv" onclick="exportRawCsv()"
+        class="bg-gray-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-700">
+        📄 Xuất CSV (từng loại)
+      </button>
+    </div>
+
+    <p id="dStatus2" class="text-xs text-gray-400 mt-2 hidden"></p>
+    <p class="text-xs text-gray-400 mt-2">
+      ⚠️ Cột đúng thứ tự Google Sheets. Ảnh URLs phân tách bằng "|". Ngày format yyyy-MM-dd HH:mm:ss.
+    </p>
+  </section>
+
+  Thêm nút "D. Xuất dữ liệu" vào tab/accordion (nếu có) hoặc hiện sectionD luôn dưới vùng C.
+
+— VIỆC 3: js/report.js — thêm 2 hàm export
+
+  import { CONFIG } from './config.js';
+  import { getAuthHeader } from './auth.js';
+  import { SCHEMAS } from './schemas.js';
+  import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; // nếu chưa dùng CDN thì đọc từ window.XLSX
+
+  // Lấy các loại được chọn trong <select multiple id="dTypes">
+  function getSelectedTypes() {
+    const sel = document.getElementById('dTypes');
+    const vals = [...sel.selectedOptions].map(o => o.value);
+    return vals.length ? vals : Object.keys(SCHEMAS);
+  }
+
+  async function callExportRaw() {
+    const types    = getSelectedTypes();
+    const from     = document.getElementById('dFrom').value || null;
+    const to       = document.getElementById('dTo').value   || null;
+    const status   = document.getElementById('dStatus').value;
+    const { token } = getAuthHeader();
+
+    const statusEl = document.getElementById('dStatus2');
+    statusEl.textContent = 'Đang tải...';
+    statusEl.classList.remove('hidden');
+
+    const res = await fetch(CONFIG.appsScriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'export_raw', token, types, from, to, status })
+    });
+    const json = await res.json();
+    statusEl.classList.add('hidden');
+    if (!json.ok) throw new Error(json.error || 'export_raw thất bại');
+    return json.results; // [{type, sheetName, headers, rows}, ...]
+  }
+
+  window.exportRawXlsx = async function() {
+    try {
+      const results = await callExportRaw();
+      const wb = XLSX.utils.book_new();
+      for (const { sheetName, headers, rows } of results) {
+        if (!rows.length) continue; // bỏ sheet rỗng
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        // freeze row 1
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+        // đặt tên tab = tên sheet GS (tối đa 31 ký tự — giới hạn Excel)
+        XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+      }
+      const from = document.getElementById('dFrom').value || 'all';
+      const to   = document.getElementById('dTo').value   || 'all';
+      XLSX.writeFile(wb, 'khaosat-export_' + from + '_' + to + '.xlsx');
+    } catch(e) {
+      alert('Lỗi xuất Excel: ' + e.message);
+    }
+  };
+
+  window.exportRawCsv = async function() {
+    try {
+      const results = await callExportRaw();
+      for (const { sheetName, headers, rows } of results) {
+        if (!rows.length) continue;
+        const lines = [headers, ...rows].map(row =>
+          row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join('|')
+        );
+        const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const from = document.getElementById('dFrom').value || 'all';
+        const to   = document.getElementById('dTo').value   || 'all';
+        a.download = sheetName + '_' + from + '_' + to + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        await new Promise(r => setTimeout(r, 300)); // tránh trình duyệt block nhiều download
+      }
+    } catch(e) {
+      alert('Lỗi xuất CSV: ' + e.message);
+    }
+  };
+
+YÊU CẦU CHUNG:
+- SheetJS đã được load ở kpi.html (v1.1.6). Nếu report.html chưa có, thêm CDN SheetJS vào <head> report.html.
+- BOM (﻿) ở đầu CSV để Excel Windows mở không lỗi encoding tiếng Việt.
+- Separator CSV dùng | (pipe) — KHÔNG dùng dấu phẩy vì dữ liệu có dấu phẩy.
+- Freeze row 1 trong mỗi sheet Excel.
+- Chỉ tạo sheet cho loại có ít nhất 1 row sau filter.
+
+KHÔNG thay đổi vùng A/B/C hiện tại.
+
+Sau khi xong:
+1. In đoạn code handleExportRaw (Code.gs).
+2. Kiểm tra file report.html có đủ CDN SheetJS.
+3. Kiểm tra js/report.js có 2 hàm exportRawXlsx và exportRawCsv.
+Chờ tôi xác nhận.
+```
+
+---
+
+## PROMPT P3 — Form-renderer: xử lý type image_url (Bản vẽ)
+
+### Mục tiêu
+`js/schemas.js` đã dùng `type: 'image_url'` cho trường `Bản vẽ` (3 loại: tang_cuong_den, ngam_hoa, thay_den).
+`js/form-renderer.js` **chưa có case xử lý** type này → cần thêm.
+Xem spec tại **CLAUDE.md mục 22.1 (đã hoàn thành trong schemas, cần hoàn thiện renderer)**.
+
+```
+Đọc CLAUDE.md mục 22.1 (phần "Đã thực hiện" + "UI cần làm") và mục 8 (Cloudinary).
+
+Thực hiện trong js/form-renderer.js:
+
+Tìm hàm renderField (hoặc switch/if theo field.type).
+Thêm case cho type === 'image_url':
+
+  Tạo hàm renderImageUrlField(field, container, state):
+  - Render label (giống các field khác: label + dấu * nếu required).
+  - Render 1 wrapper div với:
+      * Nếu state.imageFields[field.key] có URL:
+          - <img src="{url}" class="h-24 w-24 object-cover rounded border">
+          - Nút "🔄 Thay ảnh" (nhỏ, outline).
+          - Nút "✕ Xoá" (nhỏ, red-outlined) → xoá URL khỏi state.
+      * Nếu chưa có URL:
+          - Nút "📷 Chụp/Chọn ảnh bản vẽ" (full width, outlined).
+  - Hidden <input type="file" accept="image/*" capture="environment"> (1 file duy nhất).
+  - Nút Chụp / Thay ảnh click → input.click().
+  - onChange input:
+      * Lấy file → compressImage(file, 1600, 0.8) (từ camera.js) → progress indicator.
+      * Gọi uploadImage(compressedBlob, 'banve') từ api.js. Folder Cloudinary: khaosat/banve/.
+      * Upload thành công → lưu URL vào state.imageFields[field.key], re-render thumbnail.
+      * Lỗi upload → toast lỗi, giữ ô trống.
+  - Nếu field.required = true + URL rỗng → validateForm đánh dấu lỗi giống các field khác.
+
+Chú ý:
+- state.imageFields phải khởi tạo {} ở initState của form.
+- collectFormData: nếu field.type === 'image_url' → data[field.label] = state.imageFields[field.key] || ''.
+- Đây là 1 ảnh đơn lẻ (khác với block ảnh hiện trường nhiều ảnh — đừng lẫn lộn).
+- Trong edit mode (?edit=STT): khi pre-fill → nếu data[field.label] là URL → render thumbnail ngay.
+
+KHÔNG thay đổi block ảnh hiện trường (nhiều ảnh).
+KHÔNG thay đổi schemas.js, Code.gs, các file HTML.
+
+Sau khi xong:
+1. Mở form.html?type=tang_cuong_den trong browser: trường "Bản vẽ" hiện nút "📷 Chụp/Chọn ảnh bản vẽ".
+2. Chọn 1 ảnh → upload → thumbnail hiện.
+3. Submit → cột "Bản vẽ" trong Google Sheets chứa URL Cloudinary (không phải text).
+Báo cáo kết quả.
+```
+
+---
+
+## PROMPT P4 — Nhập dữ liệu lịch sử từ Excel vào Google Sheets
+
+### Mục tiêu
+Chạy migration tool để đưa **1053 bản ghi lịch sử** từ `khao sat tang cuong den.xlsx` vào Google Sheets `khao-sat-ke-hoach`.
+File cần có sẵn: `tools/import_data.json` (526KB) + `tools/import-history.html` + endpoint `bulk_import` trong Code.gs.
+
+### Kiểm tra trước khi chạy
+
+```
+Trước khi nhập dữ liệu lịch sử, kiểm tra:
+
+1. Mở Google Sheets `khao-sat-ke-hoach`, xem từng sheet trong 15 loại:
+   - Nếu sheet nào đã có data rows (ngoài header) → DỪng lại, báo cho tôi biết để tránh trùng lặp.
+   - Nếu tất cả sheets trống (chỉ có header row) → an toàn để nhập.
+
+2. Verify file tools/import_data.json đã có trong repo:
+   - Chạy: python -c "import json; d=json.load(open('tools/import_data.json',encoding='utf-8')); print({k:len(v) for k,v in d.items()})"
+   - Kết quả phải có 15 key, tổng ~1053 bản ghi.
+
+3. Verify endpoint bulk_import đã có trong Code.gs:
+   - Chạy: grep -c "bulk_import" apps-script/Code.gs
+   - Phải ≥ 2 (1 trong switch, 1 trong hàm handleBulkImport).
+
+4. Verify Apps Script đã được re-deploy sau khi thêm bulk_import (phiên bản mới nhất).
+   Nếu chưa: hướng dẫn tôi deploy lại: Apps Script → Deploy → Manage deployments → New version → Deploy.
+
+Báo cáo kết quả 4 mục. Đợi tôi xác nhận rồi mới sang bước tiếp.
+```
+
+### Chạy migration
+
+```
+Đã xác nhận an toàn. Thực hiện nhập dữ liệu lịch sử:
+
+BƯỚC 1: Mở trình duyệt, vào URL:
+  https://<user>.github.io/khaosat/tools/import-history.html
+  (Hoặc nếu test local: http://localhost:8080/tools/import-history.html)
+
+BƯỚC 2: Đăng nhập bằng tài khoản admin.
+
+BƯỚC 3: Kiểm tra bảng tóm tắt bản ghi cần nhập:
+  tang_cuong_den: 449, ngam_hoa: 91, thay_den: 62, hkn: 22,
+  tc_noi: 36, cap_luon_can: 65, tc_ngam: 15, thay_can: 19,
+  thay_tru: 27, choa_den: 39, nap_tru: 23, vo_tu: 38,
+  tc_den_kc_xa: 0, decal_so_tru: 149, nang_mong: 18
+  TỔNG: 1053
+
+BƯỚC 4: Nhấn "Nhập tất cả 1053 bản ghi".
+  Chờ ~1-3 phút. Xem progress log từng sheet.
+  Mỗi sheet mất ~5-10s (Apps Script ghi batch bằng setValues).
+
+BƯỚC 5: Sau khi xong, verify trên Google Sheets:
+  - Mở sheet "Tang cuong den" → đếm rows (phải có 449 + 1 header = 450 rows).
+  - Kiểm tra 3 row đầu:
+    * STT có giá trị (1, 2, 3...).
+    * Cột Submitted At có giá trị "bulk_import" hoặc lấy từ ngày KS gốc.
+    * Cột Username bắt đầu bằng "import_".
+    * Cột Deleted At rỗng.
+  - Mở sheet "Ngam Hoa" → 91 rows + header.
+  - Mở sheet "14 Decal số trụ" → 149 rows + header.
+
+BƯỚC 6: Nếu thấy dữ liệu đúng → commit kết quả (không có file mới, chỉ data trong Google Sheets).
+
+BƯỚC 7: Ghi log vào CHANGELOG.md: "2026-05-28 — Imported 1053 historical survey records from Excel."
+
+⚠️ NẾU GẶP LỖI:
+- "Lỗi kết nối" → kiểm tra Apps Script đã deploy chưa, URL config.js có đúng không.
+- "forbidden" → token hết hạn, đăng nhập lại.
+- "Sheet không tồn tại" → chạy initSheets() trước.
+- Một số sheet OK, một số lỗi → không sao, ghi lại sheet nào lỗi và chạy lại chỉ sheet đó.
+
+Báo cáo: số sheet nhập thành công, tổng rows đã nhập, sheet nào (nếu có) bị lỗi.
+```
+
+---
+
+## CHECKLIST SAU KHI HOÀN TẤT P1–P4
+
+```
+Sau khi xong hết 4 prompt P1–P4, kiểm tra:
+
+— Code.gs:
+  [ ] NO_GPS_TYPES = ['hkn'] (chỉ 1 phần tử).
+  [ ] handleKpi tính pct_gps theo 2 nhóm (lat/lng vs link).
+  [ ] case 'export_raw' trong switch doPost.
+  [ ] handleExportRaw trả array of arrays (không phải objects).
+  [ ] case 'bulk_import' trong switch doPost.
+
+— Frontend:
+  [ ] report.html có section vùng D với 2 nút Excel + CSV.
+  [ ] report.js có hàm exportRawXlsx() và exportRawCsv().
+  [ ] form-renderer.js có case 'image_url' → nút chụp + upload + thumbnail.
+  [ ] Trường "Bản vẽ" trong form tang_cuong_den/ngam_hoa/thay_den là ảnh (không phải text input).
+
+— Google Sheets:
+  [ ] 15 sheet có dữ liệu lịch sử (tổng ~1053 rows, không tính header).
+  [ ] Cột Deleted At của tất cả rows lịch sử = rỗng.
+  [ ] Cột Username các rows lịch sử bắt đầu bằng "import_".
+
+— Không thay đổi:
+  [ ] schemas.js không bị đụng (đã đúng từ trước).
+  [ ] lookups.js không bị đụng.
+  [ ] Các trang HTML khác (login, index, form, recent, kpi, manage) không bị ảnh hưởng.
+```
+
+---
+
+**Hết Phần III.** 4 prompt bổ sung từ buổi làm việc 2026-05-28.

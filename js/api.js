@@ -83,6 +83,15 @@ export async function apiReport({ types, from, to, usernames, status, groupBy } 
   });
 }
 
+/** Xuất raw rows theo đúng cấu trúc cột của từng sheet — cho Vùng D báo cáo. */
+export async function apiExportRaw({ types, from, to, usernames, status } = {}) {
+  return postJson({
+    action: 'export_raw',
+    token: requireToken(),
+    types, from, to, usernames, status
+  });
+}
+
 /** Trả danh sách user. Mặc định chỉ active=TRUE. Truyền {includeInactive: true} để xem cả disabled (cho users.html). */
 export async function apiUsers({ includeInactive } = {}) {
   return postJson({
