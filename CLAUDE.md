@@ -199,8 +199,23 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
 - `ngày khảo sát` / `Ngày khảo sát`: **KTV không nhập tay**. Apps Script tự ghi `new Date()` khi nhận request, theo timezone `Asia/Ho_Chi_Minh`, format `yyyy-MM-dd HH:mm:ss`.
 - `kinh độ`, `vĩ độ`: lấy tự động bằng `navigator.geolocation`, KTV có nút "Lấy lại GPS" nếu cần.
 - `link` / `Link Google Map`: tự sinh `https://www.google.com/maps?q=<lat>,<lng>` nếu có GPS, để trống nếu không.
-- `Bản vẽ`: text input, **không bắt buộc**. KTV nhập tên/mã bản vẽ thiết kế nếu có (vd "BV-2026-001"), để trống nếu chưa có. (chốt 2026-05-26: KTV được nhập)
+- `Bản vẽ`: upload ảnh (`image_url`) — KTV chụp ảnh bản vẽ thiết kế tại hiện trường, upload Cloudinary, lưu URL vào cột. Không bắt buộc. (chốt 2026-05-26: cho nhập; update 2026-05-28: đổi từ `text` → `image_url` để KTV chụp ảnh bản vẽ giấy — đã implement trong `js/schemas.js`)
 - `Ghi chú`: luôn là `textarea`, không bắt buộc.
+
+### GPS trên từng loại khảo sát (CHỐT — đồng bộ `NO_GPS_TYPES` trong Code.gs)
+
+Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
+
+| Mức | Trường lưu | Loại hình khảo sát |
+|---|---|---|
+| **GPS đầy đủ** (lat+lng+link) | `kinh độ`, `vĩ độ`, `Link Google Map` | `tang_cuong_den` |
+| **GPS tọa độ** (lat+lng, không có cột link) | `kinh độ`, `vĩ độ` | `ngam_hoa` ⚠️ |
+| **GPS link-only** (chỉ lưu link) | `link` (link_gmap) | `thay_den`, `tc_noi`, `cap_luon_can`, `tc_ngam`, `thay_can`, `thay_tru`, `choa_den`, `nap_tru`, `vo_tu`, `tc_den_kc_xa`, `decal_so_tru`, `nang_mong` |
+| **Không có GPS** | — | `hkn` |
+
+⚠️ **`ngam_hoa` thiếu cột `link`**: Sheet này không có cột `Link Google Map` (đúng theo file Excel gốc — 23 cột). Hệ quả: link Google Map sinh ra trong form nhưng **không lưu vào Google Sheets**. Nếu muốn thêm cột `link`, phải thêm vào sheet Excel gốc + cập nhật HEADERS trong Code.gs + schema.
+
+> **`NO_GPS_TYPES`** trong Code.gs **chỉ có `['hkn']`** (không phải `['hkn', 'vo_tu']` — `vo_tu` có `link_gmap`). Hằng số này dùng để loại `hkn` ra khỏi mẫu số khi tính `pct_gps`.
 - `Người khảo sát`: **KTV không nhập tay**. Sau khi đăng nhập, frontend đọc `full_name` của user từ session và tự điền vào trường này (hiển thị readonly). KHÔNG cho phép sửa để tránh giả mạo. Server-side cũng overwrite trường này từ token để chắc chắn (defense in depth).
 - `Quận`, `Phường`: dropdown lấy từ `lookups.js`. Quận chọn trước → lọc danh sách phường thuộc quận đó.
 - `Tủ điều khiển`: autocomplete (datalist) từ `lookups.js`, cho phép nhập tự do (vì có thể TĐK mới chưa có trong danh mục).
@@ -218,7 +233,8 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
 - `phuong` — dropdown đặc biệt (Phường, lọc theo Quận đã chọn)
 - `tdk` — autocomplete (datalist) từ lookups
 - `link_gmap` — auto-generated từ gps, ẩn khỏi UI
-- `skip` — không hiển thị, không gửi (vd: `Bản vẽ` để trống)
+- `image_url` — upload ảnh lên Cloudinary, lưu URL; dùng cho trường `Bản vẽ` (chụp bản vẽ thiết kế)
+- `skip` — không hiển thị, không gửi (dự phòng)
 
 ### Schema chi tiết — sao chép NGUYÊN VĂN tên trường vào `label` (để khớp header Google Sheets)
 
@@ -242,7 +258,7 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
 | 14 | kinh độ | lng | gps_lng | — | |
 | 15 | vĩ độ | lat | gps_lat | — | |
 | 16 | Người khảo sát | nguoi_ks | text | **Yes** | |
-| 17 | Bản vẽ | ban_ve | text | No | KTV nhập mã/tên bản vẽ nếu có |
+| 17 | Bản vẽ | ban_ve | image_url | No | KTV chụp ảnh bản vẽ thiết kế tại hiện trường |
 | 18 | Ghi chú | ghi_chu | textarea | No | |
 | 19 | Vị trí | vi_tri | text | No | |
 | 20 | Tên hẻm | ten_hem | text | No | |
@@ -274,8 +290,10 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
 | 19 | kinh độ | lng | gps_lng | — |
 | 20 | vĩ độ | lat | gps_lat | — |
 | 21 | Người khảo sát | nguoi_ks | text | **Yes** |
-| 22 | Bản vẽ | ban_ve | text | No |
+| 22 | Bản vẽ | ban_ve | image_url | No | Chụp ảnh bản vẽ thiết kế |
 | 23 | Ghi chú | ghi_chu | textarea | No |
+
+> ⚠️ **`ngam_hoa` không có cột `link_gmap`** — đúng theo file Excel gốc (23 cột, không có `Link Google Map`). Form vẫn lấy GPS và lưu `kinh độ`/`vĩ độ`, nhưng link Google Maps không được ghi vào sheet. Nếu muốn thêm về sau phải thêm cột vào sheet + cập nhật `HEADERS` trong Code.gs.
 
 **5.3 `thay_den` — "Thay den"**
 
@@ -294,7 +312,7 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
 | 11 | Năm lắp đặt | nam_ld | number | No |
 | 12 | ngày khảo sát | ngay_ks | date_auto | — |
 | 13 | Người khảo sát | nguoi_ks | text | **Yes** |
-| 14 | Bản vẽ | ban_ve | text | No |
+| 14 | Bản vẽ | ban_ve | image_url | No | Chụp ảnh bản vẽ thiết kế |
 | 15 | Ghi chú | ghi_chu | textarea | No |
 | 16 | link | link_gmap | link_gmap | — |
 
@@ -563,7 +581,8 @@ export const TDK_LIST = [
   - `action: "delete"` — body `{ token, type, stt }` → soft-delete (set `Deleted At` + `Deleted By`) + xoá ảnh Cloudinary kèm. Chỉ `admin`/`user` được gọi.
   - `action: "restore"` — body `{ token, type, stt }` → undo soft-delete (clear `Deleted At` + `Deleted By`). Không restore được ảnh (đã xoá Cloudinary). Chỉ `admin`/`user`.
   - `action: "kpi"` — body `{ token, month: "2026-05" }` → trả KPI tất cả KTV trong tháng. Chỉ `admin`/`user`.
-  - `action: "report"` — body `{ token, types?: [...], from?, to?, usernames?: [...], status? }` → trả aggregation đa chiều cho trang báo cáo. Chỉ `admin`/`user`. Chi tiết ở mục 15.
+  - `action: "report"` — body `{ token, types?: [...], from?, to?, usernames?: [...], status?, groupBy? }` → trả aggregation đa chiều (3 vùng A/B/C) cho trang báo cáo. Chỉ `admin`/`user`. Chi tiết ở mục 15.
+  - `action: "export_raw"` — body `{ token, types: [...], from?, to?, usernames?: [], status? }` → trả raw rows theo đúng thứ tự cột của từng sheet (array of arrays) để xuất Excel/CSV. Không aggregate. Chỉ `admin`/`user`. Chi tiết ở mục 15.
 - Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
@@ -712,6 +731,16 @@ Vì file Google Sheets `khao-sat-ke-hoach` đã có sẵn sheet `taikhoan` với
 - File gốc có header ở **row 2** (row 1 trống/có giá trị lạ "3125").
 - Khi tạo Google Sheets mới, **đặt header ở row 1** (clean lại), để code Apps Script đơn giản (luôn đọc row 1 làm header cho mọi sheet).
 - Tài liệu setup phải nhắc user clean.
+
+### Hằng số GPS (cập nhật 2026-05-28)
+
+```javascript
+// Chỉ hkn không có GPS (không có gps_lat/gps_lng lẫn link_gmap).
+// vo_tu có link_gmap → không thuộc NO_GPS_TYPES.
+const NO_GPS_TYPES = ['hkn'];
+```
+
+> Dùng trong KPI `pct_gps`: loại `hkn` ra khỏi mẫu số. Các loại `link-only` (thay_den, tc_noi, ...) tính GPS qua cột `link` không rỗng.
 
 ### Bảng mapping `type` → tên sheet (HARDCODE trong Apps Script)
 ```javascript
@@ -932,8 +961,12 @@ Tính cho từng KTV trong tháng `M`:
 
 **2. Chất lượng dữ liệu** (`quality`, trọng số 30%)
 - `pct_anh` = % bản có ≥1 URL trong cột `Ảnh (URLs)`.
-- `pct_gps` = % bản có cả `kinh độ` và `vĩ độ` khác rỗng (chỉ tính trên các loại form có GPS — `hkn`, `vo_tu` không có GPS thì bỏ qua khỏi mẫu số).
-- Công thức: `(pct_anh + pct_gps) / 2`
+- `pct_gps` = % bản **có GPS** tính theo loại:
+  - **tang_cuong_den, ngam_hoa** (lưu tọa độ): bản có cả `kinh độ` và `vĩ độ` khác rỗng.
+  - **12 loại còn lại có `link`** (thay_den, tc_noi, cap_luon_can, tc_ngam, thay_can, thay_tru, choa_den, nap_tru, vo_tu, tc_den_kc_xa, decal_so_tru, nang_mong): bản có cột `link` không rỗng.
+  - **`hkn`**: **loại ra khỏi mẫu số** (không có GPS, không có link) → `NO_GPS_TYPES = ['hkn']`.
+- Công thức: `pct_gps = số bản có GPS / tổng bản (trừ bản từ hkn)`
+- `quality = (pct_anh + pct_gps) / 2`
 
 **3. Đa dạng loại KS** (`diversity`, trọng số 15%)
 - Số loại khảo sát khác nhau (trong 15 loại) mà user đã submit ít nhất 1 bản trong tháng.
@@ -1059,8 +1092,21 @@ Khác với KPI (chấm điểm KTV), trang này tổng hợp **số liệu kh�
   | Nguyễn Văn A | 12 | 8 | ... | 45 |
   | ... |
 
-- Nút "Xuất CSV" → tải về 3 file CSV tương ứng 3 vùng A/B/C (zip lại 1 file).
+- Nút "Xuất tổng hợp (CSV)" → tải về 3 file CSV tương ứng 3 vùng A/B/C (zip lại 1 file).
 - Click vào số trong bảng → mở popup hiện danh sách bản ghi cụ thể (drill-down).
+
+  **D. Xuất dữ liệu thô theo cấu trúc sheet** (tab riêng hoặc section dưới cùng):
+  - Mục đích: tải về file Excel/CSV có cấu trúc cột **y hệt Google Sheets** của từng loại KS — để nộp hồ sơ, báo cáo lên cấp trên, hoặc đối chiếu với file Excel gốc.
+  - Bộ lọc riêng cho vùng D: chọn 1 hoặc nhiều loại KS + khoảng thời gian + KTV + trạng thái.
+  - **Nút "Xuất Excel (.xlsx)"**: dùng SheetJS, tạo workbook nhiều tab — mỗi loại KS được chọn = 1 tab riêng, tên tab = tên sheet Google Sheets nguyên văn (vd `Tang cuong den`, `Ngam Hoa`...).
+  - **Nút "Xuất CSV (từng loại)"**: mỗi loại KS = 1 file `.csv` riêng, đặt tên `<sheet_name>_<from>_<to>.csv`, download từng file một (hoặc zip tất cả).
+  - **Yêu cầu cấu trúc file xuất (QUAN TRỌNG)**:
+    - **Row 1 = header nguyên văn** đúng thứ tự cột của sheet, lấy từ `HEADERS[type]` + `BONUS_COLS` (giống hệt Google Sheets).
+    - Ví dụ cho `Tang cuong den`: `STT | Hẻm | Tuyến đường | Quận | Phường | Tủ điều khiển | Độ rộng đường | ... | Link Google Map | Ảnh (URLs) | Submitted At | User Agent | Username | Deleted At | Deleted By`
+    - **Thứ tự cột cố định** theo `HEADERS[type]` trong `Code.gs` — không được tự ý sắp xếp lại.
+    - Giá trị `null`/rỗng xuất ra ô trống (không xuất `"null"` hay `"undefined"`).
+    - Cột `Ảnh (URLs)`: giữ nguyên dạng chuỗi URL phân tách bằng `|`.
+    - Cột ngày giờ (`ngày khảo sát`, `Submitted At`, `Deleted At`): giữ nguyên format `yyyy-MM-dd HH:mm:ss`.
 
 ### Logic server-side `action=report`
 1. Verify role có quyền `report`.
@@ -1075,8 +1121,27 @@ Khác với KPI (chấm điểm KTV), trang này tổng hợp **số liệu kh�
    - Đếm ảnh, GPS theo loại.
 4. Trả về 3 mảng tương ứng 3 vùng A/B/C. Format ổn định để frontend render.
 
+### Logic server-side `action=export_raw` (mới — cho vùng D)
+
+Endpoint riêng tách khỏi `action=report` vì trả raw rows (không aggregate):
+
+```
+Body: { token, types: ["tang_cuong_den", "ngam_hoa", ...], from?, to?, usernames?: [], status? }
+```
+
+1. Verify role có quyền `report`.
+2. Với mỗi type trong `types`:
+   a. Mở sheet, đọc header row (đúng thứ tự cột trong sheet).
+   b. Filter rows theo điều kiện (from/to/usernames/status).
+   c. Trả về `{ type, sheetName, headers: [...], rows: [[val, val, ...], ...] }` — rows là array of arrays (không phải object) để giữ đúng thứ tự cột.
+3. Trả `{ ok, results: [{ type, sheetName, headers, rows }, ...] }`.
+4. **Không dùng `action=list`** cho export vì `list` trả JSON objects, frontend phải tự sắp xếp lại thứ tự cột — dễ sai. `export_raw` trả đúng thứ tự luôn.
+
+Frontend nhận `results` → SheetJS tạo workbook: mỗi `result` = 1 worksheet, `ws_name = sheetName`, data = `[headers, ...rows]`.
+
 ### Performance
 - Với 15 sheet × vài ngàn rows, scan toàn bộ có thể 3-8s. Chấp nhận với UI loading rõ ràng.
+- `export_raw` cho 1 loại KS nhẹ hơn nhiều (chỉ scan 1 sheet) — nên khuyến khích user chọn lọc loại trước khi xuất.
 - Nếu sau này dữ liệu vượt 50k rows, cân nhắc thêm sheet `Index` cache rebuild incremental khi mỗi submit. Chưa làm ngay.
 - **Tuỳ chọn**: trang `report.html` có thể đọc trực tiếp từ Google Sheets **CSV publish URL** (xem mục 16) thay vì gọi Apps Script — nhanh hơn vì không qua serverless. Nhược điểm: data public, không filter server-side, cần parse 15 CSV. Mặc định KHÔNG dùng cách này; chỉ bật khi Apps Script chậm quá.
 
@@ -1156,7 +1221,12 @@ Khi nhận lệnh "bắt đầu code dự án này", thực hiện theo đúng t
 - [ ] **B11.** Tạo `recent.html`. Có `requireAuth()`. user1/demo chỉ thấy của mình; admin/user thấy tất cả.
 - [ ] **B12.** Tạo `js/kpi.js` + `kpi.html` — bảng KPI tháng, chi tiết KTV, export CSV. Có `requireAuth('kpi')`.
 - [ ] **B13.** Tạo `js/manage.js` + `manage.html` — bộ lọc, bảng bản ghi, xoá/khôi phục. Có `requireAuth('manage')`.
-- [ ] **B14.** Tạo `js/report.js` + `report.html` — bảng tổng quan + biểu đồ cột chồng + pivot KTV×Loại, export CSV. Có `requireAuth('report')`.
+- [ ] **B14.** Tạo `js/report.js` + `report.html` — 4 vùng kết quả:
+  - Vùng A: bảng tổng quan (đếm theo loại).
+  - Vùng B: biểu đồ cột chồng SVG (theo thời gian).
+  - Vùng C: pivot KTV × Loại KS.
+  - Vùng D: xuất dữ liệu thô theo cấu trúc sheet — gọi `action=export_raw`, dùng SheetJS tạo Excel nhiều tab (mỗi loại KS = 1 tab, tên tab = tên sheet nguyên văn, cột đúng thứ tự `HEADERS[type]` + `BONUS_COLS`). Có cả nút "Xuất CSV từng loại".
+  - Có `requireAuth('report')`.
 - [ ] **B15.** Tạo `manifest.json`, `sw.js`, icon placeholder.
 - [ ] **B16.** **Test thủ công** trên Chrome desktop + 1 lần Chrome mobile (devtools mobile mode):
   - Đăng nhập sai → hiện lỗi, không lưu token. Sai 5 lần → bị khoá 5 phút.
@@ -1196,6 +1266,9 @@ Khi nhận lệnh "bắt đầu code dự án này", thực hiện theo đúng t
 - [ ] Report tổng quan đếm đúng — đối chiếu thủ công với Google Sheets COUNTIF.
 - [ ] Report bỏ qua bản đã soft-delete khi status filter là "Đang hoạt động".
 - [ ] Pivot KTV × Loại không hiện hàng trống cho KTV không submit gì trong khoảng filter.
+- [ ] Vùng D `export_raw`: file Excel xuất ra có đúng số sheet, tên tab nguyên văn, thứ tự cột khớp 100% với Google Sheets (so sánh bằng cách mở song song 2 file).
+- [ ] CSV xuất ra dùng separator `|` (pipe), không bị vỡ khi có dữ liệu chứa dấu phẩy hoặc tiếng Việt.
+- [ ] Giá trị `null`/rỗng không xuất thành chuỗi `"null"` hay `"undefined"` trong file xuất.
 - [ ] `SETUP.md` đầy đủ, một người không phải dev cũng theo được.
 
 ---
@@ -1234,7 +1307,7 @@ Mọi câu hỏi đã được trả lời ngày 2026-05-26. **KHÔNG được t
 - **Soft-delete**: bản ghi xoá có `Deleted At`, ảnh Cloudinary xoá thật, có sheet `Audit` log.
 
 ### Schema chi tiết
-- **Trường "Bản vẽ"** (xuất hiện ở 3 form: tang_cuong_den, ngam_hoa, thay_den): KTV nhập tự do dạng text (mã bản vẽ, vd "BV-2026-001"). KHÔNG dùng `skip` nữa.
+- **Trường "Bản vẽ"** (xuất hiện ở 3 form: tang_cuong_den, ngam_hoa, thay_den): **type `image_url`** — KTV chụp ảnh bản vẽ thiết kế (giấy A4) ngay tại hiện trường, upload lên Cloudinary folder `khaosat/banve/`, lưu URL vào cột. Không bắt buộc. *(Update 2026-05-28: đã đổi từ `text` → `image_url`, implement trong `js/schemas.js` và tính năng 22.1 xem như đã hoàn thành)*
 - **Trường "Năm lắp đặt"**: nhập tự do dạng number, KHÔNG giới hạn range.
 
 ### Mục tiêu KPI
@@ -1280,18 +1353,18 @@ Khi triển khai v1.1+, thêm 4 cột mới vào sheet `phan quyen`: `edit` (s�
 
 ---
 
-### 22.1 — Bản vẽ → upload ảnh (thay vì text)
+### ~~22.1 — Bản vẽ → upload ảnh (thay vì text)~~ ✅ **ĐÃ HOÀN THÀNH (2026-05-28)**
 
 **Mục đích**: KTV chụp ảnh bản vẽ thiết kế (giấy A4) ngay tại hiện trường thay vì gõ mã.
 
-**File sửa**:
-- `js/schemas.js`: 3 schema có field `Bản vẽ` (tang_cuong_den, ngam_hoa, thay_den) — đổi `type: 'text'` → `type: 'image_url'`.
-- `js/form-renderer.js`: thêm renderer cho type `image_url` — input file 1 ảnh, upload Cloudinary, lưu URL vào field.
+**Đã thực hiện**:
+- `js/schemas.js`: 3 schema `Bản vẽ` (tang_cuong_den, ngam_hoa, thay_den) đã dùng `type: 'image_url'`.
+- Cần **hoàn thiện thêm** trong `js/form-renderer.js`: renderer cho `image_url` — nút chụp/chọn ảnh, upload Cloudinary folder `khaosat/banve/`, thumbnail preview.
 
-**UI**:
+**UI cần làm** (trong form-renderer):
 - Nút "📷 Chụp/Chọn ảnh bản vẽ" → upload Cloudinary folder `khaosat/banve/` → thumbnail preview + URL ẩn.
 - Cho phép replace ảnh nếu chụp sai.
-- Field readonly với KTV (chỉ thấy thumbnail + button thay).
+- Cho phép để trống (không bắt buộc).
 
 **Lưu Google Sheets**: cell chứa URL Cloudinary (giống cột `Ảnh (URLs)` nhưng đơn lẻ).
 

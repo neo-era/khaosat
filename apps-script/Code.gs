@@ -133,8 +133,21 @@ const HEADERS = {
 /** 6 cột bonus thêm vào CUỐI mỗi sheet khảo sát. */
 const BONUS_COLS = ['Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By'];
 
-/** Loại form không có GPS (cho KPI tính pct_gps). */
-const NO_GPS_TYPES = ['hkn', 'vo_tu'];
+/** Loại form không có GPS nào cả — loại ra khỏi mẫu số khi tính pct_gps. */
+const NO_GPS_TYPES = ['hkn'];
+
+/**
+ * Phân loại GPS theo mức lưu trữ (xem CLAUDE.md mục 5 — bảng GPS):
+ *   GPS_LATLONG_TYPES : lưu cả kinh độ + vĩ độ (cột riêng)
+ *   GPS_LINK_TYPES    : chỉ lưu link Google Map (cột 'link')
+ *   NO_GPS_TYPES      : không có GPS, bỏ qua khi tính pct_gps
+ */
+const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa'];
+const GPS_LINK_TYPES    = [
+  'thay_den', 'tc_noi', 'cap_luon_can', 'tc_ngam', 'thay_can',
+  'thay_tru', 'choa_den', 'nap_tru', 'vo_tu',
+  'tc_den_kc_xa', 'decal_so_tru', 'nang_mong'
+];
 
 const TAIKHOAN_HEADER = ['username', 'password_hash', 'full_name', 'role', 'active', 'created_at'];
 const KPI_TARGETS_HEADER = ['param', 'value'];
@@ -1374,6 +1387,7 @@ function doPost(e) {
       case 'schedule_delete': return jsonResponse(handleScheduleDelete(body));
       case 'update':       return jsonResponse(handleUpdate(body));
       case 'bulk_import':  return jsonResponse(handleBulkImport(body));
+      case 'export_raw':   return jsonResponse(handleExportRaw(body));
       default:             return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -1690,10 +1704,18 @@ function handleKpi(body) {
       if (!submittedAt || !inMonth(submittedAt, month)) return;
       stat.total++;
       if (String(row['Ảnh (URLs)'] || '').trim()) stat.has_photo++;
-      if (NO_GPS_TYPES.indexOf(type) < 0) {
+      // GPS: tính theo mức lưu trữ (xem CLAUDE.md mục 5 bảng GPS)
+      if (GPS_LATLONG_TYPES.indexOf(type) >= 0) {
+        // Nhóm A: lưu cả lat/lng — kiểm tra 2 cột
         stat.gps_eligible++;
         if (row['kinh độ'] && row['vĩ độ']) stat.has_gps++;
+      } else if (GPS_LINK_TYPES.indexOf(type) >= 0) {
+        // Nhóm B: chỉ lưu link — kiểm tra cột 'link' hoặc 'Link Google Map'
+        stat.gps_eligible++;
+        const linkVal = String(row['link'] || row['Link Google Map'] || '').trim();
+        if (linkVal && linkVal !== '#VALUE!') stat.has_gps++;
       }
+      // NO_GPS_TYPES (hkn): bỏ qua — không tính vào mẫu số
       stat.types.add(type);
       const dayKey = Utilities.formatDate(submittedAt, TZ, 'yyyy-MM-dd');
       stat.days.add(dayKey);
@@ -1975,7 +1997,7 @@ function handleReport(body) {
 
   types.forEach(t => {
     const rows = readSheetRows(t, true);  // include deleted để đếm
-    const optionalGpsAllowed = NO_GPS_TYPES.indexOf(t) < 0;
+    // optionalGpsAllowed đã được thay bằng GPS_LATLONG_TYPES / GPS_LINK_TYPES
     rows.forEach(row => {
       const submittedAt = row['Submitted At'] ? new Date(row['Submitted At']) : null;
       if (!submittedAt) return;
@@ -1995,7 +2017,13 @@ function handleReport(body) {
         areaA[t].has_photo++;
         areaA[t].photo_count += photos.length;
       }
-      if (optionalGpsAllowed && row['kinh độ'] && row['vĩ độ']) areaA[t].has_gps++;
+      // GPS cho báo cáo: tách theo nhóm lưu trữ
+      if (GPS_LATLONG_TYPES.indexOf(t) >= 0) {
+        if (row['kinh độ'] && row['vĩ độ']) areaA[t].has_gps++;
+      } else if (GPS_LINK_TYPES.indexOf(t) >= 0) {
+        const lv = String(row['link'] || row['Link Google Map'] || '').trim();
+        if (lv && lv !== '#VALUE!') areaA[t].has_gps++;
+      }
 
       // Area B
       const bucket = bucketDate(submittedAt, groupBy);
@@ -2403,4 +2431,87 @@ function handleBulkImport(body) {
     skipped,
     total: rows.length
   };
+}
+
+// =====================================================================
+// EXPORT RAW — xuất dữ liệu thô theo cấu trúc sheet (cho report Vùng D)
+// =====================================================================
+
+/**
+ * Xuất raw rows theo đúng thứ tự cột của từng sheet.
+ * Trả array of arrays (không phải objects) để frontend dùng SheetJS trực tiếp.
+ * Body: { token, types[], from?, to?, usernames?: [], status? }
+ */
+function handleExportRaw(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'report')) return { ok: false, error: 'forbidden' };
+
+  const types = Array.isArray(body.types) && body.types.length > 0
+    ? body.types
+    : Object.keys(SHEET_MAP);
+
+  const from      = body.from ? new Date(body.from) : null;
+  const to        = body.to   ? new Date(body.to + 'T23:59:59') : null;
+  const usernames = Array.isArray(body.usernames) && body.usernames.length > 0
+    ? body.usernames : null;
+  const status    = body.status || 'active';  // 'active' | 'deleted' | 'all'
+
+  const results = [];
+  const ss = getSpreadsheet();
+
+  for (const type of types) {
+    const sheetName = SHEET_MAP[type];
+    if (!sheetName) continue;
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) { results.push({ type, sheetName, headers: [], rows: [] }); continue; }
+
+    const allValues = sheet.getDataRange().getValues();
+    if (allValues.length < 2) {
+      results.push({ type, sheetName, headers: allValues.length ? allValues[0].map(String) : [], rows: [] });
+      continue;
+    }
+
+    const headers       = allValues[0].map(String);
+    const idxSubmitted  = headers.indexOf('Submitted At');
+    const idxUsername   = headers.indexOf('Username');
+    const idxDeletedAt  = headers.indexOf('Deleted At');
+
+    const filtered = [];
+    for (let i = 1; i < allValues.length; i++) {
+      const row = allValues[i];
+      // Bỏ dòng hoàn toàn rỗng
+      if (!row.some(c => c !== '' && c !== null && c !== undefined)) continue;
+
+      // Filter trạng thái
+      const isDeleted = idxDeletedAt >= 0 &&
+        row[idxDeletedAt] !== '' && row[idxDeletedAt] != null;
+      if (status === 'active'  && isDeleted)  continue;
+      if (status === 'deleted' && !isDeleted) continue;
+
+      // Filter khoảng ngày theo Submitted At
+      if ((from || to) && idxSubmitted >= 0) {
+        const d = row[idxSubmitted] instanceof Date
+          ? row[idxSubmitted]
+          : new Date(row[idxSubmitted]);
+        if (isNaN(d.getTime())) continue;
+        if (from && d < from) continue;
+        if (to   && d > to)   continue;
+      }
+
+      // Filter username
+      if (usernames && idxUsername >= 0 &&
+          !usernames.includes(String(row[idxUsername]))) continue;
+
+      // Serialize: Date → string, null/undefined → ''
+      const serialized = row.map(v => {
+        if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');
+        return v == null ? '' : v;
+      });
+      filtered.push(serialized);
+    }
+
+    results.push({ type, sheetName, headers, rows: filtered });
+  }
+
+  return { ok: true, results };
 }
