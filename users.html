@@ -104,6 +104,7 @@
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initUsers } from './js/users.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth('users_manage');
     document.getElementById('header-user').textContent = user.full_name;
@@ -114,6 +115,7 @@
     };
 
     initUsers(user);
+    initHelp('admin');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

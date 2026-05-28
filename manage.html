@@ -95,6 +95,7 @@
     import { initManage } from './js/manage.js';
     import { apiUsers } from './js/api.js';
     import { showToast } from './js/utils.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth('manage');
     document.getElementById('header-user').textContent = user.full_name;
@@ -117,6 +118,7 @@
       }
       initManage(users);
     })();
+    initHelp('admin');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});

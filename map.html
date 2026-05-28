@@ -91,6 +91,7 @@
   <script type="module">
     import { requireAuth } from './js/auth.js';
     import { initMap } from './js/map.js';
+    import { initHelp } from './js/help.js';
 
     const user = requireAuth('map');
     document.getElementById('header-user').textContent = user.full_name;
@@ -102,6 +103,7 @@
     };
 
     initMap(user);
+    initHelp('chung');
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
