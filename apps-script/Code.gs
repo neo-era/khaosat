@@ -1372,8 +1372,9 @@ function doPost(e) {
       case 'schedule_create': return jsonResponse(handleScheduleCreate(body));
       case 'schedule_update': return jsonResponse(handleScheduleUpdate(body));
       case 'schedule_delete': return jsonResponse(handleScheduleDelete(body));
-      case 'update':  return jsonResponse(handleUpdate(body));
-      default:        return jsonResponse({ ok: false, error: 'unknown action: ' + action });
+      case 'update':       return jsonResponse(handleUpdate(body));
+      case 'bulk_import':  return jsonResponse(handleBulkImport(body));
+      default:             return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
     console.error(err);
@@ -2324,4 +2325,82 @@ function bucketDate(date, groupBy) {
 
 function round1(n) {
   return Math.round(n * 10) / 10;
+}
+
+// =====================================================================
+// BULK IMPORT — nhập dữ liệu lịch sử từ Excel (chỉ admin)
+// =====================================================================
+
+/**
+ * Nhập hàng loạt bản ghi lịch sử vào sheet.
+ * Body: { token, type, rows: [{col_name: value, ...}, ...] }
+ * Trả về: { ok, type, inserted, skipped, total }
+ */
+function handleBulkImport(body) {
+  const auth = verifyToken(body.token);
+  if (!isFullAccess(auth.role)) {
+    return { ok: false, error: 'Chỉ admin/user mới được nhập dữ liệu hàng loạt' };
+  }
+
+  const type = body.type;
+  const sheetName = SHEET_MAP[type];
+  if (!sheetName) return { ok: false, error: 'Loại không hợp lệ: ' + type };
+
+  const sheet = getSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return { ok: false, error: 'Sheet không tồn tại: ' + sheetName };
+
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  if (rows.length === 0) return { ok: true, type, inserted: 0, skipped: 0, total: 0 };
+
+  // Lấy header của sheet để xác định thứ tự cột
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+
+  const batchData = [];
+  let skipped = 0;
+  let sttBase = sheet.getLastRow(); // row tiếp theo = lastRow + 1; STT = lastRow (header = row 1)
+
+  for (let i = 0; i < rows.length; i++) {
+    const rec = rows[i];
+    // Skip hoàn toàn rỗng
+    if (!rec || Object.keys(rec).length === 0) { skipped++; continue; }
+
+    sttBase++;
+    const rowArr = header.map(label => {
+      // Các cột bổ sung không có trong Excel: để trống (trừ STT)
+      if (label === 'STT') return rec['STT'] !== undefined && rec['STT'] !== '' ? rec['STT'] : sttBase;
+      if (label === 'Ảnh (URLs)') return '';
+      if (label === 'Submitted At') return rec['ngày khảo sát'] || rec['Ngày khảo sát'] || '';
+      if (label === 'User Agent') return 'bulk_import';
+      if (label === 'Username') return rec['Người khảo sát'] ? 'import_' + String(rec['Người khảo sát']).substring(0, 20).replace(/\s+/g, '_') : 'import';
+      if (label === 'Deleted At') return '';
+      if (label === 'Deleted By') return '';
+      // Tìm giá trị từ record (match tên cột)
+      const val = rec[label];
+      return val !== undefined ? val : '';
+    });
+    batchData.push(rowArr);
+  }
+
+  if (batchData.length === 0) {
+    return { ok: true, type, inserted: 0, skipped, total: rows.length };
+  }
+
+  // Ghi batch một lần (nhanh hơn appendRow từng dòng)
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, batchData.length, header.length).setValues(batchData);
+
+  // Log audit
+  try {
+    logAudit('bulk_import', auth.username, sheetName, 0,
+      'inserted=' + batchData.length + ' rows (historical data from Excel)');
+  } catch(e) { Logger.log('audit log error: ' + e); }
+
+  return {
+    ok: true,
+    type,
+    sheet: sheetName,
+    inserted: batchData.length,
+    skipped,
+    total: rows.length
+  };
 }

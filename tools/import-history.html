@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nhập dữ liệu lịch sử — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div class="max-w-3xl mx-auto px-4 py-8">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Nhập dữ liệu lịch sử từ Excel</h1>
+    <p class="text-gray-500 text-sm mt-1">Công cụ một lần — chuyển toàn bộ bản ghi cũ vào Google Sheets sản xuất</p>
+  </div>
+
+  <!-- Login section -->
+  <div id="loginSection" class="bg-white rounded-xl shadow p-6 mb-4">
+    <h2 class="font-semibold text-gray-700 mb-3">1. Đăng nhập (cần quyền admin)</h2>
+    <div class="flex gap-3">
+      <input id="username" type="text" placeholder="Username" class="border rounded-lg px-3 py-2 flex-1 text-sm" />
+      <input id="password" type="password" placeholder="Password" class="border rounded-lg px-3 py-2 flex-1 text-sm" />
+      <button id="loginBtn" onclick="doLogin()" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">Đăng nhập</button>
+    </div>
+    <p id="loginMsg" class="text-sm mt-2 text-red-500 hidden"></p>
+    <p id="loginOk" class="text-sm mt-2 text-green-600 hidden"></p>
+  </div>
+
+  <!-- Data preview section -->
+  <div id="previewSection" class="bg-white rounded-xl shadow p-6 mb-4 hidden">
+    <h2 class="font-semibold text-gray-700 mb-3">2. Kiểm tra dữ liệu cần nhập</h2>
+    <div id="summaryTable" class="text-sm"></div>
+    <p class="text-xs text-gray-400 mt-3">
+      ⚠️ Công cụ này sẽ THÊM (append) dữ liệu vào cuối sheet. Nếu chạy 2 lần sẽ bị trùng — hãy kiểm tra Google Sheets trước.
+    </p>
+  </div>
+
+  <!-- Import controls -->
+  <div id="importSection" class="bg-white rounded-xl shadow p-6 hidden">
+    <h2 class="font-semibold text-gray-700 mb-3">3. Chạy nhập dữ liệu</h2>
+    <div class="flex items-center gap-4 mb-4">
+      <button id="importBtn" onclick="startImport()" class="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
+        Nhập tất cả 1053 bản ghi
+      </button>
+      <label class="flex items-center gap-2 text-sm text-gray-600">
+        <input type="checkbox" id="skipEmpty" checked class="w-4 h-4">
+        Bỏ qua loại không có dữ liệu
+      </label>
+    </div>
+
+    <!-- Progress -->
+    <div id="progressArea" class="hidden">
+      <div class="bg-gray-200 rounded-full h-3 mb-2">
+        <div id="progressBar" class="bg-blue-500 h-3 rounded-full transition-all" style="width:0%"></div>
+      </div>
+      <div id="progressLog" class="mt-3 space-y-1 max-h-72 overflow-y-auto text-xs font-mono bg-gray-50 border rounded p-3"></div>
+    </div>
+
+    <!-- Result summary -->
+    <div id="resultArea" class="hidden mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+      <p class="font-semibold text-green-700" id="resultTitle"></p>
+      <div id="resultDetail" class="text-sm text-green-600 mt-1"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // Đọc config từ thư mục cha
+  let CONFIG;
+  try {
+    const mod = await import('../js/config.js');
+    CONFIG = mod.CONFIG;
+  } catch(e) {
+    // Fallback nếu không load được module
+    CONFIG = { appsScriptUrl: '' };
+  }
+
+  let token = null;
+  let importData = null;
+
+  // Đọc import_data.json
+  async function loadData() {
+    try {
+      const res = await fetch('./import_data.json');
+      importData = await res.json();
+      return importData;
+    } catch(e) {
+      alert('Không tải được import_data.json: ' + e.message);
+      return null;
+    }
+  }
+
+  window.doLogin = async function() {
+    const btn = document.getElementById('loginBtn');
+    const msg = document.getElementById('loginMsg');
+    const ok  = document.getElementById('loginOk');
+    const u   = document.getElementById('username').value.trim();
+    const p   = document.getElementById('password').value;
+    msg.classList.add('hidden');
+    ok.classList.add('hidden');
+    btn.disabled = true;
+    btn.textContent = 'Đang đăng nhập...';
+
+    try {
+      const res = await fetch(CONFIG.appsScriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'login', username: u, password: p })
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        msg.textContent = json.error || 'Đăng nhập thất bại';
+        msg.classList.remove('hidden');
+      } else if (json.role !== 'admin' && json.role !== 'user') {
+        msg.textContent = 'Cần đăng nhập bằng tài khoản admin hoặc user';
+        msg.classList.remove('hidden');
+      } else {
+        token = json.token;
+        ok.textContent = `Đăng nhập thành công: ${json.full_name} (${json.role})`;
+        ok.classList.remove('hidden');
+        await showPreview();
+      }
+    } catch(e) {
+      msg.textContent = 'Lỗi kết nối: ' + e.message;
+      msg.classList.remove('hidden');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Đăng nhập';
+  };
+
+  async function showPreview() {
+    const data = importData || await loadData();
+    if (!data) return;
+
+    const LABELS = {
+      tang_cuong_den: 'Tăng cường đèn',
+      ngam_hoa:       'Ngầm hoá',
+      thay_den:       'Thay đèn',
+      hkn:            'Hộp kín nước',
+      tc_noi:         'Thay cáp nổi',
+      cap_luon_can:   'Cáp luồn cần',
+      tc_ngam:        'Thay cáp ngầm',
+      thay_can:       'Thay cần',
+      thay_tru:       'Thay trụ',
+      choa_den:       'Chóa đèn',
+      nap_tru:        'Nắp trụ',
+      vo_tu:          'Vỏ tủ',
+      tc_den_kc_xa:   'TC đèn kc xa',
+      decal_so_tru:   'Decal số trụ',
+      nang_mong:      'Nâng móng',
+    };
+
+    let html = '<table class="w-full border-collapse"><thead><tr class="bg-gray-100">' +
+      '<th class="text-left p-2 border">Loại khảo sát</th>' +
+      '<th class="text-right p-2 border">Số bản ghi</th>' +
+      '</tr></thead><tbody>';
+
+    let total = 0;
+    for (const [type, rows] of Object.entries(data)) {
+      const n = rows.length;
+      total += n;
+      const cls = n === 0 ? 'text-gray-400' : '';
+      html += `<tr class="${cls}"><td class="p-2 border">${LABELS[type] || type}</td><td class="text-right p-2 border font-mono">${n}</td></tr>`;
+    }
+    html += `<tr class="font-bold bg-blue-50"><td class="p-2 border">TỔNG</td><td class="text-right p-2 border font-mono">${total}</td></tr>`;
+    html += '</tbody></table>';
+
+    document.getElementById('summaryTable').innerHTML = html;
+    document.getElementById('previewSection').classList.remove('hidden');
+    document.getElementById('importSection').classList.remove('hidden');
+    document.getElementById('importBtn').textContent = `Nhập tất cả ${total} bản ghi`;
+  }
+
+  window.startImport = async function() {
+    if (!token) { alert('Chưa đăng nhập'); return; }
+    const data = importData || await loadData();
+    if (!data) return;
+
+    const btn = document.getElementById('importBtn');
+    const skipEmpty = document.getElementById('skipEmpty').checked;
+    btn.disabled = true;
+
+    const progressArea = document.getElementById('progressArea');
+    const progressBar  = document.getElementById('progressBar');
+    const progressLog  = document.getElementById('progressLog');
+    progressArea.classList.remove('hidden');
+    progressLog.innerHTML = '';
+
+    const types = Object.keys(data);
+    const active = skipEmpty ? types.filter(t => data[t].length > 0) : types;
+    let done = 0, totalInserted = 0, totalSkipped = 0;
+
+    const log = (msg, cls = '') => {
+      const p = document.createElement('p');
+      p.className = cls;
+      p.textContent = msg;
+      progressLog.appendChild(p);
+      progressLog.scrollTop = progressLog.scrollHeight;
+    };
+
+    for (const type of active) {
+      const rows = data[type];
+      log(`▶ [${type}] Đang nhập ${rows.length} bản ghi...`);
+
+      try {
+        const res = await fetch(CONFIG.appsScriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'bulk_import', token, type, rows })
+        });
+        const json = await res.json();
+        if (json.ok) {
+          log(`  ✓ Đã nhập ${json.inserted} bản ghi (bỏ qua ${json.skipped})`, 'text-green-600');
+          totalInserted += json.inserted;
+          totalSkipped  += json.skipped;
+        } else {
+          log(`  ✗ Lỗi: ${json.error}`, 'text-red-500');
+        }
+      } catch(e) {
+        log(`  ✗ Lỗi kết nối: ${e.message}`, 'text-red-500');
+      }
+
+      done++;
+      progressBar.style.width = Math.round((done / active.length) * 100) + '%';
+    }
+
+    log('');
+    log(`Hoàn thành! Đã nhập ${totalInserted} bản ghi, bỏ qua ${totalSkipped}.`, 'font-bold text-blue-700');
+
+    document.getElementById('resultTitle').textContent = `Nhập xong: ${totalInserted} bản ghi`;
+    document.getElementById('resultDetail').textContent =
+      `Bỏ qua ${totalSkipped} dòng rỗng. Kiểm tra Google Sheets để xác nhận.`;
+    document.getElementById('resultArea').classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Nhập lại (sẽ tạo trùng nếu đã có)';
+  };
+
+  // Tải data ngay khi page load
+  loadData();
+</script>
+</body>
+</html>
