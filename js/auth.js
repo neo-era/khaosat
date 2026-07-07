@@ -86,8 +86,7 @@ export function requireAuth(requiredAction) {
     throw new Error('redirecting to login');  // stop further script
   }
   if (requiredAction && !can(u.role, requiredAction)) {
-    const home = isFullAccess(u.role) ? 'kpi.html' : 'index.html';
-    location.replace(home);
+    location.replace('index.html');
     throw new Error('redirecting due to missing permission');
   }
   return u;
@@ -95,6 +94,5 @@ export function requireAuth(requiredAction) {
 
 /** Trang mặc định sau khi login theo role. */
 export function defaultHomeFor(role) {
-  if (isFullAccess(role)) return 'kpi.html';
   return 'index.html';
 }
