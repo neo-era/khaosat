@@ -104,6 +104,24 @@ export const PHUONG_XA = [
   { ten: "Đông Thạnh", quan_cu: "Huyện Hóc Môn" },
   { ten: "Nhà Bè", quan_cu: "Huyện Nhà Bè" },
   { ten: "Hiệp Phước", quan_cu: "Huyện Nhà Bè" },
+
+  // Huyện Cần Giuộc, tỉnh Long An (bổ sung thủ công 2026-07-07)
+  { ten: "Cần Giuộc", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Long Thượng", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Long Hậu", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Long An", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Long Phụng", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Phước Lý", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Phước Vĩnh Đông", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Phước Vĩnh Tây", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Phước Hậu", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Đông Thạnh", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Thuận Thành", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Tân Kim", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Tân Tập", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Mỹ Lộc", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Trường Bình", quan_cu: "Huyện Cần Giuộc, Long An" },
+  { ten: "Long Định", quan_cu: "Huyện Cần Giuộc, Long An" },
 ];
 
 export const QUAN_LIST = [...new Set(PHUONG_XA.map(p => p.quan_cu))].sort();
@@ -1014,4 +1032,4 @@ export const TDK_LIST = [
   "Ấn Quan 4",
 ];
 
-// Tổng: 102 phường/xã, 22 quận cũ, 903 tủ điều khiển
+// Tổng: 102 phường/xã TP.HCM + 16 xã/TT Huyện Cần Giuộc Long An = 118 mục; 23 quận/huyện; 903 tủ điều khiển
