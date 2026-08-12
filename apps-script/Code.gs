@@ -1385,10 +1385,11 @@ function doPost(e) {
       case 'schedule_create': return jsonResponse(handleScheduleCreate(body));
       case 'schedule_update': return jsonResponse(handleScheduleUpdate(body));
       case 'schedule_delete': return jsonResponse(handleScheduleDelete(body));
-      case 'update':       return jsonResponse(handleUpdate(body));
-      case 'bulk_import':  return jsonResponse(handleBulkImport(body));
-      case 'export_raw':   return jsonResponse(handleExportRaw(body));
-      default:             return jsonResponse({ ok: false, error: 'unknown action: ' + action });
+      case 'update':        return jsonResponse(handleUpdate(body));
+      case 'bulk_import':   return jsonResponse(handleBulkImport(body));
+      case 'export_raw':    return jsonResponse(handleExportRaw(body));
+      case 'upload_photo':  return jsonResponse(handleUploadPhoto(body));
+      default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
     console.error(err);
@@ -1544,12 +1545,12 @@ function handleDelete(body) {
   if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };
   const { rowIndex, header, values } = found;
 
-  // Xoá ảnh Cloudinary
+  // Xoá ảnh (Drive hoặc Cloudinary tuỳ URL)
   const photoUrls = String(values[header.indexOf('Ảnh (URLs)')] || '').split('|').filter(u => u);
   const photoResults = [];
   photoUrls.forEach(url => {
     try {
-      const ok = destroyCloudinaryImage(url);
+      const ok = url.includes('drive.google.com') ? deleteDrivePhoto(url) : destroyCloudinaryImage(url);
       photoResults.push({ url: url, ok: ok });
     } catch (e) {
       photoResults.push({ url: url, ok: false, error: String(e) });
@@ -2139,6 +2140,63 @@ function extractCloudinaryPublicId(url) {
   // https://res.cloudinary.com/<cloud>/image/upload/[v123/]khaosat/tang_cuong_den/abc.jpg
   const m = url.match(/\/upload\/(?:v\d+\/)?(.+?)\.\w+(?:\?.*)?$/);
   return m ? m[1] : null;
+}
+
+// =====================================================================
+// GOOGLE DRIVE UPLOAD
+// =====================================================================
+
+/**
+ * Nhận base64 ảnh từ frontend → lưu vào Google Drive → trả về URL xem công khai.
+ * Script Properties cần: DRIVE_FOLDER_ID = ID thư mục Drive gốc.
+ */
+function handleUploadPhoto(body) {
+  const userInfo = verifyToken(body.token);
+  if (!userInfo) return { ok: false, error: 'Token không hợp lệ hoặc hết hạn' };
+
+  const base64 = body.base64;
+  const mime   = body.mimeType || 'image/jpeg';
+  const fname  = body.fileName  || ('photo_' + Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyyMMdd_HHmmss') + '.jpg');
+  const folder = (body.folder   || 'khaosat').replace(/^\/+|\/+$/g, '');
+
+  if (!base64) return { ok: false, error: 'Thiếu base64' };
+
+  const rootId = getProp('DRIVE_FOLDER_ID');
+  if (!rootId) return { ok: false, error: 'DRIVE_FOLDER_ID chưa cấu hình trong Script Properties' };
+
+  try {
+    let parent = DriveApp.getFolderById(rootId);
+    const parts = folder.split('/').filter(Boolean);
+    for (const part of parts) {
+      const iter = parent.getFoldersByName(part);
+      parent = iter.hasNext() ? iter.next() : parent.createFolder(part);
+    }
+    const bytes = Utilities.base64Decode(base64);
+    const blob  = Utilities.newBlob(bytes, mime, fname);
+    const file  = parent.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const fileId = file.getId();
+    Logger.log('Uploaded to Drive: ' + fileId + ' by ' + userInfo.username);
+    return { ok: true, url: 'https://drive.google.com/uc?export=view&id=' + fileId, fileId: fileId };
+  } catch (err) {
+    Logger.log('handleUploadPhoto error: ' + err);
+    return { ok: false, error: String(err) };
+  }
+}
+
+/** Xoá file Drive (chuyển vào thùng rác). URL format: .../uc?export=view&id=FILE_ID */
+function deleteDrivePhoto(url) {
+  try {
+    const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (!m) return false;
+    const file = DriveApp.getFileById(m[1]);
+    file.setTrashed(true);
+    Logger.log('Drive photo trashed: ' + m[1]);
+    return true;
+  } catch (e) {
+    Logger.log('deleteDrivePhoto error: ' + e);
+    return false;
+  }
 }
 
 /** Gọi Cloudinary destroy API. Return true nếu OK. */
