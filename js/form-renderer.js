@@ -10,10 +10,10 @@
 // - Role demo: disable nút Lưu + banner cảnh báo
 
 import { SCHEMAS } from './schemas.js';
-import { PHUONG_XA, QUAN_LIST, TDK_LIST } from './lookups.js';
+import { PHUONG_XA, QUAN_LIST, TDK_LIST, TDK_BY_PHUONG } from './lookups.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
-import { apiSubmit, apiUpdate, apiList, uploadImage, apiScheduleList, apiScheduleUpdate } from './api.js';
+import { apiSubmit, apiUpdate, apiList, uploadImageToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
 import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
 import { compressImage, createThumbnail } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
@@ -523,10 +523,13 @@ function renderImageBlock() {
   div.id = 'image-block';
   div.className = 'mt-4 pt-4 border-t';
   div.innerHTML = `
-    <label class="block text-sm font-medium text-gray-700 mb-2">📷 Ảnh hiện trường</label>
-    <label class="block w-full bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:bg-blue-100 mb-3" style="min-height:44px">
+    <div class="flex items-center justify-between mb-2">
+      <label class="text-sm font-medium text-gray-700">📷 Ảnh hiện trường</label>
+      <span id="photo-count" class="text-xs text-gray-500">0/3 ảnh</span>
+    </div>
+    <label id="photo-add-btn" class="block w-full bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:bg-blue-100 mb-3" style="min-height:44px">
       <input id="photo-input" type="file" accept="image/*" multiple capture="environment" class="hidden">
-      <span class="text-blue-700 font-medium">+ Chụp ảnh / Chọn từ thư viện</span>
+      <span class="text-blue-700 font-medium">+ Chụp ảnh / Chọn từ thư viện (tối đa 3 ảnh)</span>
     </label>
     <div id="photo-grid" class="grid grid-cols-3 gap-2"></div>
   `;
@@ -591,20 +594,39 @@ function updatePhuongOptions(quanVal) {
     phuongEl.appendChild(customOpt);
   }
 
-  // Handler cho custom
+  // Khi đổi quận → reset TĐK về toàn bộ danh sách
+  updateTdkList('');
+
+  // Handler cho phường change: custom input + filter TĐK
   phuongEl.onchange = () => {
-    if (phuongEl.value !== '__custom') return;
-    const custom = (prompt('Nhập tên phường/xã không có trong danh sách:') || '').trim();
-    if (custom) {
-      const opt = document.createElement('option');
-      opt.value = custom;
-      opt.textContent = custom + ' (tự nhập)';
-      phuongEl.insertBefore(opt, phuongEl.lastChild);
-      phuongEl.value = custom;
-    } else {
-      phuongEl.value = '';
+    if (phuongEl.value === '__custom') {
+      const custom = (prompt('Nhập tên phường/xã không có trong danh sách:') || '').trim();
+      if (custom) {
+        const opt = document.createElement('option');
+        opt.value = custom;
+        opt.textContent = custom + ' (tự nhập)';
+        phuongEl.insertBefore(opt, phuongEl.lastChild);
+        phuongEl.value = custom;
+      } else {
+        phuongEl.value = '';
+      }
     }
+    // Lọc TĐK theo phường đã chọn
+    updateTdkList(phuongEl.value !== '__custom' ? phuongEl.value : '');
   };
+}
+
+/** Cập nhật datalist TĐK theo phường. Nếu phường không có mapping → hiện toàn bộ. */
+function updateTdkList(phuong) {
+  const dl = document.getElementById('tdk-list');
+  if (!dl) return;
+  const list = (phuong && TDK_BY_PHUONG[phuong]) ? TDK_BY_PHUONG[phuong] : TDK_LIST;
+  dl.innerHTML = '';
+  for (const t of list) {
+    const opt = document.createElement('option');
+    opt.value = t;
+    dl.appendChild(opt);
+  }
 }
 
 // =====================================================================
@@ -696,13 +718,19 @@ function updateGpsUI() {
 // =====================================================================
 
 function handleFileSelect(e) {
-  const files = Array.from(e.target.files || []);
+  const remaining = 3 - state.photos.length;
+  if (remaining <= 0) {
+    showToast('Đã đủ 3 ảnh. Xoá 1 ảnh trước khi thêm.', 'warning');
+    e.target.value = '';
+    return;
+  }
+  const files = Array.from(e.target.files || []).slice(0, remaining);
   for (const file of files) {
     const item = { id: uuid(), file, status: 'pending', url: null, thumbnail: null, error: null };
     state.photos.push(item);
     uploadOne(item);
   }
-  e.target.value = '';  // cho phép chọn lại cùng file
+  e.target.value = '';
   renderPhotoGrid();
 }
 
@@ -712,7 +740,7 @@ async function uploadOne(item) {
     renderPhotoGrid();
     item.status = 'uploading';
     renderPhotoGrid();
-    item.url = await uploadImage(item.file, state.schemaKey);
+    item.url = await uploadImageToDrive(item.file, state.schemaKey);
     item.status = 'done';
   } catch (e) {
     item.status = 'error';
@@ -739,7 +767,7 @@ async function handleImageFieldSelect(e, fieldKey, fieldLabel) {
   try {
     state.imageUrls[fieldKey].thumbnail = await createThumbnail(file);
     renderImageFieldPreview(fieldKey);
-    const url = await uploadImage(file, 'banve/' + state.schemaKey);
+    const url = await uploadImageToDrive(file, 'banve/' + state.schemaKey);
     state.imageUrls[fieldKey] = { status: 'done', url, fileName: file.name, thumbnail: state.imageUrls[fieldKey].thumbnail };
   } catch (err) {
     state.imageUrls[fieldKey] = { status: 'error', url: null, fileName: file.name, thumbnail: null, error: err.message || 'Upload fail' };
@@ -812,6 +840,10 @@ function renderImageFieldPreview(fieldKey) {
 function renderPhotoGrid() {
   const grid = document.getElementById('photo-grid');
   if (!grid) return;
+  const countEl = document.getElementById('photo-count');
+  if (countEl) countEl.textContent = `${state.photos.length}/3 ảnh`;
+  const addBtn = document.getElementById('photo-add-btn');
+  if (addBtn) addBtn.classList.toggle('hidden', state.photos.length >= 3);
   grid.innerHTML = '';
   for (const p of state.photos) {
     const cell = document.createElement('div');

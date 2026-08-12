@@ -177,31 +177,38 @@ export async function apiResetPassword(username, new_password) {
   });
 }
 
-// ===== Cloudinary upload =====
+// ===== Google Drive upload (qua Apps Script) =====
+
+/** Chuyển Blob → base64 string (không kèm data: prefix). */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 /**
- * Upload 1 ảnh (đã nén) lên Cloudinary unsigned preset.
- * @param {File} file
- * @param {string} surveyType - subfolder
- * @returns {Promise<string>} secure_url
+ * Upload 1 ảnh (nén → base64 → Apps Script → Drive).
+ * @param {File|Blob} file
+ * @param {string} surveyType - subfolder (vd 'tang_cuong_den' hoặc 'banve/tang_cuong_den')
+ * @returns {Promise<string>} Drive view URL
  */
-export async function uploadImage(file, surveyType) {
-  const blob = await compressImage(file);
-  const formData = new FormData();
-  formData.append('file', blob, file.name.replace(/\.\w+$/, '.jpg'));
-  formData.append('upload_preset', CONFIG.cloudinaryPreset);
-  formData.append('folder', `khaosat/${surveyType}`);
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CONFIG.cloudinaryName}/image/upload`,
-    { method: 'POST', body: formData }
-  );
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('Cloudinary upload fail: ' + txt);
-  }
-  const json = await res.json();
-  if (!json.secure_url) throw new Error('Cloudinary không trả secure_url');
-  return json.secure_url;
+export async function uploadImageToDrive(file, surveyType) {
+  const compressed = await compressImage(file);
+  const base64 = await blobToBase64(compressed);
+  const ext = (compressed.type === 'image/png') ? 'png' : 'jpg';
+  const fileName = `${surveyType.replace('/', '_')}_${Date.now()}.${ext}`;
+  const res = await postJson({
+    action: 'upload_photo',
+    token: requireToken(),
+    base64,
+    mimeType: compressed.type || 'image/jpeg',
+    fileName,
+    folder: `khaosat/${surveyType}`
+  });
+  return res.url;
 }
 
 // ===== Offline queue sync =====
