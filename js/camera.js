@@ -60,6 +60,55 @@ function validateImageFile(file) {
   }
 }
 
+/**
+ * Ghi dải thông tin (thời gian + GPS + hạng mục) vào đáy ảnh.
+ * @param {Blob} blob       — ảnh đã nén (từ compressImage)
+ * @param {object} opts
+ *   @param {string} opts.time       — "dd/MM/yyyy HH:mm:ss"
+ *   @param {string} opts.location   — tọa độ GPS hoặc chuỗi rỗng
+ *   @param {string} opts.surveyName — tên hạng mục khảo sát
+ * @returns {Promise<Blob>} JPEG mới đã có dải thông tin
+ */
+export async function stampImage(blob, { time = '', location = '', surveyName = '' } = {}) {
+  const lines = [time, location, surveyName].filter(Boolean);
+  if (lines.length === 0) return blob;
+
+  const img     = await loadImage(blob);
+  const canvas  = document.createElement('canvas');
+  canvas.width  = img.width;
+  canvas.height = img.height;
+  const ctx     = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  const fontSize = Math.max(18, Math.round(img.width / 36));
+  const pad      = Math.round(fontSize * 0.55);
+  const lineH    = fontSize + Math.round(pad * 0.7);
+  const stripH   = lines.length * lineH + pad * 2;
+  const y0       = img.height - stripH;
+
+  // Dải nền tối
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.fillRect(0, y0, img.width, stripH);
+
+  // Chữ trắng
+  ctx.font         = `bold ${fontSize}px Arial, sans-serif`;
+  ctx.fillStyle    = '#ffffff';
+  ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur   = 3;
+  ctx.textBaseline = 'top';
+
+  lines.forEach((line, i) => {
+    ctx.fillText(line, pad, y0 + pad + i * lineH);
+  });
+
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      b => b ? resolve(b) : reject(new Error('Stamp failed')),
+      'image/jpeg', 0.88
+    )
+  );
+}
+
 function loadImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
