@@ -38,11 +38,6 @@
           style="min-height:44px">
       </div>
 
-      <div class="flex items-center">
-        <input id="remember" type="checkbox" checked class="w-5 h-5 rounded border-gray-300 text-blue-700 focus:ring-blue-500 mr-2">
-        <label for="remember" class="text-sm text-gray-700 select-none">Nhớ đăng nhập (8 tiếng)</label>
-      </div>
-
       <div id="error-msg" class="hidden text-red-700 text-sm bg-red-50 border border-red-200 rounded-lg p-3"></div>
 
       <button id="submit-btn" type="submit"
@@ -78,7 +73,6 @@
       const errEl = document.getElementById('error-msg');
       const usernameEl = document.getElementById('username');
       const passwordEl = document.getElementById('password');
-      const rememberEl = document.getElementById('remember');
 
       // Local lockout sau 5 fails / 5 phút (server cũng có rate limit riêng)
       const FAIL_KEY = 'login_fail_local';
@@ -150,8 +144,6 @@
 
         const username = usernameEl.value.trim();
         const password = passwordEl.value;
-        const remember = rememberEl.checked;
-
         if (!username || !password) {
           showError('Nhập tên đăng nhập và mật khẩu');
           return;
@@ -162,7 +154,7 @@
         btn.textContent = '⏳ Đang đăng nhập...';
 
         try {
-          const user = await login(username, password, remember);
+          const user = await login(username, password);
           clearFailState();
           location.replace(defaultHomeFor(user.role));
         } catch (err) {

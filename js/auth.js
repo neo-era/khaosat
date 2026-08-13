@@ -49,7 +49,7 @@ export function getAuthHeader() {
  * @returns {Promise<{username, full_name, role}>}
  * @throws Error với message hiển thị được cho user.
  */
-export async function login(username, password, remember = true) {
+export async function login(username, password) {
   const res = await apiLogin(username, password);
   saveToken({
     token: res.token,
@@ -57,7 +57,7 @@ export async function login(username, password, remember = true) {
     full_name: res.full_name,
     role: res.role,
     expires_at: res.expires_at
-  }, remember);
+  });
   return { username: res.username, full_name: res.full_name, role: res.role };
 }
 
