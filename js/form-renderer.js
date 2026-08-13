@@ -13,9 +13,9 @@ import { SCHEMAS } from './schemas.js';
 import { PHUONG_XA, QUAN_LIST, TDK_LIST, TDK_BY_PHUONG } from './lookups.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
-import { apiSubmit, apiUpdate, apiList, uploadImageToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
+import { apiSubmit, apiUpdate, apiList, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
 import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
-import { compressImage, createThumbnail } from './camera.js';
+import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
 import { showToast, escapeHtml, uuid, formatVnDate } from './utils.js';
 
@@ -740,7 +740,25 @@ async function uploadOne(item) {
     renderPhotoGrid();
     item.status = 'uploading';
     renderPhotoGrid();
-    item.url = await uploadImageToDrive(item.file, state.schemaKey);
+
+    // 1. Nén ảnh
+    const compressed = await compressImage(item.file);
+
+    // 2. Đóng dấu thông tin vào ảnh
+    const now = new Date();
+    const p = n => String(n).padStart(2, '0');
+    const time = `${p(now.getDate())}/${p(now.getMonth()+1)}/${now.getFullYear()} ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+    const location = state.gps.status === 'ok'
+      ? `GPS: ${state.gps.lat.toFixed(5)}, ${state.gps.lng.toFixed(5)}`
+      : '';
+    const stamped = await stampImage(compressed, {
+      time,
+      location,
+      surveyName: state.schema.name
+    });
+
+    // 3. Upload blob đã đóng dấu lên Drive
+    item.url = await uploadBlobToDrive(stamped, state.schemaKey);
     item.status = 'done';
   } catch (e) {
     item.status = 'error';

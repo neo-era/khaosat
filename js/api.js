@@ -197,14 +197,22 @@ function blobToBase64(blob) {
  */
 export async function uploadImageToDrive(file, surveyType) {
   const compressed = await compressImage(file);
-  const base64 = await blobToBase64(compressed);
-  const ext = (compressed.type === 'image/png') ? 'png' : 'jpg';
+  return uploadBlobToDrive(compressed, surveyType);
+}
+
+/**
+ * Upload Blob đã xử lý sẵn (nén + đóng dấu) lên Google Drive.
+ * Dùng sau khi stampImage() đã xử lý — bỏ qua bước compressImage.
+ */
+export async function uploadBlobToDrive(blob, surveyType) {
+  const base64 = await blobToBase64(blob);
+  const ext = (blob.type === 'image/png') ? 'png' : 'jpg';
   const fileName = `${surveyType.replace('/', '_')}_${Date.now()}.${ext}`;
   const res = await postJson({
     action: 'upload_photo',
     token: requireToken(),
     base64,
-    mimeType: compressed.type || 'image/jpeg',
+    mimeType: blob.type || 'image/jpeg',
     fileName,
     folder: `khaosat/${surveyType}`
   });
