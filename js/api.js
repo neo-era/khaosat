@@ -83,6 +83,16 @@ export async function apiReport({ types, from, to, usernames, status, groupBy } 
   });
 }
 
+/** Nhập hàng loạt bản ghi lịch sử từ Excel (chỉ admin/user). */
+export async function apiBulkImport(type, rows) {
+  return postJson({
+    action: 'bulk_import',
+    token: requireToken(),
+    type,
+    rows
+  });
+}
+
 /** Xuất raw rows theo đúng cấu trúc cột của từng sheet — cho Vùng D báo cáo. */
 export async function apiExportRaw({ types, from, to, usernames, status } = {}) {
   return postJson({

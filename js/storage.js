@@ -79,23 +79,21 @@ export function getSubmittedToday() {
 }
 
 // ===== Auth token =====
-// Lưu vào localStorage (remember=true) hoặc sessionStorage (remember=false).
+// Lưu vào sessionStorage — mất khi đóng tab (không nhớ qua session).
 // Schema: { token, username, full_name, role, expires_at }
 
 const TOKEN_KEY = 'auth';
 
-export function saveToken(obj, remember) {
-  const storage = remember ? localStorage : sessionStorage;
-  const other = remember ? sessionStorage : localStorage;
+export function saveToken(obj) {
   try {
-    storage.setItem(TOKEN_KEY, JSON.stringify(obj));
-    other.removeItem(TOKEN_KEY);  // tránh trùng
+    sessionStorage.setItem(TOKEN_KEY, JSON.stringify(obj));
+    localStorage.removeItem(TOKEN_KEY);  // dọn token cũ nếu còn
   } catch {}
 }
 
 export function getToken() {
   try {
-    const s = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+    const s = sessionStorage.getItem(TOKEN_KEY);
     if (!s) return null;
     const obj = JSON.parse(s);
     if (!obj || !obj.token) return null;

@@ -1,6 +1,6 @@
 // js/report.js — Trang báo cáo: vùng A-D aggregate + Vùng E xuất dữ liệu thô.
 
-import { apiReport, apiUsers, apiList, apiExportRaw } from './api.js';
+import { apiReport, apiUsers, apiList, apiExportRaw, apiUpdate, apiBulkImport } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
 
@@ -729,4 +729,182 @@ async function exportRawCsv() {
   }
 
   if (downloaded === 0) alert('Không có dữ liệu để xuất theo bộ lọc đã chọn');
+}
+
+// =====================================================================
+// VÙNG F — Nhập dữ liệu từ file Excel
+// =====================================================================
+
+const IMPORT_SHEET_MAP = {
+  tang_cuong_den: 'Tang cuong den', ngam_hoa: 'Ngam Hoa', thay_den: 'Thay den',
+  hkn: '4, HKN', tc_noi: '5. TCNoi', cap_luon_can: '6, Cap luon can',
+  tc_ngam: '7. TCNgam', thay_can: '8. Thay Can', thay_tru: '9. Thay thế tru',
+  choa_den: '10.choa den', nap_tru: '11. Nap tru', vo_tu: '12, Vo tu',
+  tc_den_kc_xa: '13 Tăng cường đèn kc xa', decal_so_tru: '14 Decal số trụ', nang_mong: '15. Nâng móng'
+};
+
+// Các cột server-managed: không gửi khi update
+const IMPORT_SKIP = ['STT', 'Submitted At', 'Username', 'Người khảo sát',
+  'ngày khảo sát', 'Ngày khảo sát', 'Deleted At', 'Deleted By', 'User Agent'];
+
+let importState = { type: '', inserts: [], updates: [] };
+
+export function initImport() {
+  const typeSel = document.getElementById('import-type');
+  if (!typeSel) return;
+  for (const k of SCHEMA_KEYS) {
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = SCHEMAS[k].icon + ' ' + SCHEMAS[k].name;
+    typeSel.appendChild(opt);
+  }
+  document.getElementById('btn-import-preview').onclick = previewImport;
+  document.getElementById('btn-import-run').onclick = runImport;
+}
+
+function serializeCell(v) {
+  if (v instanceof Date) {
+    const p = n => String(n).padStart(2, '0');
+    return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())} ${p(v.getHours())}:${p(v.getMinutes())}:${p(v.getSeconds())}`;
+  }
+  return (v === undefined || v === null) ? '' : String(v);
+}
+
+async function previewImport() {
+  const XLSX = window.XLSX;
+  if (!XLSX) { showToast('SheetJS chưa tải', 'error'); return; }
+
+  const fileEl = document.getElementById('import-file');
+  const file = fileEl.files[0];
+  if (!file) { showToast('Chọn file Excel trước', 'warning'); return; }
+
+  const type = document.getElementById('import-type').value;
+  const expectedSheet = IMPORT_SHEET_MAP[type];
+
+  let wb;
+  try {
+    const data = await file.arrayBuffer();
+    wb = XLSX.read(data, { type: 'array', cellDates: true });
+  } catch (e) {
+    showToast('Không đọc được file: ' + e.message, 'error');
+    return;
+  }
+
+  const sheetName = wb.SheetNames.find(n => n === expectedSheet) || wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+  if (aoa.length < 2) {
+    showToast('File không có dữ liệu (cần ít nhất 1 dòng header + 1 dòng dữ liệu)', 'warning');
+    return;
+  }
+
+  const headers = aoa[0].map(String);
+  const objRows = aoa.slice(1)
+    .map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = serializeCell(row[i]); });
+      return obj;
+    })
+    .filter(obj => Object.values(obj).some(v => v !== ''));
+
+  const inserts = [], updates = [];
+  for (const row of objRows) {
+    const sttNum = Number(row['STT']);
+    if (row['STT'] !== '' && !isNaN(sttNum) && sttNum > 0) {
+      updates.push({ stt: sttNum, row });
+    } else {
+      inserts.push({ row });
+    }
+  }
+
+  importState = { type, inserts, updates };
+
+  const schema = SCHEMAS[type];
+  document.getElementById('import-summary').innerHTML =
+    `Loại: <strong>${escapeHtml(schema.icon + ' ' + schema.name)}</strong> · ` +
+    `Tab: <strong>${escapeHtml(sheetName)}</strong> · ` +
+    `Tổng: <strong>${objRows.length}</strong> dòng · ` +
+    `<span class="text-green-700">➕ ${inserts.length} thêm mới</span> · ` +
+    `<span class="text-orange-600">✏️ ${updates.length} cập nhật</span>`;
+
+  const previewCols = headers.slice(0, 7);
+  let html = '<thead class="bg-gray-100"><tr>' +
+    '<th class="px-2 py-1 text-left text-xs text-gray-600 font-medium whitespace-nowrap">Trạng thái</th>';
+  previewCols.forEach(h => {
+    html += `<th class="px-2 py-1 text-left text-xs text-gray-600 font-medium whitespace-nowrap">${escapeHtml(h)}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  objRows.slice(0, 20).forEach(row => {
+    const sttNum = Number(row['STT']);
+    const isUpdate = row['STT'] !== '' && !isNaN(sttNum) && sttNum > 0;
+    const badge = isUpdate
+      ? `<span class="bg-orange-100 text-orange-700 px-1 rounded text-xs whitespace-nowrap">✏️ #${row['STT']}</span>`
+      : `<span class="bg-green-100 text-green-700 px-1 rounded text-xs">➕ Mới</span>`;
+    html += '<tr class="border-t border-gray-100">';
+    html += `<td class="px-2 py-1">${badge}</td>`;
+    previewCols.forEach(h => {
+      const v = String(row[h] || '');
+      html += `<td class="px-2 py-1 text-xs text-gray-700 max-w-[110px] truncate" title="${escapeHtml(v)}">${escapeHtml(v.substring(0, 40))}</td>`;
+    });
+    html += '</tr>';
+  });
+  if (objRows.length > 20) {
+    html += `<tr><td colspan="${previewCols.length + 1}" class="px-2 py-1 text-xs text-gray-400 text-center italic">... và ${objRows.length - 20} dòng nữa</td></tr>`;
+  }
+  html += '</tbody>';
+
+  document.getElementById('import-table').innerHTML = html;
+  document.getElementById('import-preview').classList.remove('hidden');
+  document.getElementById('btn-import-run').classList.remove('hidden');
+}
+
+async function runImport() {
+  const { type, inserts, updates } = importState;
+  if (!type || (!inserts.length && !updates.length)) {
+    showToast('Không có dữ liệu để import', 'warning');
+    return;
+  }
+  if (!confirm(`Xác nhận import?\n• ${inserts.length} dòng thêm mới\n• ${updates.length} dòng cập nhật\n\nThao tác không thể hoàn tác!`)) return;
+
+  const btn = document.getElementById('btn-import-run');
+  const progress = document.getElementById('import-progress');
+  btn.disabled = true;
+  progress.classList.remove('hidden');
+
+  let successInsert = 0, successUpdate = 0, failedUpdate = 0;
+
+  try {
+    if (inserts.length > 0) {
+      progress.textContent = `Đang thêm ${inserts.length} bản ghi mới...`;
+      const res = await apiBulkImport(type, inserts.map(i => i.row));
+      successInsert = res.inserted || inserts.length;
+    }
+
+    for (let i = 0; i < updates.length; i++) {
+      const { stt, row } = updates[i];
+      progress.textContent = `Đang cập nhật ${i + 1}/${updates.length} (STT #${stt})...`;
+      try {
+        const cleanRow = Object.assign({}, row);
+        IMPORT_SKIP.forEach(k => delete cleanRow[k]);
+        await apiUpdate(type, stt, cleanRow, undefined);
+        successUpdate++;
+      } catch (e) {
+        failedUpdate++;
+        console.error('Update STT', stt, 'lỗi:', e.message);
+      }
+    }
+
+    const failNote = failedUpdate > 0 ? `, ${failedUpdate} cập nhật thất bại` : '';
+    progress.textContent = `Hoàn tất: +${successInsert} mới, ✏️ ${successUpdate} cập nhật${failNote}`;
+    showToast(
+      `Import xong: +${successInsert} mới, ${successUpdate} cập nhật` + (failedUpdate > 0 ? `, ${failedUpdate} lỗi` : ''),
+      failedUpdate > 0 ? 'warning' : 'success', 4000
+    );
+  } catch (e) {
+    progress.textContent = 'Lỗi: ' + e.message;
+    showToast('Import thất bại: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
