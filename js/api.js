@@ -3,6 +3,7 @@
 import { CONFIG } from './config.js';
 import { compressImage } from './camera.js';
 import { getToken, getQueue, removeFromQueue } from './storage.js';
+import { showToast } from './utils.js';
 
 /**
  * POST text/plain (tránh CORS preflight). Trả parsed JSON.
@@ -209,6 +210,9 @@ function blobToBase64(blob) {
   });
 }
 
+/** Chỉ cảnh báo 1 lần mỗi phiên khi phải dùng đường dự phòng Cloudinary. */
+let driveFallbackWarned = false;
+
 /**
  * Upload 1 ảnh (nén → Drive, dự phòng Cloudinary).
  * @param {File|Blob} file
@@ -256,7 +260,13 @@ export async function uploadBlobToDrive(blob, surveyType) {
   } catch (err) {
     // Chưa đăng nhập thì Cloudinary cũng vô nghĩa — ném lỗi luôn
     if (/chưa đăng nhập/i.test(err.message || '')) throw err;
+
     console.warn('[upload] Drive lỗi → chuyển sang Cloudinary:', err.message);
+    // Báo 1 lần/phiên: fallback im lặng dễ khiến Drive hỏng cả tháng không ai biết
+    if (!driveFallbackWarned) {
+      driveFallbackWarned = true;
+      showToast('Drive lỗi — ảnh đang lưu tạm trên Cloudinary', 'warning', 5000);
+    }
     return uploadToCloudinary(blob, folder, fileName);
   }
 }
