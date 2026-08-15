@@ -814,6 +814,21 @@ signature = SHA1("public_id={pid}&timestamp={ts}" + api_secret)
 - `public_id` parse từ URL Cloudinary đã lưu (vd `https://res.cloudinary.com/X/image/upload/v123/khaosat/tang_cuong_den/abc.jpg` → public_id = `khaosat/tang_cuong_den/abc`).
 - Lỗi xoá ảnh (ảnh không tồn tại, network…) → **không chặn soft-delete row**, chỉ log và tiếp tục. Quan trọng hơn là dữ liệu chữ được đánh dấu xoá.
 
+### Lưu ảnh: Drive là chính, Cloudinary là dự phòng (cập nhật 2026-08-15)
+
+Ảnh đi qua `uploadBlobToDrive()` trong `js/api.js`:
+
+1. **Google Drive** (chính) — POST `action=upload_photo` → Apps Script ghi vào thư mục con của `DRIVE_FOLDER_ID`, share ANYONE_WITH_LINK, trả `https://drive.google.com/uc?export=view&id=<ID>`.
+2. **Cloudinary** (dự phòng, tự động) — nếu bước 1 ném lỗi (hay gặp: script chưa được cấp scope `drive`, hoặc `DRIVE_FOLDER_ID` chưa set), client upload thẳng lên Cloudinary bằng unsigned preset. **Không cần OAuth**, nên KTV ngoài hiện trường không bị kẹt khi backend trục trặc. Ghi `console.warn` để còn lần ra được.
+
+Hệ thống hiểu cả 2 dạng URL: `handleDelete` trong Code.gs phân nhánh theo `url.includes('drive.google.com')` → `deleteDrivePhoto()` (trash file) hoặc `destroyCloudinaryImage()` (Admin API).
+
+> ⚠️ Xoá ảnh Cloudinary cần `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET` trong Script Properties. Thiếu thì soft-delete vẫn chạy nhưng **ảnh còn nguyên trên Cloudinary** (chỉ log cảnh báo).
+
+**Thư mục riêng theo loại KS**: schema khai `driveFolder`. Dấu `/` ở đầu = đặt ở gốc, ngang hàng `khaosat` (vd `thao_go_bang_ron` dùng `/Bangron`). Không khai thì mặc định `khaosat/<type>`.
+
+**Chống tạo trùng thư mục**: form gửi nhiều ảnh song song, nếu thư mục chưa tồn tại thì các request cùng tạo → Drive sinh nhiều thư mục trùng tên. `getOrCreateFolderPath()` trong Code.gs dùng `LockService` + cache ID 6 tiếng để chặn.
+
 ### Code upload trong `js/api.js`
 ```javascript
 async function uploadImage(file, surveyType) {

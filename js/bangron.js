@@ -439,8 +439,34 @@ function renderModeVanBan() {
 // =====================================================================
 
 /**
- * Ảnh Drive không trả header CORS → html2canvas vẽ ra ô trắng.
- * Tải bytes qua Apps Script rồi gán data: URL cho từng <img>.
+ * Chuyển 1 URL ảnh thành data: URL.
+ *
+ * Cách 1 — fetch thẳng từ trình duyệt: nhanh nhất, dùng được khi host trả header
+ * CORS (Cloudinary luôn có; Drive có ở response cuối nhưng chuỗi redirect 303 có
+ * thể làm trình duyệt từ chối).
+ * Cách 2 — đi vòng qua Apps Script (`photo_base64`): chậm hơn nhưng chắc chắn.
+ */
+async function fetchAsDataUrl(url) {
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    if (!blob.type.startsWith('image/')) throw new Error('không phải ảnh');
+    return await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(new Error('đọc blob lỗi'));
+      fr.readAsDataURL(blob);
+    });
+  } catch (err) {
+    const res = await apiPhotoBase64(url);
+    return `data:${res.mimeType || 'image/jpeg'};base64,${res.base64}`;
+  }
+}
+
+/**
+ * Nội tuyến toàn bộ ảnh trong tài liệu thành data: URL trước khi html2canvas chụp.
+ * Không làm bước này thì ảnh có thể ra ô trắng trong file PDF.
  * @returns {Promise<Array<{el:HTMLImageElement, orig:string}>>} danh sách để khôi phục sau
  */
 async function inlinePhotos(btn) {
@@ -458,8 +484,7 @@ async function inlinePhotos(btn) {
       img.src = photoCache.get(url);
     } else {
       try {
-        const res = await apiPhotoBase64(url);
-        const dataUrl = `data:${res.mimeType || 'image/jpeg'};base64,${res.base64}`;
+        const dataUrl = await fetchAsDataUrl(url);
         photoCache.set(url, dataUrl);
         img.src = dataUrl;
       } catch (err) {
