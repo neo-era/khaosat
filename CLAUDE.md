@@ -814,6 +814,23 @@ signature = SHA1("public_id={pid}&timestamp={ts}" + api_secret)
 - `public_id` parse từ URL Cloudinary đã lưu (vd `https://res.cloudinary.com/X/image/upload/v123/khaosat/tang_cuong_den/abc.jpg` → public_id = `khaosat/tang_cuong_den/abc`).
 - Lỗi xoá ảnh (ảnh không tồn tại, network…) → **không chặn soft-delete row**, chỉ log và tiếp tục. Quan trọng hơn là dữ liệu chữ được đánh dấu xoá.
 
+### ⚠️ OAuth scope trong `apps-script/appsscript.json` — đừng khai thừa
+
+Khi manifest khai `oauthScopes` tường minh, script chỉ chạy được với **đúng** bộ đó và **phải được cấp đủ**. Khai thừa 1 scope chưa cấp → **toàn bộ** lệnh Google API trong script bị từ chối, kể cả những scope đã cấp. Triệu chứng dễ nhầm: lỗi báo thiếu quyền Drive trong khi tài khoản đã cấp Drive.
+
+Bộ tối thiểu đang dùng — khớp với quyền đã cấp cho project:
+
+| Scope | Dùng cho |
+|---|---|
+| `spreadsheets` | mọi thao tác đọc/ghi sheet |
+| `drive` | upload/xoá ảnh, backup |
+| `script.external_request` | `UrlFetchApp` (Cloudinary destroy, tải ảnh) |
+| `userinfo.email` | định danh người chạy |
+
+**Chưa khai** (khai vào là phải cấp quyền lại từ đầu):
+- `https://mail.google.com/` — chỉ cần nếu bật email thông báo (`notifyAdmins`). Không khai thì `GmailApp.sendEmail` lỗi, nhưng đã bọc try/catch nên **không chặn submit**. Đây là restricted scope, màn hình xin quyền hiện cảnh báo nặng ("đọc, soạn, xoá vĩnh viễn toàn bộ email") → chỉ thêm khi thật sự cần.
+- `script.scriptapp` — chỉ cần cho `setupBackupTrigger()` (backup tự động hàng tuần).
+
 ### Lưu ảnh: Drive là chính, Cloudinary là dự phòng (cập nhật 2026-08-15)
 
 Ảnh đi qua `uploadBlobToDrive()` trong `js/api.js`:
