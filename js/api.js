@@ -210,10 +210,10 @@ function blobToBase64(blob) {
 }
 
 /**
- * Upload 1 ảnh (nén → base64 → Apps Script → Drive).
+ * Upload 1 ảnh (nén → Drive, dự phòng Cloudinary).
  * @param {File|Blob} file
- * @param {string} surveyType - subfolder (vd 'tang_cuong_den' hoặc 'banve/tang_cuong_den')
- * @returns {Promise<string>} Drive view URL
+ * @param {string} surveyType - thư mục con (vd 'tang_cuong_den' hoặc 'banve/tang_cuong_den')
+ * @returns {Promise<string>} URL ảnh công khai
  */
 export async function uploadImageToDrive(file, surveyType) {
   const compressed = await compressImage(file);
@@ -221,28 +221,68 @@ export async function uploadImageToDrive(file, surveyType) {
 }
 
 /**
- * Upload Blob đã xử lý sẵn (nén + đóng dấu) lên Google Drive.
- * Dùng sau khi stampImage() đã xử lý — bỏ qua bước compressImage.
+ * Upload Blob đã xử lý sẵn (nén + đóng dấu).
+ *
+ * Ưu tiên Google Drive qua Apps Script. Nếu Drive lỗi (hay gặp nhất: script chưa
+ * được cấp quyền Drive, hoặc DRIVE_FOLDER_ID chưa cấu hình) thì tự chuyển sang
+ * Cloudinary unsigned upload — chạy thẳng từ trình duyệt, không cần quyền OAuth.
+ * Nhờ vậy KTV ngoài hiện trường không bị kẹt khi backend trục trặc.
+ *
+ * Cả 2 dạng URL đều được phần còn lại của hệ thống hiểu: Code.gs khi xoá bản ghi
+ * tự phân biệt `drive.google.com` (trash file) và Cloudinary (destroy API).
  *
  * @param {Blob} blob
  * @param {string} surveyType - thư mục con trong `khaosat/` (vd 'tang_cuong_den').
- *   Bắt đầu bằng '/' để đặt thư mục ở gốc Drive, NGANG HÀNG với `khaosat`
- *   (vd '/Bangron' → thư mục `Bangron` riêng, không nằm trong `khaosat`).
+ *   Bắt đầu bằng '/' để đặt thư mục ở gốc, NGANG HÀNG với `khaosat`
+ *   (vd '/Bangron' → thư mục `Bangron` riêng).
+ * @returns {Promise<string>} URL ảnh công khai
  */
 export async function uploadBlobToDrive(blob, surveyType) {
-  const base64 = await blobToBase64(blob);
   const ext = (blob.type === 'image/png') ? 'png' : 'jpg';
   const folder = surveyType.startsWith('/') ? surveyType.slice(1) : `khaosat/${surveyType}`;
   const fileName = `${surveyType.replace(/^\//, '').replace(/\//g, '_')}_${Date.now()}.${ext}`;
-  const res = await postJson({
-    action: 'upload_photo',
-    token: requireToken(),
-    base64,
-    mimeType: blob.type || 'image/jpeg',
-    fileName,
-    folder
-  });
-  return res.url;
+
+  try {
+    const base64 = await blobToBase64(blob);
+    const res = await postJson({
+      action: 'upload_photo',
+      token: requireToken(),
+      base64,
+      mimeType: blob.type || 'image/jpeg',
+      fileName,
+      folder
+    });
+    return res.url;
+  } catch (err) {
+    // Chưa đăng nhập thì Cloudinary cũng vô nghĩa — ném lỗi luôn
+    if (/chưa đăng nhập/i.test(err.message || '')) throw err;
+    console.warn('[upload] Drive lỗi → chuyển sang Cloudinary:', err.message);
+    return uploadToCloudinary(blob, folder, fileName);
+  }
+}
+
+/**
+ * Upload trực tiếp lên Cloudinary bằng unsigned preset (không cần token/OAuth).
+ * @returns {Promise<string>} secure_url
+ */
+async function uploadToCloudinary(blob, folder, fileName) {
+  if (!CONFIG.cloudinaryName || !CONFIG.cloudinaryPreset) {
+    throw new Error('Upload thất bại: Drive lỗi và Cloudinary chưa cấu hình');
+  }
+  const fd = new FormData();
+  fd.append('file', blob, fileName);
+  fd.append('upload_preset', CONFIG.cloudinaryPreset);
+  fd.append('folder', folder);
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CONFIG.cloudinaryName}/image/upload`,
+    { method: 'POST', body: fd }
+  );
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.secure_url) {
+    throw new Error('Cloudinary: ' + (json.error?.message || 'HTTP ' + res.status));
+  }
+  return json.secure_url;
 }
 
 // ===== Offline queue sync =====

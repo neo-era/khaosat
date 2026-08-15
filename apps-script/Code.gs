@@ -2153,6 +2153,52 @@ function extractCloudinaryPublicId(url) {
 // =====================================================================
 
 /**
+ * TEST QUYỀN DRIVE — admin chạy tay trong Apps Script Editor.
+ *
+ * Vì sao cần: validateSheets() chỉ đọc Google Sheets, KHÔNG chạm Drive, nên nó
+ * chạy OK cả khi quyền Drive chưa được cấp. Hàm này gọi thẳng DriveApp để:
+ *   1. Ép hiện màn hình "Cần cấp quyền" có dòng về Google Drive.
+ *   2. Báo rõ DRIVE_FOLDER_ID trỏ vào thư mục nào, có ghi được không.
+ *
+ * Chạy xong thấy ok:true nghĩa là quyền Drive đã đủ → sang bước Deploy new version.
+ */
+function testDriveAccess() {
+  const rootId = getProp('DRIVE_FOLDER_ID');
+  if (!rootId) {
+    const msg = 'CHƯA SET DRIVE_FOLDER_ID trong Script Properties';
+    Logger.log(msg);
+    return { ok: false, error: msg };
+  }
+
+  const result = { ok: false, drive_folder_id: rootId };
+  try {
+    const root = DriveApp.getFolderById(rootId);
+    result.folder_name = root.getName();
+    result.folder_url = root.getUrl();
+
+    // Thử tạo + xoá 1 file rỗng để chắc chắn có quyền GHI, không chỉ quyền đọc
+    const probe = root.createFile('__test_quyen_ghi.txt', 'test', MimeType.PLAIN_TEXT);
+    probe.setTrashed(true);
+    result.can_write = true;
+
+    // Liệt kê thư mục con để đối chiếu với cấu trúc mong đợi
+    const subs = [];
+    const it = root.getFolders();
+    while (it.hasNext()) subs.push(it.next().getName());
+    result.subfolders = subs;
+    result.has_Bangron = subs.indexOf('Bangron') >= 0;
+
+    result.ok = true;
+    result.message = 'Quyền Drive OK. Tiếp theo: Deploy → Manage deployments → New version.';
+  } catch (err) {
+    result.error = String(err);
+    result.message = 'Chưa có quyền Drive. Chạy lại hàm này và bấm "Xem lại quyền" → Cho phép.';
+  }
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+/**
  * Nhận base64 ảnh từ frontend → lưu vào Google Drive → trả về URL xem công khai.
  * Script Properties cần: DRIVE_FOLDER_ID = ID thư mục Drive gốc.
  */
