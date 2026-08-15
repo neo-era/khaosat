@@ -187,6 +187,16 @@ export async function apiResetPassword(username, new_password) {
   });
 }
 
+/**
+ * Đọc 1 ảnh Drive về dạng base64 (đi vòng qua Apps Script).
+ * Dùng khi cần nội tuyến ảnh vào canvas/PDF — ảnh Drive không có header CORS
+ * nên html2canvas vẽ ra ô trắng nếu lấy trực tiếp bằng URL.
+ * @returns {Promise<{ok:boolean, mimeType:string, base64:string}>}
+ */
+export async function apiPhotoBase64(url) {
+  return postJson({ action: 'photo_base64', token: requireToken(), url });
+}
+
 // ===== Google Drive upload (qua Apps Script) =====
 
 /** Chuyển Blob → base64 string (không kèm data: prefix). */
@@ -213,18 +223,24 @@ export async function uploadImageToDrive(file, surveyType) {
 /**
  * Upload Blob đã xử lý sẵn (nén + đóng dấu) lên Google Drive.
  * Dùng sau khi stampImage() đã xử lý — bỏ qua bước compressImage.
+ *
+ * @param {Blob} blob
+ * @param {string} surveyType - thư mục con trong `khaosat/` (vd 'tang_cuong_den').
+ *   Bắt đầu bằng '/' để đặt thư mục ở gốc Drive, NGANG HÀNG với `khaosat`
+ *   (vd '/Bangron' → thư mục `Bangron` riêng, không nằm trong `khaosat`).
  */
 export async function uploadBlobToDrive(blob, surveyType) {
   const base64 = await blobToBase64(blob);
   const ext = (blob.type === 'image/png') ? 'png' : 'jpg';
-  const fileName = `${surveyType.replace('/', '_')}_${Date.now()}.${ext}`;
+  const folder = surveyType.startsWith('/') ? surveyType.slice(1) : `khaosat/${surveyType}`;
+  const fileName = `${surveyType.replace(/^\//, '').replace(/\//g, '_')}_${Date.now()}.${ext}`;
   const res = await postJson({
     action: 'upload_photo',
     token: requireToken(),
     base64,
     mimeType: blob.type || 'image/jpeg',
     fileName,
-    folder: `khaosat/${surveyType}`
+    folder
   });
   return res.url;
 }

@@ -121,7 +121,7 @@
           <h2 class="font-semibold">3. Trang chủ — chọn loại khảo sát</h2>
         </div>
         <div class="p-4 space-y-3 text-sm">
-          <p>Trang chủ hiện lưới <strong>15 loại khảo sát</strong>. Nhấn vào loại cần nhập:</p>
+          <p>Trang chủ hiện lưới <strong>16 loại khảo sát</strong>. Nhấn vào loại cần nhập:</p>
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             <div class="border rounded-lg p-2 text-center">💡 Tăng cường đèn</div>
             <div class="border rounded-lg p-2 text-center">🔌 Ngầm hóa</div>
@@ -138,7 +138,12 @@
             <div class="border rounded-lg p-2 text-center">🛣️ TC đèn kc xa</div>
             <div class="border rounded-lg p-2 text-center">🔢 Decal số trụ</div>
             <div class="border rounded-lg p-2 text-center">⛏️ Nâng móng</div>
+            <div class="border rounded-lg p-2 text-center">🚩 Tháo gỡ băng rôn</div>
           </div>
+          <p class="text-xs text-gray-600">
+            Riêng <strong>🚩 Tháo gỡ băng rôn</strong> cho chụp <strong>tối đa 5 ảnh</strong> (các loại khác 3 ảnh),
+            và không có ô "Tủ điều khiển".
+          </p>
         </div>
       </div>
 
@@ -385,6 +390,42 @@
               <li><strong>Xuất CSV</strong>: mỗi loại = 1 file .csv riêng, mở được bằng Excel.</li>
               <li>Phù hợp để nộp hồ sơ hoặc đối chiếu với file Excel gốc.</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Báo cáo băng rôn -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="bao-cao-bang-ron">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🚩</span>
+          <h2 class="font-semibold">3b. Báo cáo tháo gỡ băng rôn (bangron.html)</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm text-gray-700">
+          <p>Menu → <strong>"Báo cáo băng rôn"</strong>. Đây là báo cáo <strong>kèm hình ảnh hiện trường</strong>,
+             dành riêng cho loại khảo sát <em>Tháo gỡ băng rôn</em> — thay cho cách báo bằng Zalo.</p>
+
+          <ol class="list-decimal list-inside space-y-1 text-xs">
+            <li>Chọn khoảng ngày, quận/phường, KTV, loại quảng cáo → nhấn <strong>"Tải dữ liệu"</strong>.</li>
+            <li>Chọn kiểu trình bày:
+              <strong>🖼️ Báo cáo hình ảnh</strong> (bảng tổng hợp + ảnh từng tuyến) hoặc
+              <strong>📋 Văn bản hành chính</strong> (có quốc hiệu, chữ ký, phụ lục ảnh).</li>
+            <li>Bấm vào các ô <span class="border-b border-dotted border-gray-500">gạch chấm</span> để điền số văn bản, người ký, nhận xét.</li>
+            <li>Xuất file.</li>
+          </ol>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div class="border rounded-lg p-2">
+              <p class="font-medium mb-1">🖨️ In / Lưu PDF</p>
+              <p class="text-gray-600">Nên dùng nút này. Trong hộp thoại in chọn máy in <em>"Save as PDF"</em>. Chữ nét, ảnh chắc chắn hiện.</p>
+            </div>
+            <div class="border rounded-lg p-2">
+              <p class="font-medium mb-1">📄 Xuất PDF</p>
+              <p class="text-gray-600">Tự tạo file PDF. Chờ lâu hơn vì phải tải từng ảnh về; chọn khoảng ngày ngắn nếu nhiều ảnh.</p>
+            </div>
+            <div class="border rounded-lg p-2">
+              <p class="font-medium mb-1">📊 Xuất Excel</p>
+              <p class="text-gray-600">Bảng dữ liệu + link 5 ảnh mỗi dòng + dòng tổng cộng số tấm.</p>
+            </div>
           </div>
         </div>
       </div>

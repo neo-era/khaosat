@@ -27,7 +27,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 - Trường "Người khảo sát" auto-fill từ `full_name` của user đã đăng nhập (readonly).
 
 ### Phạm vi
-- **15 loại khảo sát** (mỗi loại là 1 form độc lập, ghi vào 1 sheet riêng trong Google Sheets).
+- **16 loại khảo sát** (mỗi loại là 1 form độc lập, ghi vào 1 sheet riêng trong Google Sheets).
 - Mỗi bản ghi có thể đính kèm **nhiều ảnh hiện trường**.
 - Có **lấy GPS tự động** (cho các form khảo sát tuyến).
 - **Có đăng nhập** — username + password lưu trong sheet `taikhoan` của cùng file Google Sheets. Mật khẩu hash SHA-256 + salt. **4 role** (`admin`/`user`/`user1`/`demo`) với 3 mức quyền (xem bảng dưới).
@@ -71,12 +71,14 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 ├── README.md                  ← hướng dẫn người dùng (KTV) ngắn gọn
 ├── SETUP.md                   ← hướng dẫn setup Google Sheets, Apps Script, Cloudinary
 ├── login.html                 ← trang đăng nhập (entry point cho cả KTV và admin)
-├── index.html                 ← trang chủ: chọn 1 trong 15 loại khảo sát (cần đăng nhập)
+├── index.html                 ← trang chủ: chọn 1 trong 16 loại khảo sát (cần đăng nhập)
 ├── form.html                  ← trang form chung, render động theo ?type=...
 ├── recent.html                ← trang xem các bản ghi gần đây trong ngày (KTV xem của mình)
 ├── manage.html                ← trang quản lý bản ghi (admin/user — tìm/sửa/xoá)
 ├── kpi.html                   ← trang KPI tháng (CHỈ admin/user truy cập được)
 ├── report.html                ← trang báo cáo tổng hợp theo loại KS / thời gian / KTV (admin/user)
+├── bbht.html                  ← biên bản hiện trường (admin/user)
+├── bangron.html               ← báo cáo riêng loại "Tháo gỡ băng rôn", kèm ảnh (admin/user) — mục 15b
 ├── manifest.json              ← PWA manifest
 ├── sw.js                      ← Service Worker (cache shell + offline)
 ├── assets/
@@ -84,13 +86,15 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 │   └── icon-512.png
 ├── js/
 │   ├── config.js              ← các URL/key cấu hình (KHÔNG commit secret thật, dùng placeholder)
-│   ├── schemas.js             ← 15 schema form (đối tượng JS, export default)
+│   ├── schemas.js             ← 16 schema form (đối tượng JS, export default)
 │   ├── lookups.js             ← dữ liệu Phường/Xã (102 mục) và TĐK (903 mục) cho dropdown/autocomplete
 │   ├── form-renderer.js       ← engine render form từ schema
 │   ├── api.js                 ← gọi Apps Script + upload Cloudinary
 │   ├── auth.js                ← login, session token, route-guard, đọc user hiện tại
 │   ├── kpi.js                 ← tính KPI tháng từ data, render bảng/biểu đồ
 │   ├── report.js              ← tổng hợp báo cáo + render bảng/biểu đồ
+│   ├── bbht.js                ← logic biên bản hiện trường
+│   ├── bangron.js             ← logic báo cáo băng rôn (2 kiểu trình bày + In/PDF/Excel)
 │   ├── manage.js              ← logic trang manage.html (list/delete/restore)
 │   ├── gps.js                 ← lấy tọa độ GPS
 │   ├── camera.js              ← xử lý ảnh (compress trước khi upload)
@@ -104,9 +108,9 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 
 ---
 
-## 4. Danh sách 15 loại khảo sát (CHỐT)
+## 4. Danh sách 16 loại khảo sát (CHỐT)
 
-15 sheet này lấy từ file `khao_sat_tang_cuong_den.xlsx` mà user đã cung cấp. **Tên sheet trong Google Sheets phải đặt CHÍNH XÁC như cột "Sheet name"** — không sửa, không bỏ khoảng trắng, không thay dấu.
+15 sheet đầu lấy từ file `khao_sat_tang_cuong_den.xlsx` mà user đã cung cấp; loại thứ 16 (`thao_go_bang_ron`) là nghiệp vụ bổ sung 2026-08-15, không có trong file Excel gốc. **Tên sheet trong Google Sheets phải đặt CHÍNH XÁC như cột "Sheet name"** — không sửa, không bỏ khoảng trắng, không thay dấu.
 
 | # | `key` (dùng trong code) | Sheet name (trong Google Sheets) | Số cột | Hàng header trong file gốc |
 |---|---|---|---|---|
@@ -125,10 +129,11 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 | 13 | `tc_den_kc_xa` | `13 Tăng cường đèn kc xa` | 16 | 1 |
 | 14 | `decal_so_tru` | `14 Decal số trụ` | 12 | 1 |
 | 15 | `nang_mong` | `15. Nâng móng` | 15 | 1 |
+| 16 | `thao_go_bang_ron` | `16. Thao go bang ron` | 13 | — (sheet mới, không từ Excel) |
 
-> **Cách tạo nhanh**: KHÔNG cần thao tác tay tạo 15 sheet. Sau khi tạo file Google Sheets trống và bind Apps Script, admin chạy hàm `initSheets()` 1 lần — script tự tạo đủ 15 sheet với header chính xác + 2 sheet phụ + conditional format. Chi tiết ở mục 7.
+> **Cách tạo nhanh**: KHÔNG cần thao tác tay tạo 16 sheet. Sau khi tạo file Google Sheets trống và bind Apps Script, admin chạy hàm `initSheets()` 1 lần — script tự tạo đủ 16 sheet với header chính xác + 2 sheet phụ + conditional format. Hàm idempotent: chạy lại chỉ tạo sheet còn thiếu, không đụng dữ liệu cũ. Chi tiết ở mục 7.
 
-**Cột bổ sung cho TẤT CẢ 15 sheet** (thêm vào cuối, sau cột cuối cùng của header gốc):
+**Cột bổ sung cho TẤT CẢ 16 sheet** (thêm vào cuối, sau cột cuối cùng của header gốc):
 - `Ảnh (URLs)` — chuỗi các URL Cloudinary, phân tách bằng `|`
 - `Submitted At` — timestamp ISO khi Apps Script nhận request (server-side, không phải client time)
 - `User Agent` — để debug khi cần
@@ -208,7 +213,7 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 
 | Mức | Trường lưu | Loại hình khảo sát |
 |---|---|---|
-| **GPS đầy đủ** (lat+lng+link) | `kinh độ`, `vĩ độ`, `Link Google Map` | `tang_cuong_den` |
+| **GPS đầy đủ** (lat+lng+link) | `kinh độ`, `vĩ độ`, `Link Google Map` | `tang_cuong_den`, `thao_go_bang_ron` |
 | **GPS tọa độ** (lat+lng, không có cột link) | `kinh độ`, `vĩ độ` | `ngam_hoa` ⚠️ |
 | **GPS link-only** (chỉ lưu link) | `link` (link_gmap) | `thay_den`, `tc_noi`, `cap_luon_can`, `tc_ngam`, `thay_can`, `thay_tru`, `choa_den`, `nap_tru`, `vo_tu`, `tc_den_kc_xa`, `decal_so_tru`, `nang_mong` |
 | **Không có GPS** | — | `hkn` |
@@ -533,6 +538,28 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 | 14 | Ghi chú | ghi_chu | textarea | No |
 | 15 | link | link_gmap | link_gmap | — |
 
+**5.16 `thao_go_bang_ron` — "16. Thao go bang ron"** *(bổ sung 2026-08-15)*
+
+Nghiệp vụ tháo gỡ băng rôn / quảng cáo trái phép treo trên trụ đèn chiếu sáng. Trước đây nhân viên báo qua Zalo (chùm ảnh + 1 dòng "Tháo băng rôn đường X, phường Y: N tấm"); nay nhập thẳng vào app. **Không có trường `Tủ điều khiển`** — nghiệp vụ này gắn với tuyến đường, không gắn với TĐK.
+
+| Order | Label | Field key | Type | Required | Note |
+|---|---|---|---|---|---|
+| 1 | STT | stt | stt_auto | — | |
+| 2 | Tuyến đường | tuyen_duong | text | **Yes** | |
+| 3 | Quận | quan | quan | **Yes** | |
+| 4 | Phường | phuong | phuong | **Yes** | lọc theo Quận |
+| 5 | Vị trí | vi_tri | text | No | đoạn đường, vd: "từ số 63 đến số 120" |
+| 6 | Loại quảng cáo | loai_qc | select | **Yes** | options: `["Băng rôn", "Cờ phướn", "Poster/áp phích", "Hỗn hợp"]` |
+| 7 | Số lượng | so_luong | number | **Yes** | số tấm đã tháo |
+| 8 | Người khảo sát | nguoi_ks | text | **Yes** | auto-fill readonly |
+| 9 | Ngày khảo sát | ngay_ks | date_auto | — | |
+| 10 | kinh độ | lng | gps_lng | — | |
+| 11 | vĩ độ | lat | gps_lat | — | |
+| 12 | Ghi chú | ghi_chu | textarea | No | |
+| 13 | Link Google Map | link_gmap | link_gmap | — | auto từ GPS |
+
+> **Ảnh: tối đa 5** (các loại khác là 3). Khai bằng khoá `maxPhotos: 5` trong `js/schemas.js`; `js/form-renderer.js` đọc `state.schema.maxPhotos || 3` nên 15 loại cũ giữ nguyên mức 3. Ảnh vẫn lưu chung 1 ô `Ảnh (URLs)` phân tách bằng `|` — backend không đổi.
+
 ---
 
 ## 6. Dữ liệu lookup (Quận/Phường, TĐK)
@@ -583,6 +610,7 @@ export const TDK_LIST = [
   - `action: "kpi"` — body `{ token, month: "2026-05" }` → trả KPI tất cả KTV trong tháng. Chỉ `admin`/`user`.
   - `action: "report"` — body `{ token, types?: [...], from?, to?, usernames?: [...], status?, groupBy? }` → trả aggregation đa chiều (3 vùng A/B/C) cho trang báo cáo. Chỉ `admin`/`user`. Chi tiết ở mục 15.
   - `action: "export_raw"` — body `{ token, types: [...], from?, to?, usernames?: [], status? }` → trả raw rows theo đúng thứ tự cột của từng sheet (array of arrays) để xuất Excel/CSV. Không aggregate. Chỉ `admin`/`user`. Chi tiết ở mục 15.
+  - `action: "photo_base64"` — body `{ token, url }` → đọc 1 ảnh Drive trả `{ ok, mimeType, base64 }`. Chỉ cần token hợp lệ. **Lý do tồn tại**: `drive.google.com/uc?export=view` không trả header CORS nên `html2canvas` vẽ ra ô trắng; trang báo cáo phải nội tuyến ảnh thành `data:` URL trước khi capture. Xem mục 15b.
 - Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
@@ -1144,6 +1172,34 @@ Frontend nhận `results` → SheetJS tạo workbook: mỗi `result` = 1 workshe
 - `export_raw` cho 1 loại KS nhẹ hơn nhiều (chỉ scan 1 sheet) — nên khuyến khích user chọn lọc loại trước khi xuất.
 - Nếu sau này dữ liệu vượt 50k rows, cân nhắc thêm sheet `Index` cache rebuild incremental khi mỗi submit. Chưa làm ngay.
 - **Tuỳ chọn**: trang `report.html` có thể đọc trực tiếp từ Google Sheets **CSV publish URL** (xem mục 16) thay vì gọi Apps Script — nhanh hơn vì không qua serverless. Nhược điểm: data public, không filter server-side, cần parse 15 CSV. Mặc định KHÔNG dùng cách này; chỉ bật khi Apps Script chậm quá.
+
+---
+
+## 15b. Trang báo cáo băng rôn `bangron.html` (admin / user) — bổ sung 2026-08-15
+
+### Mục đích
+Báo cáo **riêng** cho loại KS thứ 16 (`thao_go_bang_ron`), có **kèm hình ảnh hiện trường** — thứ mà `report.html` (chỉ aggregate số) và `bbht.html` (chỉ bảng khối lượng) đều không làm được. Thay cho cách báo qua Zalo hiện nay.
+
+### Quyền truy cập
+`requireAuth('report')` → chỉ `admin`, `user`. `user1`/`demo` bị đẩy về `index.html`.
+
+### Bộ lọc
+Từ ngày → đến ngày (mặc định đầu tháng → hôm nay), Quận → Phường (cascade), KTV (chỉ admin/user), Loại quảng cáo. Gọi `apiList({ type:'thao_go_bang_ron', from:from+'T00:00:00', to:to+'T23:59:59', status:'active' })` rồi lọc tiếp phía client.
+
+> ⚠️ **Phải kèm `T00:00:00` / `T23:59:59`**: `handleList` trong Code.gs làm `new Date(body.to)` — truyền `'2026-08-15'` trần sẽ thành nửa đêm UTC, mất trọn ngày cuối. (`bbht.js` hiện vẫn còn lỗi này, sửa sau.)
+
+### Hai kiểu trình bày (nút chuyển, không mất nội dung đã gõ)
+1. **Báo cáo hình ảnh** (mặc định) — tiêu đề + bảng tổng hợp (có dòng TỔNG CỘNG số tấm) + mỗi lượt tháo gỡ là 1 khối: dòng tiêu đề `N. Tháo băng rôn đường X (đoạn ...), phường Y: Z tấm` (đúng câu chữ nhân viên đang dùng) + lưới ảnh 3 cột.
+2. **Văn bản hành chính** — quốc hiệu/tiêu ngữ, số văn bản, I. Thời gian–địa bàn, II. Kết quả (bảng), III. Nhận xét–kiến nghị, khối chữ ký 2 bên, rồi **PHỤ LỤC ẢNH** sang trang mới.
+
+Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã gõ được cache theo `id` nên đổi kiểu trình bày không mất.
+
+### Ba đường xuất
+| Nút | Cơ chế | Ghi chú |
+|---|---|---|
+| 🖨️ In / Lưu PDF | `window.print()` + CSS `@media print` (A4, `page-break-inside:avoid` cho mỗi khối ảnh) | **Đường khuyến nghị** — ảnh luôn hiện, chữ nét và chọn được |
+| 📄 Xuất PDF | html2canvas → JPEG → jsPDF cắt trang A4 | Phải chạy `inlinePhotos()` trước: tải ảnh qua `action=photo_base64` → gán `data:` URL, có cache + hiện tiến trình. Ảnh lỗi → ô xám, không chặn cả file |
+| 📊 Xuất Excel | SheetJS, 1 sheet | Cột theo đúng `HEADERS.thao_go_bang_ron` + `Username`, `Submitted At`, `Ảnh 1..5` tách riêng, cuối cùng là dòng TỔNG CỘNG |
 
 ---
 

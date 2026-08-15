@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Báo cáo tháo gỡ băng rôn — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    /* Khung tài liệu A4 — Times cho giống văn bản nhà nước */
+    #report-preview {
+      background: #fff;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 12pt;
+      line-height: 1.45;
+      padding: 15mm 15mm;
+      box-sizing: border-box;
+      color: #000;
+    }
+
+    /* Ô chỉnh sửa trực tiếp trong tài liệu */
+    .ed {
+      display: inline;
+      border-bottom: 1px dotted #888;
+      outline: none;
+      cursor: text;
+      min-width: 40px;
+    }
+    .ed:empty::before { content: attr(data-ph); color: #aaa; font-style: italic; }
+    .ed:focus { background: #fffde7; border-bottom-color: #1d4ed8; }
+
+    /* Bảng tổng hợp */
+    .br-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 6px; }
+    .br-table th {
+      background: #e8edf4; border: 1px solid #555; padding: 4px 5px;
+      text-align: center; font-weight: bold;
+    }
+    .br-table td { border: 1px solid #999; padding: 3px 5px; vertical-align: top; }
+    .br-table tr.br-total td { background: #f3f4f6; font-weight: bold; }
+
+    /* Khối ảnh theo tuyến đường */
+    .br-block { margin-top: 12px; page-break-inside: avoid; break-inside: avoid; }
+    .br-block-title { font-size: 11pt; font-weight: bold; margin-bottom: 4px; }
+    .br-photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .br-photo-grid img {
+      width: 100%; height: 150px; object-fit: cover;
+      border: 1px solid #999; border-radius: 3px; display: block;
+      background: #f3f4f6;
+    }
+    .br-photo-cap { font-size: 8pt; color: #555; text-align: center; margin-top: 1px; }
+    .br-no-photo { font-size: 10pt; font-style: italic; color: #777; }
+
+    /* CSS khi in — quyết định chất lượng bản in/PDF trình duyệt */
+    @media print {
+      @page { size: A4; margin: 12mm; }
+      body { background: #fff; }
+      .no-print, header, #filter-card, #loading { display: none !important; }
+      main { padding: 0 !important; max-width: none !important; }
+      .overflow-x-auto { overflow: visible !important; }
+      #report-preview {
+        max-width: none; width: auto; padding: 0;
+        box-shadow: none; border-radius: 0;
+      }
+      .br-block { page-break-inside: avoid; break-inside: avoid; }
+      .br-photo-grid img { height: 55mm; }
+      .br-table { page-break-inside: auto; }
+      .br-table tr { page-break-inside: avoid; }
+      .br-table thead { display: table-header-group; }
+      .ed { border-bottom: none; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Header app -->
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-7xl mx-auto px-3 py-2 flex items-center gap-2">
+      <a href="index.html"
+         class="text-xl flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
+         style="min-height:44px; min-width:44px;">←</a>
+      <span class="text-sm font-bold text-blue-900 flex-1">🚩 Báo cáo tháo gỡ băng rôn</span>
+      <span id="header-user" class="text-xs text-gray-500 hidden sm:block truncate max-w-[180px]"></span>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-3 py-4 pb-24">
+
+    <!-- ===== Bộ lọc ===== -->
+    <div id="filter-card" class="bg-white rounded-xl shadow-sm p-4 mb-4">
+      <h2 class="text-sm font-semibold text-gray-700 mb-3">🔍 Bộ lọc dữ liệu</h2>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <div>
+          <label class="block text-xs text-gray-600 mb-1 font-medium">Từ ngày *</label>
+          <input id="filter-from" type="date"
+                 class="w-full px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 style="min-height:44px">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1 font-medium">Đến ngày *</label>
+          <input id="filter-to" type="date"
+                 class="w-full px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 style="min-height:44px">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1 font-medium">Quận/Huyện</label>
+          <select id="filter-quan"
+                  class="w-full px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style="min-height:44px">
+            <option value="">-- Tất cả --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1 font-medium">Phường/Xã</label>
+          <select id="filter-phuong"
+                  class="w-full px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style="min-height:44px">
+            <option value="">-- Tất cả --</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div id="ktv-wrap">
+          <label class="block text-xs text-gray-600 mb-1 font-medium">Người thực hiện (KTV)</label>
+          <select id="filter-ktv"
+                  class="w-full px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style="min-height:44px">
+            <option value="">-- Tất cả KTV --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1 font-medium">Loại quảng cáo</label>
+          <select id="filter-loai"
+                  class="w-full px-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style="min-height:44px">
+            <option value="">-- Tất cả --</option>
+            <option value="Băng rôn">Băng rôn</option>
+            <option value="Cờ phướn">Cờ phướn</option>
+            <option value="Poster/áp phích">Poster/áp phích</option>
+            <option value="Hỗn hợp">Hỗn hợp</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="btn-load"
+              class="bg-blue-700 hover:bg-blue-800 text-white px-6 font-medium rounded-lg transition"
+              style="min-height:44px">
+        🔄 Tải dữ liệu
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden text-center py-10 text-gray-500">
+      <div class="inline-block w-10 h-10 border-4 border-blue-200 border-t-blue-700 rounded-full animate-spin mb-3"></div>
+      <p class="text-sm">Đang tải dữ liệu từ Google Sheets...</p>
+      <p class="text-xs text-gray-400 mt-1">Có thể mất 5–10 giây nếu dữ liệu nhiều</p>
+    </div>
+
+    <!-- ===== Preview wrap ===== -->
+    <div id="preview-wrap" class="hidden">
+
+      <!-- Thanh chế độ xem + xuất file -->
+      <div class="bg-white rounded-xl shadow-sm p-3 mb-3 no-print">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <span class="text-xs font-medium text-gray-600 mr-1">Kiểu trình bày:</span>
+          <button id="btn-mode-anh"
+                  class="text-sm px-4 rounded-lg font-medium transition border"
+                  style="min-height:44px">🖼️ Báo cáo hình ảnh</button>
+          <button id="btn-mode-vb"
+                  class="text-sm px-4 rounded-lg font-medium transition border"
+                  style="min-height:44px">📋 Văn bản hành chính</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btn-print"
+                  class="bg-blue-700 hover:bg-blue-800 text-white px-5 text-sm font-medium rounded-lg transition"
+                  style="min-height:44px">🖨️ In / Lưu PDF</button>
+          <button id="btn-pdf"
+                  class="bg-green-700 hover:bg-green-800 text-white px-5 text-sm font-medium rounded-lg transition"
+                  style="min-height:44px">📄 Xuất PDF</button>
+          <button id="btn-xlsx"
+                  class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 text-sm font-medium rounded-lg transition"
+                  style="min-height:44px">📊 Xuất Excel</button>
+          <span id="data-summary" class="text-xs font-semibold text-blue-800 bg-blue-50 px-3 py-1 rounded-full ml-auto"></span>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">
+          💡 Click vào ô <span class="border-b border-dotted border-gray-500">có gạch chấm</span> để sửa trực tiếp.
+          Nút <b>In / Lưu PDF</b> cho chất lượng chữ tốt nhất (chọn "Save as PDF" trong hộp thoại in).
+        </p>
+      </div>
+
+      <!-- Scroll ngang trên mobile cho tài liệu A4 rộng -->
+      <div class="overflow-x-auto rounded-xl shadow-md">
+        <div id="report-preview"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initBangron } from './js/bangron.js';
+    import { initHelp } from './js/help.js';
+
+    const user = requireAuth('report');
+    document.getElementById('header-user').textContent = user.full_name + ' · ' + user.role;
+    initBangron(user);
+    initHelp('admin');
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
