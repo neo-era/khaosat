@@ -49,10 +49,11 @@ const SHEET_MAP = {
   vo_tu:          '12, Vo tu',
   tc_den_kc_xa:   '13 Tăng cường đèn kc xa',
   decal_so_tru:   '14 Decal số trụ',
-  nang_mong:      '15. Nâng móng'
+  nang_mong:      '15. Nâng móng',
+  thao_go_bang_ron: '16. Thao go bang ron'
 };
 
-/** Header gốc của 15 loại khảo sát (NGUYÊN VĂN tiếng Việt, đồng bộ schemas.js + CLAUDE.md mục 5). */
+/** Header gốc của 16 loại khảo sát (NGUYÊN VĂN tiếng Việt, đồng bộ schemas.js + CLAUDE.md mục 5). */
 const HEADERS = {
   tang_cuong_den: [
     'STT','Hẻm','Tuyến đường','Quận','Phường','Tủ điều khiển',
@@ -127,6 +128,10 @@ const HEADERS = {
     'Độ cao nâng','Số lượng','Quy cách móng',
     'Chiều cao nắp cửa trụ (từ mặt bích đến nắp cửa trụ)',
     'Người khảo sát','Ngày khảo sát','Ghi chú','link'
+  ],
+  thao_go_bang_ron: [
+    'STT','Tuyến đường','Quận','Phường','Vị trí','Loại quảng cáo','Số lượng',
+    'Người khảo sát','Ngày khảo sát','kinh độ','vĩ độ','Ghi chú','Link Google Map'
   ]
 };
 
@@ -142,7 +147,7 @@ const NO_GPS_TYPES = ['hkn'];
  *   GPS_LINK_TYPES    : chỉ lưu link Google Map (cột 'link')
  *   NO_GPS_TYPES      : không có GPS, bỏ qua khi tính pct_gps
  */
-const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa'];
+const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa', 'thao_go_bang_ron'];
 const GPS_LINK_TYPES    = [
   'thay_den', 'tc_noi', 'cap_luon_can', 'tc_ngam', 'thay_can',
   'thay_tru', 'choa_den', 'nap_tru', 'vo_tu',
@@ -1389,6 +1394,7 @@ function doPost(e) {
       case 'bulk_import':   return jsonResponse(handleBulkImport(body));
       case 'export_raw':    return jsonResponse(handleExportRaw(body));
       case 'upload_photo':  return jsonResponse(handleUploadPhoto(body));
+      case 'photo_base64':  return jsonResponse(handlePhotoBase64(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -2165,12 +2171,7 @@ function handleUploadPhoto(body) {
   if (!rootId) return { ok: false, error: 'DRIVE_FOLDER_ID chưa cấu hình trong Script Properties' };
 
   try {
-    let parent = DriveApp.getFolderById(rootId);
-    const parts = folder.split('/').filter(Boolean);
-    for (const part of parts) {
-      const iter = parent.getFoldersByName(part);
-      parent = iter.hasNext() ? iter.next() : parent.createFolder(part);
-    }
+    const parent = getOrCreateFolderPath(rootId, folder);
     const bytes = Utilities.base64Decode(base64);
     const blob  = Utilities.newBlob(bytes, mime, fname);
     const file  = parent.createFile(blob);
@@ -2181,6 +2182,89 @@ function handleUploadPhoto(body) {
   } catch (err) {
     Logger.log('handleUploadPhoto error: ' + err);
     return { ok: false, error: String(err) };
+  }
+}
+
+/**
+ * Lấy (hoặc tạo) thư mục theo đường dẫn 'a/b/c' tính từ thư mục gốc rootId.
+ *
+ * Dùng LockService: form gửi nhiều ảnh SONG SONG, nếu không khoá thì 5 request
+ * cùng thấy thư mục chưa tồn tại và cùng tạo → Drive sinh 5 thư mục TRÙNG TÊN
+ * (Drive cho phép trùng tên), ảnh nằm rải rác mỗi nơi một ít.
+ * Kết quả được cache 6 tiếng theo đường dẫn để đỡ quét lại.
+ */
+function getOrCreateFolderPath(rootId, path) {
+  const cache = CacheService.getScriptCache();
+  const key = 'drivefolder_' + rootId + '_' + path;
+  const cachedId = cache.get(key);
+  if (cachedId) {
+    try { return DriveApp.getFolderById(cachedId); } catch (e) { cache.remove(key); }
+  }
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) {
+    Logger.log('getOrCreateFolderPath: không lấy được lock, chạy không khoá');
+  }
+  try {
+    let parent = DriveApp.getFolderById(rootId);
+    const parts = path.split('/').filter(Boolean);
+    for (const part of parts) {
+      const iter = parent.getFoldersByName(part);
+      parent = iter.hasNext() ? iter.next() : parent.createFolder(part);
+    }
+    cache.put(key, parent.getId(), 21600);  // 6 tiếng
+    return parent;
+  } finally {
+    try { lock.releaseLock(); } catch (e) { /* chưa lấy được lock */ }
+  }
+}
+
+/**
+ * Đọc 1 ảnh Drive trả về base64 — dùng cho trang báo cáo khi cần nội tuyến ảnh
+ * vào file PDF (html2canvas không vẽ được ảnh Drive vì thiếu header CORS).
+ * Body: { token, url }  →  { ok, mimeType, base64 }
+ */
+function handlePhotoBase64(body) {
+  const auth = verifyToken(body.token);
+  if (!auth) return { ok: false, error: 'Token không hợp lệ hoặc hết hạn' };
+
+  const url = String(body.url || '');
+  const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) return { ok: false, error: 'URL không phải Google Drive' };
+
+  const fileId = m[1];
+
+  // Cách 1: đọc trực tiếp qua DriveApp (nhanh, ổn định nhất)
+  try {
+    const blob = DriveApp.getFileById(fileId).getBlob();
+    return {
+      ok: true,
+      mimeType: blob.getContentType() || 'image/jpeg',
+      base64: Utilities.base64Encode(blob.getBytes())
+    };
+  } catch (err) {
+    Logger.log('handlePhotoBase64 DriveApp fail: ' + err);
+  }
+
+  // Cách 2 (dự phòng): tải qua HTTP. Ảnh đã share ANYONE_WITH_LINK nên đọc được
+  // mà không cần quyền Drive — dùng khi script chưa được cấp lại quyền.
+  try {
+    const res = UrlFetchApp.fetch(
+      'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1600',
+      { muteHttpExceptions: true, followRedirects: true });
+    if (res.getResponseCode() === 200) {
+      const blob = res.getBlob();
+      return {
+        ok: true,
+        mimeType: blob.getContentType() || 'image/jpeg',
+        base64: Utilities.base64Encode(blob.getBytes()),
+        via: 'http'
+      };
+    }
+    return { ok: false, error: 'Không tải được ảnh (HTTP ' + res.getResponseCode() + ')' };
+  } catch (err2) {
+    Logger.log('handlePhotoBase64 HTTP fail: ' + err2);
+    return { ok: false, error: String(err2) };
   }
 }
 

@@ -357,10 +357,35 @@ export const SCHEMAS = {
       { label: 'Ghi chú',                                                        key: 'ghi_chu',       type: 'textarea', required: false },
       { label: 'link',                                                           key: 'link_gmap',     type: 'link_gmap' }
     ]
+  },
+
+  // ===== 5.16 Tháo gỡ băng rôn (13 cột) =====
+  thao_go_bang_ron: {
+    name: 'Tháo gỡ băng rôn',
+    sheet: '16. Thao go bang ron',
+    icon: '🚩',
+    maxPhotos: 5,
+    driveFolder: '/Bangron',   // thư mục Drive riêng, ngang hàng với 'khaosat'
+    fields: [
+      { label: 'STT',                    key: 'stt',          type: 'stt_auto' },
+      { label: 'Tuyến đường',            key: 'tuyen_duong',  type: 'text',     required: true },
+      { label: 'Quận',                   key: 'quan',         type: 'quan',     required: true },
+      { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
+      { label: 'Vị trí',                 key: 'vi_tri',       type: 'text',     required: false, hint: 'Đoạn đường, vd: từ số 63 đến số 120' },
+      { label: 'Loại quảng cáo',         key: 'loai_qc',      type: 'select',   required: true,
+        options: ['Băng rôn', 'Cờ phướn', 'Poster/áp phích', 'Hỗn hợp'] },
+      { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true,  hint: 'tấm' },
+      { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
+      { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
+      { label: 'kinh độ',                key: 'lng',          type: 'gps_lng' },
+      { label: 'vĩ độ',                  key: 'lat',          type: 'gps_lat' },
+      { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
+      { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' }
+    ]
   }
 };
 
-/** Trả mảng các key (= 15 loại). Dùng cho trang chủ render grid. */
+/** Trả mảng các key (= 16 loại). Dùng cho trang chủ render grid. */
 export const SCHEMA_KEYS = Object.keys(SCHEMAS);
 
 /** Lookup nhanh tên hiển thị + icon theo key. */

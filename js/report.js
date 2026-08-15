@@ -11,7 +11,8 @@ const state = {
 const TYPE_COLORS = [
   '#1d4ed8', '#dc2626', '#16a34a', '#ea580c', '#9333ea',
   '#0891b2', '#ca8a04', '#65a30d', '#be185d', '#0d9488',
-  '#7c3aed', '#b45309', '#059669', '#c026d3', '#4f46e5'
+  '#7c3aed', '#b45309', '#059669', '#c026d3', '#4f46e5',
+  '#be123c'
 ];
 
 export async function initReport() {
@@ -740,7 +741,8 @@ const IMPORT_SHEET_MAP = {
   hkn: '4, HKN', tc_noi: '5. TCNoi', cap_luon_can: '6, Cap luon can',
   tc_ngam: '7. TCNgam', thay_can: '8. Thay Can', thay_tru: '9. Thay thế tru',
   choa_den: '10.choa den', nap_tru: '11. Nap tru', vo_tu: '12, Vo tu',
-  tc_den_kc_xa: '13 Tăng cường đèn kc xa', decal_so_tru: '14 Decal số trụ', nang_mong: '15. Nâng móng'
+  tc_den_kc_xa: '13 Tăng cường đèn kc xa', decal_so_tru: '14 Decal số trụ', nang_mong: '15. Nâng móng',
+  thao_go_bang_ron: '16. Thao go bang ron'
 };
 
 // Các cột server-managed: không gửi khi update

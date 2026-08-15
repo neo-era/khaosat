@@ -18,6 +18,7 @@ const BBHT_MAP = {
   tc_den_kc_xa:   { label: 'Tăng cường đèn kc xa',  dvt: 'Cái', field: 'Số lượng'         },
   decal_so_tru:   { label: 'Decal số trụ',           dvt: 'Cái', field: 'Số lượng'         },
   nang_mong:      { label: 'Nâng móng trụ',          dvt: 'Cái', field: 'Số lượng'         },
+  thao_go_bang_ron: { label: 'Tháo gỡ băng rôn',     dvt: 'Tấm', field: 'Số lượng'         },
 };
 
 const ALL_TYPES = Object.keys(BBHT_MAP);
