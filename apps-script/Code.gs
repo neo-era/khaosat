@@ -386,6 +386,49 @@ function getPwdPepper() {
   return getProp('PWD_PEPPER') || getSalt();
 }
 
+/**
+ * Sinh và cài đặt PWD_PEPPER — admin chạy tay 1 lần, TRƯỚC resetAllPasswords().
+ *
+ * Chạy hàm này thay vì tự sinh chuỗi ở nơi khác: chuỗi bí mật không đi qua
+ * clipboard, không qua Console trình duyệt, không qua tin nhắn — sinh ra và nằm
+ * luôn trong Script Properties.
+ *
+ * An toàn: từ chối nếu PWD_PEPPER đã tồn tại (ghi đè = làm hỏng mọi mật khẩu).
+ */
+function taoPwdPepper() {
+  const props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty('PWD_PEPPER')) {
+    const msg = 'PWD_PEPPER đã có sẵn — KHÔNG ghi đè. Ghi đè sẽ làm mọi mật khẩu ' +
+                'ngừng hoạt động. Thật sự muốn đổi thì xoá tay trong Thuộc tính tập lệnh, ' +
+                'chạy lại hàm này, rồi BẮT BUỘC chạy resetAllPasswords().';
+    Logger.log(msg);
+    return { ok: false, error: msg };
+  }
+
+  // Đếm mật khẩu đã tạo — nếu đã có thì đặt pepper bây giờ sẽ làm chúng hỏng
+  const soMatKhauDaCo = Object.keys(props.getProperties())
+    .filter(k => k.indexOf('CRED_') === 0).length;
+
+  // 64 ký tự hex từ 2 UUID — ngẫu nhiên tốt hơn Math.random()
+  const pepper = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  props.setProperty('PWD_PEPPER', pepper);
+
+  const result = {
+    ok: true,
+    da_tao: true,
+    do_dai: pepper.length,
+    so_mat_khau_da_co: soMatKhauDaCo,
+    buoc_tiep_theo: soMatKhauDaCo > 0
+      ? '⚠️ Đã có ' + soMatKhauDaCo + ' mật khẩu tạo trước đó — chúng vừa ngừng hoạt động. ' +
+        'PHẢI chạy resetAllPasswords() ngay để đặt lại.'
+      : 'Xong. Giờ chạy resetAllPasswords() để đặt mật khẩu tạm cho mọi người.'
+  };
+  // KHÔNG log giá trị pepper — nó nằm trong Thuộc tính tập lệnh là đủ
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
 function credKey(username) {
   return 'CRED_' + String(username).trim().toLowerCase();
 }
