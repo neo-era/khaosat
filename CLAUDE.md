@@ -71,6 +71,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 ├── README.md                  ← hướng dẫn người dùng (KTV) ngắn gọn
 ├── SETUP.md                   ← hướng dẫn setup Google Sheets, Apps Script, Cloudinary
 ├── login.html                 ← trang đăng nhập (entry point cho cả KTV và admin)
+├── doi-mat-khau.html          ← đổi mật khẩu; bắt buộc khi admin vừa đặt mật khẩu tạm
 ├── index.html                 ← trang chủ: chọn 1 trong 16 loại khảo sát (cần đăng nhập)
 ├── form.html                  ← trang form chung, render động theo ?type=...
 ├── recent.html                ← trang xem các bản ghi gần đây trong ngày (KTV xem của mình)
@@ -91,6 +92,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 │   ├── form-renderer.js       ← engine render form từ schema
 │   ├── api.js                 ← gọi Apps Script + upload Cloudinary
 │   ├── auth.js                ← login, session token, route-guard, đọc user hiện tại
+│   ├── change-password.js     ← logic trang đổi mật khẩu
 │   ├── kpi.js                 ← tính KPI tháng từ data, render bảng/biểu đồ
 │   ├── report.js              ← tổng hợp báo cáo + render bảng/biểu đồ
 │   ├── bbht.js                ← logic biên bản hiện trường
@@ -150,13 +152,14 @@ Ngoài 15 sheet khảo sát, file Google Sheets có thêm:
 | Cột | Kiểu | Ghi chú |
 |---|---|---|
 | `username` | text | Duy nhất, không dấu, vd: `ktv01`, `admin`, `demo` |
-| `password_hash` | text | SHA-256(password + salt), salt giữ trong Script Properties. **Plaintext không chấp nhận** — verify bằng length 64 hex. |
 | `full_name` | text | Họ tên đầy đủ — auto-fill vào trường "Người khảo sát" |
 | `role` | text | 1 trong 4: `admin` / `user` / `user1` / `demo` (xem mục 1) |
 | `active` | boolean | `TRUE`/`FALSE` — admin có thể vô hiệu hoá account mà không xoá. Nếu cột không tồn tại → ngầm hiểu TRUE. |
 | `created_at` | datetime | Khi tạo account |
 
-Quản lý thêm/sửa user **bằng tay** trực tiếp trên sheet. Khi đổi mật khẩu, admin chạy script trợ giúp (function `hashPassword` trong Apps Script) để sinh hash mới rồi paste vào. Code đọc theo TÊN cột (không theo index) — cho phép sắp xếp cột tuỳ ý.
+> ⚠️ **Không còn cột `password_hash`** (bỏ 2026-08-16). Sheet này chỉ là **danh bạ**; mật khẩu nằm ở Script Properties — xem mục 7.1. Code đọc theo TÊN cột (không theo index) nên sắp xếp cột tuỳ ý.
+
+Quản lý user qua trang `users.html` (permission `users_manage`), **không sửa sheet bằng tay**. Thêm dòng thẳng vào sheet vẫn chạy, nhưng user đó chưa có mật khẩu — `users.html` sẽ hiện ⛔ *chưa có MK*.
 
 **Sheet `phan quyen`** — bảng quyền theo role, **admin sửa bằng tick checkbox trực tiếp trên sheet** (không cần sửa code):
 
@@ -611,6 +614,7 @@ export const TDK_LIST = [
   - `action: "report"` — body `{ token, types?: [...], from?, to?, usernames?: [...], status?, groupBy? }` → trả aggregation đa chiều (3 vùng A/B/C) cho trang báo cáo. Chỉ `admin`/`user`. Chi tiết ở mục 15.
   - `action: "export_raw"` — body `{ token, types: [...], from?, to?, usernames?: [], status? }` → trả raw rows theo đúng thứ tự cột của từng sheet (array of arrays) để xuất Excel/CSV. Không aggregate. Chỉ `admin`/`user`. Chi tiết ở mục 15.
   - `action: "photo_base64"` — body `{ token, url }` → đọc 1 ảnh Drive trả `{ ok, mimeType, base64 }`. Chỉ cần token hợp lệ. **Lý do tồn tại**: `drive.google.com/uc?export=view` không trả header CORS nên `html2canvas` vẽ ra ô trắng; trang báo cáo phải nội tuyến ảnh thành `data:` URL trước khi capture. Xem mục 15b.
+  - `action: "change_password"` — body `{ token, current_password, new_password }` → user tự đổi mật khẩu **của chính mình**. **Mọi role đăng nhập đều gọi được**, không cần `users_manage`. Kiểm: đúng mật khẩu hiện tại · ≥8 ký tự · khác username · khác mật khẩu cũ. Xem mục 7.1.
 - Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
@@ -620,8 +624,36 @@ export const TDK_LIST = [
 - Bắt lỗi → `{ ok: false, error: <msg> }` và `Logger.log`.
 - **CORS**: Apps Script khi deploy as Web App `Anyone` đã tự cho phép. Frontend gọi bằng `fetch(URL, { method: 'POST', mode: 'no-cors' ... })` ban đầu sẽ KHÔNG đọc được response → giải pháp: dùng `Content-Type: text/plain` để tránh preflight CORS, vẫn POST được. Hoặc dùng `application/x-www-form-urlencoded`. **Test kỹ trên mobile Safari trước khi nói đã xong.**
 
+### 7.1 Kho mật khẩu — Script Properties, KHÔNG phải Sheets (đổi 2026-08-16)
+
+**Sự cố dẫn tới thay đổi này** (ghi lại để không lặp): `password_hash` từng nằm trong sheet `taikhoan`, sheet lại bị **publish-to-web** nên username + hash tải về được tự do từ internet; đồng thời `SETUP.md` trong repo **public** ghi thẳng mật khẩu plaintext của 10 tài khoản. Ai cũng đăng nhập được quyền admin.
+
+**Thiết kế hiện tại:**
+
+| | Cũ (đến 08/2026) | Mới |
+|---|---|---|
+| Nơi lưu | cột `password_hash` trong sheet | Script Property `CRED_<username>` |
+| Ai đọc được | ai mở được file Sheets | chỉ người mở được Apps Script editor |
+| Salt | **chung** 1 `AUTH_SALT` cho mọi user | **riêng** 32 hex mỗi user |
+| Băm | SHA-256 **1 vòng** | HMAC-SHA256 lặp `PWD_ITERS` vòng (mặc định 2000) |
+| Pepper | `AUTH_SALT` | `PWD_PEPPER` (fallback `AUTH_SALT`) |
+
+Bản ghi: `{v:1, salt, hash, iters, must_change, updated_at}`. **Không bao giờ lưu plaintext** — kể cả admin cũng không đọc ngược ra mật khẩu thật.
+
+Vì sao salt riêng + lặp nhiều vòng: salt riêng khiến 2 người trùng mật khẩu vẫn ra hash khác nhau (không dò một lần ra cả hệ thống); lặp nhiều vòng khiến mỗi lần thử tốn thời gian gấp `iters` lần, dò từ điển trở nên vô vọng.
+
+**Hàm chính** (section CREDENTIAL STORE trong `Code.gs`): `setPassword` · `verifyPassword` · `deriveHash` · `benchmarkHash` (đo để chọn `PWD_ITERS`) · `resetAllPasswords` (đổi hết + xoá cột `password_hash`) · `setPasswordThuCong`.
+
+**Tương thích ngược**: user chưa có bản ghi `CRED_` vẫn đăng nhập được bằng hash cũ trong sheet (nếu cột còn), và được **tự chuyển sang kho mới ngay lúc đó** kèm cờ `must_change`. Không ai bị khoá ngoài giữa chừng.
+
+**Bắt đổi mật khẩu lần đầu**: `setPassword(..., mustChange=true)` khi admin tạo user hoặc reset. Login trả `must_change`, `js/auth.js → requireAuth()` chặn mọi trang và đẩy về `doi-mat-khau.html` cho tới khi user tự đặt mật khẩu riêng. Admin không biết mật khẩu thật của KTV.
+
+**Rotate khoá — hệ quả khác nhau, đừng nhầm:**
+- Đổi `AUTH_SALT` → mọi token vô hiệu, ai cũng đăng nhập lại. **Mật khẩu không ảnh hưởng.**
+- Đổi `PWD_PEPPER` → **mọi mật khẩu ngừng hoạt động**, bắt buộc chạy `resetAllPasswords()`.
+
 ### Authentication & phân quyền
-- **Password hashing**: SHA-256(password + salt). Salt cố định, lấy từ `PropertiesService.getScriptProperties().getProperty('AUTH_SALT')` (set thủ công trong Project Settings → Script Properties, vd salt 32 ký tự random).
+- **Password hashing**: xem 7.1 — lặp HMAC-SHA256 với salt riêng từng user, lưu trong Script Properties.
 - **Token**: sau khi login thành công, sinh token = `base64(username + "|" + expiresAt + "|" + HMAC_SHA256(username + expiresAt, salt))`. `expiresAt` = now + 8h. Stateless, không cần lưu DB.
 - **Verify token** mỗi request: decode → kiểm tra expiresAt > now → recompute HMAC → match thì OK, trả lại `{ username, role, full_name }` (đọc lại từ sheet `taikhoan`, để role/full_name luôn fresh nếu admin sửa).
 - **Rate limiting nhẹ**: giới hạn 5 lần login sai/phút từ cùng 1 username bằng `CacheService`. Sai quá → khoá 5 phút.

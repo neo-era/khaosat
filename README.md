@@ -14,7 +14,9 @@ Web app cho **kỹ thuật viên (KTV) SAPULICO** khảo sát hiện trường h
 1. Mở trình duyệt **Chrome** (Android) hoặc **Safari** (iPhone).
 2. Vào URL ở trên.
 3. Nhập **tên đăng nhập** và **mật khẩu** quản lý đã cấp.
-4. Tick "Nhớ đăng nhập" để không phải gõ lại trong 8 tiếng.
+4. Lần đăng nhập đầu, app bắt **đặt mật khẩu riêng** — mật khẩu quản lý cấp chỉ là mật khẩu tạm. Đặt ≥8 ký tự, không trùng tên đăng nhập.
+
+> Phiên đăng nhập kéo dài 8 tiếng và **mất khi đóng tab trình duyệt**. Đóng tab rồi mở lại thì phải đăng nhập lại.
 
 ### 2. Cài app vào màn hình chính (PWA)
 
@@ -71,7 +73,9 @@ Sửa data trực tiếp trên **Google Sheets** (file `khao-sat-ke-hoach`) nế
 | `user1` | ✓ | ✓ | ✗ | ✗ |
 | `demo` | ✓ | ✗ (xem thử) | ✗ | ✗ |
 
-Tài khoản lưu trong sheet `taikhoan`. Admin tạo user qua Google Sheets (xem `SETUP.md` Bước D).
+Danh bạ tài khoản nằm trong sheet `taikhoan` (tên, họ tên, vai trò, trạng thái). **Mật khẩu KHÔNG nằm trong Google Sheets** — lưu riêng trong Script Properties dạng băm, mở file Sheets cũng không thấy.
+
+Admin tạo/khoá user và đặt mật khẩu tạm qua trang **👥 Quản lý user** (`users.html`), không sửa sheet bằng tay. Xem `SETUP.md` Bước D.
 
 ---
 
@@ -89,7 +93,8 @@ Người setup (1 lần duy nhất): xem `SETUP.md`.
 - **Apps Script `kpi` / `report` có thể chậm 3–8 giây** khi data >1000 bản. Nếu vượt 6 phút (quota free) sẽ timeout — chia nhỏ filter (chỉ 1 tháng/lần).
 - **Token TTL 8 tiếng**. KTV làm việc xuyên đêm cần đăng nhập lại lúc sáng. Có thể tăng trong `js/config.js → sessionTimeoutHours` (nhưng cũng phải đổi `TOKEN_TTL_MS` trong Code.gs).
 - **Sheet `Audit` chỉ tự tạo khi có lần delete/restore đầu tiên**. Trước đó sẽ không thấy sheet này — đúng design, không phải bug.
-- **Repo PUBLIC trên GitHub** → URL Apps Script + Sheets CSV bị lộ. Bảo vệ qua token + role + rate limit. Đặt mật khẩu KTV mạnh ≥10 ký tự.
+- **Repo PUBLIC trên GitHub** → URL Apps Script bị lộ. Bảo vệ qua token + role + rate limit. Đặt mật khẩu KTV mạnh ≥10 ký tự, mỗi người một mật khẩu riêng.
+- **KHÔNG publish Google Sheets ra web.** Tháng 8/2026 từng bật nhầm, làm lộ cả sheet `taikhoan` ra internet. Đã tắt và bỏ `sheetsCsvUrl` khỏi `js/config.js`.
 
 ---
 
