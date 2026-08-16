@@ -365,8 +365,18 @@ function findUser(username) {
 // Khác biệt so với cách cũ: salt RIÊNG từng user (cũ: chung 1 AUTH_SALT) và băm
 // lặp nhiều vòng thay vì 1 vòng SHA-256, để làm chậm việc dò mật khẩu.
 
-/** Số vòng lặp băm. Chạy benchmarkHash() để đo rồi chỉnh cho hợp máy. */
-const PWD_ITERS = 2000;
+/**
+ * Số vòng lặp băm — chọn 100 để đăng nhập nhanh nhất có thể.
+ *
+ * Chi phí này CHỈ trả 1 lần lúc đăng nhập (và lúc đổi mật khẩu). Mọi thao tác
+ * khác — submit form, xem KPI, tải báo cáo — đi qua verifyToken, KHÔNG băm lần nào.
+ * Nên có tăng lên cũng không làm app chậm đi trong lúc dùng.
+ *
+ * 100 vòng = kẻ dò mật khẩu phải tốn gấp 100 lần thời gian so với băm 1 vòng.
+ * Muốn chắc hơn thì chạy benchmarkHash() rồi nâng lên 500–1000; bản ghi cũ vẫn
+ * dùng được vì mỗi bản ghi tự nhớ số vòng của nó.
+ */
+const PWD_ITERS = 100;
 
 /** Độ dài tối thiểu của mật khẩu (dùng chung cho mọi nơi đặt/đổi mật khẩu). */
 const PWD_MIN_LEN = 8;
@@ -486,19 +496,29 @@ function verifyPassword(username, plain, legacyHashFromSheet) {
 }
 
 /**
- * Đo tốc độ băm để chọn PWD_ITERS. Admin chạy tay 1 lần.
- * Chọn số vòng lớn nhất mà vẫn dưới ~300ms để đăng nhập không bị chậm.
+ * Đo tốc độ băm để chọn PWD_ITERS. Admin chạy tay 1 lần (không bắt buộc).
+ *
+ * Con số in ra là thời gian NGƯỜI DÙNG PHẢI ĐỢI THÊM khi bấm nút Đăng nhập —
+ * mỗi ngày 1-2 lần, không phải mỗi thao tác.
  */
 function benchmarkHash() {
   const salt = randomSalt();
   const out = [];
-  [500, 1000, 2000, 5000, 10000].forEach(n => {
+  [50, 100, 200, 500, 1000, 2000].forEach(n => {
     const t0 = Date.now();
     deriveHash('mat-khau-thu-nghiem', salt, n);
     out.push({ iters: n, ms: Date.now() - t0 });
   });
-  const goi_y = (out.filter(r => r.ms <= 300).pop() || out[0]).iters;
-  const result = { ok: true, results: out, PWD_ITERS_dang_dung: PWD_ITERS, goi_y: goi_y };
+  // Gợi ý: số vòng lớn nhất mà người dùng vẫn thấy "bấm là vào" (dưới 200ms)
+  const goi_y = (out.filter(r => r.ms <= 200).pop() || out[0]).iters;
+  const result = {
+    ok: true,
+    PWD_ITERS_dang_dung: PWD_ITERS,
+    thoi_gian_dang_nhap_hien_tai_ms: (out.filter(r => r.iters === PWD_ITERS)[0] || {}).ms,
+    goi_y_neu_muon_chac_hon: goi_y,
+    chi_tiet: out,
+    ghi_chu: 'Chi phi nay chi tra 1 lan luc dang nhap, khong anh huong luc dung app.'
+  };
   Logger.log(JSON.stringify(result, null, 2));
   return result;
 }
