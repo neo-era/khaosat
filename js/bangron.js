@@ -1,8 +1,9 @@
 // js/bangron.js — Báo cáo tháo gỡ băng rôn: lọc dữ liệu → 2 kiểu trình bày → In / PDF / Excel
-import { apiList, apiPhotoBase64 } from './api.js';
+import { apiList } from './api.js';
 import { QUAN_LIST, PHUONG_XA } from './lookups.js';
 import { SCHEMAS } from './schemas.js';
 import { escapeHtml, showToast } from './utils.js';
+import { inlineImages, restoreImages } from './photos.js';
 
 const TYPE = 'thao_go_bang_ron';
 const SCHEMA = SCHEMAS[TYPE];
@@ -17,8 +18,6 @@ const state = {
 
 /** Giữ nội dung các ô contenteditable để không mất khi đổi kiểu trình bày. */
 const edCache = {};
-/** Cache base64 ảnh đã tải qua Apps Script (dùng lại khi xuất PDF nhiều lần). */
-const photoCache = new Map();
 
 // =====================================================================
 // HELPERS
@@ -438,70 +437,6 @@ function renderModeVanBan() {
 // XUẤT PDF (html2canvas + jsPDF) — phải nội tuyến ảnh trước khi capture
 // =====================================================================
 
-/**
- * Chuyển 1 URL ảnh thành data: URL.
- *
- * Cách 1 — fetch thẳng từ trình duyệt: nhanh nhất, dùng được khi host trả header
- * CORS (Cloudinary luôn có; Drive có ở response cuối nhưng chuỗi redirect 303 có
- * thể làm trình duyệt từ chối).
- * Cách 2 — đi vòng qua Apps Script (`photo_base64`): chậm hơn nhưng chắc chắn.
- */
-async function fetchAsDataUrl(url) {
-  try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
-    if (!blob.type.startsWith('image/')) throw new Error('không phải ảnh');
-    return await new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(fr.result);
-      fr.onerror = () => reject(new Error('đọc blob lỗi'));
-      fr.readAsDataURL(blob);
-    });
-  } catch (err) {
-    const res = await apiPhotoBase64(url);
-    return `data:${res.mimeType || 'image/jpeg'};base64,${res.base64}`;
-  }
-}
-
-/**
- * Nội tuyến toàn bộ ảnh trong tài liệu thành data: URL trước khi html2canvas chụp.
- * Không làm bước này thì ảnh có thể ra ô trắng trong file PDF.
- * @returns {Promise<Array<{el:HTMLImageElement, orig:string}>>} danh sách để khôi phục sau
- */
-async function inlinePhotos(btn) {
-  const imgs = Array.from(document.querySelectorAll('#report-preview img[data-src]'));
-  const restore = [];
-  let done = 0;
-
-  for (const img of imgs) {
-    const url = img.dataset.src;
-    restore.push({ el: img, orig: img.getAttribute('src') });
-    done++;
-    if (btn) btn.textContent = `⏳ Đang tải ảnh ${done}/${imgs.length}...`;
-
-    if (photoCache.has(url)) {
-      img.src = photoCache.get(url);
-    } else {
-      try {
-        const dataUrl = await fetchAsDataUrl(url);
-        photoCache.set(url, dataUrl);
-        img.src = dataUrl;
-      } catch (err) {
-        // Ảnh lỗi không được chặn cả file PDF — thay bằng ô xám
-        img.removeAttribute('src');
-        img.style.background = '#e5e7eb';
-      }
-    }
-    // Chờ trình duyệt decode xong ảnh mới
-    await new Promise(r => {
-      if (img.complete || !img.getAttribute('src')) return r();
-      img.onload = img.onerror = r;
-    });
-  }
-  return restore;
-}
-
 async function exportPdf() {
   const preview = document.getElementById('report-preview');
   const btn = document.getElementById('btn-pdf');
@@ -510,7 +445,9 @@ async function exportPdf() {
 
   let restore = [];
   try {
-    restore = await inlinePhotos(btn);
+    restore = await inlineImages(preview, (done, total) => {
+      btn.textContent = `⏳ Đang nhúng ảnh ${done}/${total}...`;
+    });
     btn.textContent = '⏳ Đang tạo PDF...';
 
     const captureStyle = document.createElement('style');
@@ -554,7 +491,7 @@ async function exportPdf() {
   } catch (err) {
     showToast('Lỗi xuất PDF: ' + (err.message || err), 'error');
   } finally {
-    restore.forEach(({ el, orig }) => { if (orig) el.src = orig; el.style.background = ''; });
+    restoreImages(restore);
     btn.disabled = false;
     btn.textContent = origLabel;
   }
