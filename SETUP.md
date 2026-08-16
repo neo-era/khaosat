@@ -36,7 +36,7 @@ Copy đoạn giữa `/d/` và `/edit` — để sang Bước B.
    |---|---|---|
    | `SPREADSHEET_ID` | ID copy ở Bước A | |
    | `AUTH_SALT` | Chuỗi random ≥32 ký tự | Ký token đăng nhập. Sinh bằng: mở Console trình duyệt (F12 → Console) gõ `Array.from({length:48}, () => Math.random().toString(36)[2]).join('')` |
-   | `PWD_PEPPER` | Chuỗi random ≥32 ký tự **khác** | Băm mật khẩu. Tách riêng khỏi `AUTH_SALT` để đổi được mà không đá văng mọi phiên đăng nhập. Không đặt thì hệ thống tự dùng `AUTH_SALT`. |
+   | `PWD_PEPPER` | **Đừng tự gõ** — chạy hàm `taoPwdPepper()` (xem C2.0) | Băm mật khẩu. Tách riêng khỏi `AUTH_SALT` để đổi được mà không đá văng mọi phiên đăng nhập. Không đặt thì hệ thống tự dùng `AUTH_SALT`. |
    | `DRIVE_FOLDER_ID` | ID thư mục Drive chứa ảnh | Lấy từ URL thư mục: `/drive/folders/`**`<ID>`** |
    | `CLOUDINARY_CLOUD_NAME` | Để trống tạm, điền ở Bước E | |
    | `CLOUDINARY_API_KEY` | Để trống tạm, điền ở Bước E | |
@@ -79,6 +79,16 @@ Copy đoạn giữa `/d/` và `/edit` — để sang Bước B.
 >
 > Lý do đổi: trước đây cột `password_hash` nằm ngay trong sheet, ai mở được file là
 > thấy toàn bộ hash — mà sheet lại từng bị publish ra web.
+
+### C2.0 — Tạo `PWD_PEPPER` (làm TRƯỚC, chỉ 1 lần)
+
+Apps Script → chọn hàm **`taoPwdPepper`** → ▶ Run. Xong. Không phải gõ, không phải copy chuỗi bí mật đi đâu cả — nó sinh ra và nằm luôn trong Thuộc tính tập lệnh.
+
+> **Đừng tự sinh chuỗi rồi dán vào.** Chrome nay chặn dán code vào Console (bắt gõ `allow pasting`) — cảnh báo đó là đúng, đừng vượt qua nó. Và chuỗi bí mật mà đi qua clipboard hay tin nhắn thì coi như đã lộ.
+
+Hàm này **từ chối ghi đè** nếu `PWD_PEPPER` đã có, vì ghi đè sẽ làm mọi mật khẩu ngừng hoạt động.
+
+> ⚠️ **Thứ tự quan trọng**: phải chạy `taoPwdPepper()` **trước** `resetAllPasswords()`. Làm ngược lại thì mật khẩu vừa phát cho mọi người hỏng ngay, phải phát lại lần nữa. (Hàm có kiểm và báo nếu anh lỡ làm ngược.)
 
 ### C2.1 — (Tuỳ chọn) Đo tốc độ băm
 
