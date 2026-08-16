@@ -178,6 +178,16 @@ export async function apiScheduleDelete(id) {
   return postJson({ action: 'schedule_delete', token: requireToken(), id });
 }
 
+/** User tự đổi mật khẩu của chính mình. Mọi role đăng nhập đều gọi được. */
+export async function apiChangePassword(current_password, new_password) {
+  return postJson({
+    action: 'change_password',
+    token: requireToken(),
+    current_password,
+    new_password
+  });
+}
+
 /** Reset password user (chỉ admin/role có users_manage). */
 export async function apiResetPassword(username, new_password) {
   return postJson({

@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## v2.1.0 — 2026-08-16 — 🔒 Bảo mật: mật khẩu ra khỏi Google Sheets
+
+### Sự cố phát hiện
+- Sheet `taikhoan` (username + `password_hash` + họ tên + vai trò) **bị publish ra internet** qua URL CSV trong `js/config.js`. Kiểm chứng bằng `curl`: HTTP 200, tải về được toàn bộ, không cần đăng nhập.
+- `SETUP.md` trong repo **public** ghi thẳng mật khẩu plaintext của 10 tài khoản (kể cả `admin`).
+- ⇒ Bất kỳ ai cũng đăng nhập được quyền admin. **Toàn bộ mật khẩu cũ phải coi là đã lộ.**
+
+### Khắc phục
+- **Kho mật khẩu mới**: Script Properties `CRED_<username>`, salt riêng từng user + HMAC-SHA256 lặp `PWD_ITERS` vòng (cũ: SHA-256 1 vòng, salt dùng chung, lưu ngay trong sheet).
+- **Bỏ cột `password_hash`** khỏi sheet `taikhoan` — sheet chỉ còn danh bạ.
+- **Bắt đổi mật khẩu lần đầu**: trang `doi-mat-khau.html` mới + cờ `must_change`; admin đặt mật khẩu tạm, KTV tự đặt mật khẩu riêng. Admin không biết mật khẩu thật của ai.
+- **Endpoint `change_password`** — mọi role đăng nhập tự đổi mật khẩu của mình.
+- **Bỏ `sheetsCsvUrl`** khỏi `js/config.js` (không code nào dùng) + gỡ Bước H publish-to-web trong SETUP.md.
+- **Xoá mật khẩu plaintext** khỏi SETUP.md. *(Git history vẫn còn — đó là lý do bắt buộc đổi hết mật khẩu.)*
+- Thêm `PWD_PEPPER` (tách khỏi `AUTH_SALT`): đổi pepper không đá văng phiên đăng nhập, đổi salt không làm hỏng mật khẩu.
+- Hàm quản trị mới: `benchmarkHash()`, `resetAllPasswords()`, `setPasswordThuCong()`. `migrateTaikhoan()` chuyển thành lỗi thời.
+- Tương thích ngược: user chưa migrate vẫn đăng nhập bằng hash cũ, hệ thống tự chuyển sang kho mới + bắt đổi.
+
+### Việc admin phải làm
+1. Dừng publish Google Sheets ra web.
+2. Dán `Code.gs` mới → chạy `benchmarkHash()` → chỉnh `PWD_ITERS` → Deploy new version.
+3. Chạy `resetAllPasswords()` → phát mật khẩu tạm riêng cho từng người.
+
+---
+
 ## v1.0.0 — 2026-05-27
 
 ### Lần phát hành đầu — Đầy đủ chức năng

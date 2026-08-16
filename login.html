@@ -156,7 +156,8 @@
         try {
           const user = await login(username, password);
           clearFailState();
-          location.replace(defaultHomeFor(user.role));
+          // Mật khẩu tạm do admin đặt → bắt đổi trước khi vào app
+          location.replace(user.must_change ? 'doi-mat-khau.html' : defaultHomeFor(user.role));
         } catch (err) {
           const msg = String(err.message || err);
           // Cập nhật fail count

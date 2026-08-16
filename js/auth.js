@@ -27,7 +27,8 @@ export function getCurrentUser() {
   return {
     username: t.username,
     full_name: t.full_name,
-    role: t.role
+    role: t.role,
+    must_change: t.must_change === true
   };
 }
 
@@ -56,9 +57,25 @@ export async function login(username, password) {
     username: res.username,
     full_name: res.full_name,
     role: res.role,
+    must_change: res.must_change === true,
     expires_at: res.expires_at
   });
-  return { username: res.username, full_name: res.full_name, role: res.role };
+  return {
+    username: res.username,
+    full_name: res.full_name,
+    role: res.role,
+    must_change: res.must_change === true
+  };
+}
+
+/** Trang bắt buộc đổi mật khẩu — dùng chung để tránh gõ sai tên file. */
+export const CHANGE_PWD_PAGE = 'doi-mat-khau.html';
+
+/** Bỏ cờ must_change sau khi user đã đổi mật khẩu xong. */
+export function clearMustChange() {
+  const t = getToken();
+  if (!t) return;
+  saveToken(Object.assign({}, t, { must_change: false }));
 }
 
 /** Clear token + redirect login. */
@@ -84,6 +101,11 @@ export function requireAuth(requiredAction) {
   if (!u) {
     location.replace('login.html');
     throw new Error('redirecting to login');  // stop further script
+  }
+  // Mật khẩu tạm do admin đặt → chặn mọi trang cho tới khi user tự đổi
+  if (u.must_change && !location.pathname.endsWith(CHANGE_PWD_PAGE)) {
+    location.replace(CHANGE_PWD_PAGE);
+    throw new Error('redirecting to change password');
   }
   if (requiredAction && !can(u.role, requiredAction)) {
     location.replace('index.html');

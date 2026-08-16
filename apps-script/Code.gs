@@ -154,7 +154,8 @@ const GPS_LINK_TYPES    = [
   'tc_den_kc_xa', 'decal_so_tru', 'nang_mong'
 ];
 
-const TAIKHOAN_HEADER = ['username', 'password_hash', 'full_name', 'role', 'active', 'created_at'];
+// Sheet taikhoan chỉ còn danh bạ — mật khẩu nằm ở Script Properties (xem CREDENTIAL STORE)
+const TAIKHOAN_HEADER = ['username', 'full_name', 'role', 'active', 'created_at'];
 const KPI_TARGETS_HEADER = ['param', 'value'];
 const PHAN_QUYEN_HEADER = ['vaiTro', 'submit', 'delete', 'kpi', 'manage', 'report', 'moTa'];
 const AUDIT_HEADER = ['timestamp', 'action', 'username', 'target_sheet', 'target_stt', 'note'];
@@ -275,10 +276,10 @@ function safe(v) {
 // =====================================================================
 
 /**
- * Hash password để paste vào sheet taikhoan.
- * Cách dùng: trong Apps Script Editor, chạy:
- *   Logger.log(hashPassword('MatKhauMoi@2026'));
- * Copy hash trong Logs paste vào cột password_hash.
+ * @deprecated Từ 2026-08-16 mật khẩu KHÔNG còn lưu trong sheet taikhoan.
+ * Kho mật khẩu mới nằm ở Script Properties (xem section CREDENTIAL STORE).
+ * Tạo/đổi mật khẩu: dùng trang users.html, hoặc chạy setPassword('user','matkhau').
+ * Giữ hàm này chỉ để verify được các bản ghi cũ chưa migrate.
  */
 function hashPassword(plain) {
   if (!plain) throw new Error('plain password is empty');
@@ -327,6 +328,7 @@ function findUser(username) {
   if (data.length < 2) return null;
   const header = data[0].map(String);
   const idxUser = header.indexOf('username');
+  // password_hash: cột cũ, chỉ còn dùng để verify user chưa migrate sang Script Properties
   const idxHash = header.indexOf('password_hash');
   const idxName = header.indexOf('full_name');
   const idxRole = header.indexOf('role');
@@ -345,6 +347,230 @@ function findUser(username) {
     }
   }
   return null;
+}
+
+// =====================================================================
+// CREDENTIAL STORE — mật khẩu lưu trong Script Properties, KHÔNG lưu trong Sheets
+// =====================================================================
+//
+// Vì sao đổi (2026-08-16): trước đây `password_hash` nằm ngay trong sheet
+// `taikhoan`, nên ai mở được file Google Sheets là thấy toàn bộ hash; sheet lại
+// còn bị publish ra web nên hash lộ công khai. Nay:
+//   - Mật khẩu nằm ở Script Properties → chỉ người mở được Apps Script editor thấy.
+//   - Sheet `taikhoan` chỉ còn danh bạ: username / full_name / role / active.
+//
+// Bản ghi: Script Property `CRED_<username thường>` chứa JSON
+//   { v:1, salt:<32 hex>, hash:<64 hex>, iters:<số>, must_change:<bool>, updated_at:<string> }
+//
+// Khác biệt so với cách cũ: salt RIÊNG từng user (cũ: chung 1 AUTH_SALT) và băm
+// lặp nhiều vòng thay vì 1 vòng SHA-256, để làm chậm việc dò mật khẩu.
+
+/** Số vòng lặp băm. Chạy benchmarkHash() để đo rồi chỉnh cho hợp máy. */
+const PWD_ITERS = 2000;
+
+/** Độ dài tối thiểu của mật khẩu (dùng chung cho mọi nơi đặt/đổi mật khẩu). */
+const PWD_MIN_LEN = 8;
+
+/** Pepper cho băm mật khẩu. Tách khỏi AUTH_SALT để đổi được mà không huỷ token. */
+function getPwdPepper() {
+  return getProp('PWD_PEPPER') || getSalt();
+}
+
+function credKey(username) {
+  return 'CRED_' + String(username).trim().toLowerCase();
+}
+
+function readCred(username) {
+  const raw = PropertiesService.getScriptProperties().getProperty(credKey(username));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    Logger.log('readCred: bản ghi hỏng cho ' + username + ' — ' + e);
+    return null;
+  }
+}
+
+function writeCred(username, obj) {
+  PropertiesService.getScriptProperties().setProperty(credKey(username), JSON.stringify(obj));
+}
+
+function deleteCred(username) {
+  PropertiesService.getScriptProperties().deleteProperty(credKey(username));
+}
+
+/** Salt ngẫu nhiên 32 ký tự hex. */
+function randomSalt() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').slice(0, 32);
+}
+
+/**
+ * Băm mật khẩu: lặp HMAC-SHA256 `iters` vòng, khoá = pepper bí mật.
+ * Lặp nhiều vòng khiến kẻ có được file hash vẫn phải tốn rất nhiều thời gian để dò.
+ */
+function deriveHash(password, saltHex, iters) {
+  const keyBytes = Utilities.newBlob(getPwdPepper()).getBytes();
+  let cur = Utilities.computeHmacSha256Signature(
+    Utilities.newBlob(String(password) + saltHex).getBytes(), keyBytes);
+  for (let i = 1; i < iters; i++) {
+    cur = Utilities.computeHmacSha256Signature(cur, keyBytes);
+  }
+  return bytesToHex(cur);
+}
+
+/**
+ * Đặt mật khẩu cho 1 user (ghi đè nếu đã có).
+ * @param {string} username
+ * @param {string} plain
+ * @param {boolean} [mustChange=true] - bắt user đổi ở lần đăng nhập kế tiếp
+ */
+function setPassword(username, plain, mustChange) {
+  const err = validatePasswordRule(username, plain);
+  if (err) throw new Error(err);
+  const salt = randomSalt();
+  writeCred(username, {
+    v: 1,
+    salt: salt,
+    hash: deriveHash(plain, salt, PWD_ITERS),
+    iters: PWD_ITERS,
+    must_change: mustChange !== false,
+    updated_at: nowVnString()
+  });
+  return true;
+}
+
+/** Quy tắc mật khẩu dùng chung. Trả về chuỗi lỗi, hoặc null nếu hợp lệ. */
+function validatePasswordRule(username, plain) {
+  const p = String(plain || '');
+  if (p.length < PWD_MIN_LEN) return 'Mật khẩu phải từ ' + PWD_MIN_LEN + ' ký tự trở lên';
+  if (p.toLowerCase() === String(username || '').toLowerCase()) {
+    return 'Mật khẩu không được trùng tên đăng nhập';
+  }
+  return null;
+}
+
+/**
+ * Kiểm tra mật khẩu.
+ * @returns {{ok: boolean, must_change: boolean, legacy: boolean}}
+ *
+ * Có đường tương thích ngược: user chưa có bản ghi CRED_ (chưa chạy
+ * resetAllPasswords) vẫn đăng nhập được bằng hash cũ trong sheet, và hệ thống
+ * tự chuyển họ sang kho mới ngay lúc đó. Nhờ vậy không ai bị khoá ngoài giữa chừng.
+ */
+function verifyPassword(username, plain, legacyHashFromSheet) {
+  const cred = readCred(username);
+
+  if (cred) {
+    const calc = deriveHash(plain, cred.salt, cred.iters || PWD_ITERS);
+    if (calc !== cred.hash) return { ok: false, must_change: false, legacy: false };
+    return { ok: true, must_change: cred.must_change === true, legacy: false };
+  }
+
+  // Chưa có bản ghi mới → thử hash cũ trong sheet
+  const legacy = String(legacyHashFromSheet || '').trim();
+  if (!legacy) return { ok: false, must_change: false, legacy: false };
+  if (hashPassword(plain) !== legacy) return { ok: false, must_change: false, legacy: false };
+
+  // Đúng mật khẩu cũ → chuyển sang kho mới, và bắt đổi vì mật khẩu cũ coi như đã lộ
+  try {
+    const salt = randomSalt();
+    writeCred(username, {
+      v: 1, salt: salt, hash: deriveHash(plain, salt, PWD_ITERS), iters: PWD_ITERS,
+      must_change: true, updated_at: nowVnString()
+    });
+    Logger.log('Đã chuyển mật khẩu của ' + username + ' sang Script Properties');
+  } catch (e) {
+    Logger.log('Không ghi được cred cho ' + username + ': ' + e);
+  }
+  return { ok: true, must_change: true, legacy: true };
+}
+
+/**
+ * Đo tốc độ băm để chọn PWD_ITERS. Admin chạy tay 1 lần.
+ * Chọn số vòng lớn nhất mà vẫn dưới ~300ms để đăng nhập không bị chậm.
+ */
+function benchmarkHash() {
+  const salt = randomSalt();
+  const out = [];
+  [500, 1000, 2000, 5000, 10000].forEach(n => {
+    const t0 = Date.now();
+    deriveHash('mat-khau-thu-nghiem', salt, n);
+    out.push({ iters: n, ms: Date.now() - t0 });
+  });
+  const goi_y = (out.filter(r => r.ms <= 300).pop() || out[0]).iters;
+  const result = { ok: true, results: out, PWD_ITERS_dang_dung: PWD_ITERS, goi_y: goi_y };
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+/**
+ * ĐỔI TOÀN BỘ MẬT KHẨU + xoá cột password_hash khỏi sheet. Admin chạy tay 1 lần.
+ *
+ * Dùng khi mật khẩu cũ bị coi là đã lộ (trường hợp 2026-08-16: mật khẩu plaintext
+ * bị commit vào repo public). Sinh mật khẩu tạm cho từng user, bắt đổi ở lần
+ * đăng nhập đầu.
+ *
+ * Mật khẩu tạm chỉ hiện 1 lần trong Execution log — copy phát cho từng người rồi thôi.
+ */
+function resetAllPasswords() {
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) throw new Error('Sheet taikhoan không tồn tại');
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) throw new Error('Sheet taikhoan chưa có user nào');
+
+  const header = data[0].map(String);
+  const idxUser = header.indexOf('username');
+  if (idxUser < 0) throw new Error('Sheet thiếu cột username');
+
+  const danh_sach = [];
+  for (let i = 1; i < data.length; i++) {
+    const u = String(data[i][idxUser] || '').trim();
+    if (!u) continue;
+    const tmp = randomPassword(12);
+    setPassword(u, tmp, true);
+    danh_sach.push({ username: u, mat_khau_tam: tmp });
+  }
+
+  // Xoá hẳn cột password_hash — dữ liệu nhạy cảm không còn lý do nằm trong sheet
+  const idxHash = header.indexOf('password_hash');
+  let da_xoa_cot = false;
+  if (idxHash >= 0) {
+    sheet.deleteColumn(idxHash + 1);
+    da_xoa_cot = true;
+  }
+
+  appendAuditLog('reset_all_passwords', 'system', 'taikhoan', String(danh_sach.length),
+    'users=' + danh_sach.map(x => x.username).join(','));
+
+  Logger.log('===== MẬT KHẨU TẠM — COPY PHÁT CHO TỪNG NGƯỜI RỒI XOÁ LOG =====');
+  danh_sach.forEach(x => Logger.log(x.username + '\t' + x.mat_khau_tam));
+  Logger.log('===== Tất cả sẽ bị bắt đổi mật khẩu ở lần đăng nhập đầu =====');
+
+  return { ok: true, so_user: danh_sach.length, da_xoa_cot_password_hash: da_xoa_cot,
+           danh_sach: danh_sach };
+}
+
+/** Sinh mật khẩu ngẫu nhiên, bỏ các ký tự dễ nhìn nhầm (0 O o l 1 I). */
+function randomPassword(len) {
+  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789@#$%';
+  let s = '';
+  for (let i = 0; i < (len || 12); i++) {
+    s += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return s;
+}
+
+/** Đặt lại mật khẩu 1 user từ editor (tiện khi ai đó quên mật khẩu). */
+function setPasswordThuCong() {
+  // ⚠️ Sửa 2 giá trị dưới đây rồi chạy hàm này:
+  const USERNAME = 'PASTE_USERNAME';
+  const MAT_KHAU = 'PASTE_MAT_KHAU_MOI';
+  if (USERNAME === 'PASTE_USERNAME') {
+    throw new Error('Sửa USERNAME và MAT_KHAU trong hàm setPasswordThuCong() trước khi chạy.');
+  }
+  setPassword(USERNAME, MAT_KHAU, true);
+  Logger.log('Đã đặt mật khẩu cho ' + USERNAME + '. User sẽ bị bắt đổi ở lần đăng nhập đầu.');
+  return { ok: true };
 }
 
 // =====================================================================
@@ -582,10 +808,19 @@ function initSheets() {
 }
 
 /**
- * Migrate sheet taikhoan từ format cũ (tiếng Việt + password plaintext) sang mới.
- * Idempotent: chạy lại an toàn.
+ * @deprecated LỖI THỜI từ 2026-08-16 — hàm này ghi mật khẩu vào cột `password_hash`,
+ * mà cột đó đã bị bỏ (mật khẩu chuyển sang Script Properties).
+ * Chạy nó bây giờ sẽ dựng lại cột chứa dữ liệu nhạy cảm trong sheet.
+ * Cần đặt lại mật khẩu thì dùng `resetAllPasswords()` hoặc `setPasswordThuCong()`.
  */
 function migrateTaikhoan() {
+  throw new Error(
+    'migrateTaikhoan() đã lỗi thời: mật khẩu không còn lưu trong sheet. ' +
+    'Dùng resetAllPasswords() (đổi hết) hoặc setPasswordThuCong() (1 user).');
+}
+
+/** Bản cũ, giữ lại để tham khảo lịch sử. Không gọi tới. */
+function migrateTaikhoan_DEPRECATED() {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('taikhoan');
   if (!sheet) throw new Error('Sheet taikhoan không tồn tại');
@@ -1395,6 +1630,7 @@ function doPost(e) {
       case 'export_raw':    return jsonResponse(handleExportRaw(body));
       case 'upload_photo':  return jsonResponse(handleUploadPhoto(body));
       case 'photo_base64':  return jsonResponse(handlePhotoBase64(body));
+      case 'change_password': return jsonResponse(handleChangePassword(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -1432,10 +1668,10 @@ function handleLogin(body) {
   };
   if (!user) return fail('Sai tên đăng nhập hoặc mật khẩu');
   if (user.active === false) return { ok: false, error: 'Tài khoản đã bị khoá' };
-  const expectedHash = hashPassword(password);
-  if (expectedHash !== String(user.password_hash).trim()) {
-    return fail('Sai tên đăng nhập hoặc mật khẩu');
-  }
+
+  const check = verifyPassword(username, password, user.password_hash);
+  if (!check.ok) return fail('Sai tên đăng nhập hoặc mật khẩu');
+
   // Thành công
   cache.remove(cacheKey);
   const token = generateToken(username);
@@ -1445,8 +1681,34 @@ function handleLogin(body) {
     username: user.username,
     full_name: user.full_name,
     role: user.role,
+    must_change: check.must_change === true,
     expires_at: Date.now() + TOKEN_TTL_MS
   };
+}
+
+/**
+ * action=change_password — user tự đổi mật khẩu của CHÍNH MÌNH.
+ * Body: { token, current_password, new_password }
+ * Mọi role đăng nhập đều gọi được (không cần quyền users_manage).
+ */
+function handleChangePassword(body) {
+  const auth = verifyToken(body.token);
+  const current = String(body.current_password || '');
+  const next = String(body.new_password || '');
+
+  const ruleErr = validatePasswordRule(auth.username, next);
+  if (ruleErr) return { ok: false, error: ruleErr };
+  if (current === next) return { ok: false, error: 'Mật khẩu mới phải khác mật khẩu hiện tại' };
+
+  const user = findUser(auth.username);
+  if (!user) return { ok: false, error: 'Không tìm thấy tài khoản' };
+
+  const check = verifyPassword(auth.username, current, user.password_hash);
+  if (!check.ok) return { ok: false, error: 'Mật khẩu hiện tại không đúng' };
+
+  setPassword(auth.username, next, false);
+  appendAuditLog('change_password', auth.username, 'taikhoan', auth.username, 'user tự đổi');
+  return { ok: true, message: 'Đã đổi mật khẩu' };
 }
 
 function handleSubmit(body) {
@@ -1788,38 +2050,19 @@ function handleResetPassword(body) {
   const newPwd = String(body.new_password || '');
 
   if (!target) return { ok: false, error: 'Thiếu username cần reset' };
-  if (newPwd.length < 8) return { ok: false, error: 'Mật khẩu phải ≥ 8 ký tự' };
-  if (newPwd.toLowerCase() === target.toLowerCase()) {
-    return { ok: false, error: 'Mật khẩu không được trùng username' };
-  }
+  const ruleErr = validatePasswordRule(target, newPwd);
+  if (ruleErr) return { ok: false, error: ruleErr };
 
-  // Tìm row của target user
-  const sheet = getSpreadsheet().getSheetByName('taikhoan');
-  if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { ok: false, error: 'Sheet taikhoan rỗng' };
+  // Xác nhận user tồn tại trong danh bạ trước khi ghi mật khẩu
+  if (!findUser(target)) return { ok: false, error: 'Không tìm thấy user: ' + target };
 
-  const header = data[0].map(String);
-  const idxU = header.indexOf('username');
-  const idxHash = header.indexOf('password_hash');
-  if (idxU < 0 || idxHash < 0) return { ok: false, error: 'Sheet thiếu cột username/password_hash' };
-
-  let rowIdx = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idxU]).trim() === target) {
-      rowIdx = i + 1;  // 1-based
-      break;
-    }
-  }
-  if (rowIdx < 0) return { ok: false, error: 'Không tìm thấy user: ' + target };
-
-  // Hash + ghi đè (KHÔNG log password — chỉ log username + người thực hiện)
-  const newHash = hashPassword(newPwd);
-  sheet.getRange(rowIdx, idxHash + 1).setValue(newHash);
+  // Ghi vào Script Properties, KHÔNG ghi vào sheet. must_change=true để user tự
+  // đặt mật khẩu riêng — admin không cần biết mật khẩu thật của họ.
+  setPassword(target, newPwd, true);
 
   appendAuditLog('reset_password', auth.username, 'taikhoan', target, 'pwd reset by ' + auth.username);
 
-  return { ok: true, message: 'Đã reset mật khẩu cho ' + target };
+  return { ok: true, message: 'Đã đặt mật khẩu tạm cho ' + target + '. Người này sẽ phải đổi ở lần đăng nhập kế tiếp.' };
 }
 
 const VALID_ROLES = ['admin', 'user', 'user1', 'demo'];
@@ -1842,8 +2085,8 @@ function handleUserCreate(body) {
   // Validate
   if (!username) return { ok: false, error: 'Thiếu username' };
   if (!/^[a-zA-Z0-9_.-]+$/.test(username)) return { ok: false, error: 'Username chỉ chứa chữ/số/dấu chấm/gạch dưới/gạch ngang' };
-  if (password.length < 8) return { ok: false, error: 'Mật khẩu phải ≥ 8 ký tự' };
-  if (password.toLowerCase() === username.toLowerCase()) return { ok: false, error: 'Mật khẩu không được trùng username' };
+  const pwdErr = validatePasswordRule(username, password);
+  if (pwdErr) return { ok: false, error: pwdErr };
   if (!full_name) return { ok: false, error: 'Thiếu họ tên' };
   if (VALID_ROLES.indexOf(role) < 0) return { ok: false, error: 'Role không hợp lệ: ' + role };
 
@@ -1861,8 +2104,7 @@ function handleUserCreate(body) {
     }
   }
 
-  // Build row theo header thực tế
-  const idxHash = header.indexOf('password_hash');
+  // Build row theo header thực tế — sheet chỉ giữ danh bạ, KHÔNG có mật khẩu
   const idxName = header.indexOf('full_name');
   const idxRole = header.indexOf('role');
   const idxA = header.indexOf('active');
@@ -1870,17 +2112,20 @@ function handleUserCreate(body) {
 
   const newRow = new Array(header.length).fill('');
   newRow[idxU] = username;
-  if (idxHash >= 0) newRow[idxHash] = hashPassword(password);
   if (idxName >= 0) newRow[idxName] = full_name;
   if (idxRole >= 0) newRow[idxRole] = role;
   if (idxA >= 0) newRow[idxA] = active;
   if (idxC >= 0) newRow[idxC] = nowVnString();
   sheet.appendRow(newRow);
 
+  // Mật khẩu vào Script Properties. must_change=true → user tự đặt lại ở lần đầu.
+  setPassword(username, password, true);
+
   appendAuditLog('user_create', auth.username, 'taikhoan', username,
     'role=' + role + ' active=' + active);
 
-  return { ok: true, username: username, message: 'Đã tạo user ' + username };
+  return { ok: true, username: username,
+           message: 'Đã tạo user ' + username + '. Người này sẽ phải đổi mật khẩu ở lần đăng nhập đầu.' };
 }
 
 /**
@@ -1974,12 +2219,16 @@ function handleUsers(body) {
     if (!includeInactive && !active) continue;
     const u = String(data[i][idxU] || '').trim();
     if (!u) continue;
+    const cred = readCred(u);
     users.push({
       username: u,
       full_name: String(data[i][idxN] || ''),
       role: String(data[i][idxR] || ''),
       active: active,
-      created_at: idxC >= 0 ? String(data[i][idxC] || '') : ''
+      created_at: idxC >= 0 ? String(data[i][idxC] || '') : '',
+      // Cho users.html hiển thị trạng thái mật khẩu (không bao giờ trả hash)
+      must_change: !!(cred && cred.must_change),
+      has_password: !!cred
     });
   }
   return { ok: true, users: users };
