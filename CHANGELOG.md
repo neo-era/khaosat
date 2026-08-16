@@ -10,7 +10,7 @@
 ### Khắc phục
 - **Kho mật khẩu mới**: Script Properties `CRED_<username>`, salt riêng từng user + HMAC-SHA256 lặp `PWD_ITERS` vòng (cũ: SHA-256 1 vòng, salt dùng chung, lưu ngay trong sheet).
 - **Bỏ cột `password_hash`** khỏi sheet `taikhoan` — sheet chỉ còn danh bạ.
-- **Bắt đổi mật khẩu lần đầu**: trang `doi-mat-khau.html` mới + cờ `must_change`; admin đặt mật khẩu tạm, KTV tự đặt mật khẩu riêng. Admin không biết mật khẩu thật của ai.
+- **Bắt đổi mật khẩu lần đầu**: trang `doi-mat-khau.html` mới + cờ `must_change`; admin đặt mật khẩu tạm, Người khảo sát tự đặt mật khẩu riêng. Admin không biết mật khẩu thật của ai.
 - **Endpoint `change_password`** — mọi role đăng nhập tự đổi mật khẩu của mình.
 - **Bỏ `sheetsCsvUrl`** khỏi `js/config.js` (không code nào dùng) + gỡ Bước H publish-to-web trong SETUP.md.
 - **Xoá mật khẩu plaintext** khỏi SETUP.md. *(Git history vẫn còn — đó là lý do bắt buộc đổi hết mật khẩu.)*
@@ -29,7 +29,7 @@
 
 ### Lần phát hành đầu — Đầy đủ chức năng
 
-**KTV (`user1`)**:
+**Người khảo sát (`user1`)**:
 - 15 form khảo sát render động từ schema JSON.
 - Header tiếng Việt NGUYÊN VĂN khớp Google Sheets.
 - Trường "Người khảo sát" auto-fill từ tài khoản đăng nhập, readonly.
@@ -40,9 +40,9 @@
 - PWA: cài lên màn hình chính, mở như app native.
 
 **Admin (`admin` / `user`)**:
-- Trang **KPI** (`kpi.html`): 5 chỉ tiêu chấm điểm KTV theo tháng (Tần suất / Chất lượng / Đa dạng / Đầy đủ / Ổn định), xếp loại A/B/C/D, biểu đồ cột SVG drill-down, export CSV.
+- Trang **KPI** (`kpi.html`): 5 chỉ tiêu chấm điểm Người khảo sát theo tháng (Tần suất / Chất lượng / Đa dạng / Đầy đủ / Ổn định), xếp loại A/B/C/D, biểu đồ cột SVG drill-down, export CSV.
 - Trang **Quản lý bản ghi** (`manage.html`): filter đa chiều, soft-delete (xoá ảnh Cloudinary + đánh dấu Deleted At), khôi phục bản chữ.
-- Trang **Báo cáo** (`report.html`): 3 vùng (bảng tổng quan / stacked bar chart timeseries / pivot KTV×Loại), 4 preset thời gian, export CSV combined.
+- Trang **Báo cáo** (`report.html`): 3 vùng (bảng tổng quan / stacked bar chart timeseries / pivot Người khảo sát×Loại), 4 preset thời gian, export CSV combined.
 
 **Demo (`demo`)**:
 - Đăng nhập + xem form, banner cảnh báo, nút Lưu disabled.
@@ -76,5 +76,5 @@
 
 ### Known limitations (xem README.md)
 - `cloudinaryName` cần điền thủ công sau setup Cloudinary.
-- `manage.html` dropdown filter KTV chưa load (sẽ có v1.1).
+- `manage.html` dropdown filter Người khảo sát chưa load (sẽ có v1.1).
 - Apps Script `kpi`/`report` chậm với data lớn (chấp nhận v1).

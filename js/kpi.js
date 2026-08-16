@@ -78,7 +78,7 @@ function renderTable() {
     summary.textContent = 'Tháng ' + state.month + ': không có bản ghi nào.';
     return;
   }
-  summary.textContent = `Tháng ${state.month}: ${state.results.length} KTV — Tổng ${state.results.reduce((s, r) => s + r.count, 0)} bản ghi`;
+  summary.textContent = `Tháng ${state.month}: ${state.results.length} Người khảo sát — Tổng ${state.results.reduce((s, r) => s + r.count, 0)} bản ghi`;
 
   // Sort
   const sorted = [...state.results].sort((a, b) => {
@@ -146,7 +146,7 @@ async function openDetail(r) {
   `;
   body.innerHTML = summary;
 
-  // Gọi apiList lấy records của KTV này trong tháng để vẽ chart theo ngày
+  // Gọi apiList lấy records của người khảo sát này trong tháng để vẽ chart theo ngày
   try {
     const from = state.month + '-01';
     const lastDay = new Date(parseInt(state.month.slice(0, 4)), parseInt(state.month.slice(5, 7)), 0).getDate();

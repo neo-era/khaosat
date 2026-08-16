@@ -63,7 +63,7 @@ export function initBbht(user) {
     }
   });
 
-  // KTV dropdown — chỉ admin/user
+  // Người khảo sát dropdown — chỉ admin/user
   if (user.role === 'admin' || user.role === 'user') {
     import('./api.js').then(mod => {
       if (typeof mod.apiUsers !== 'function') return;

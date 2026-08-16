@@ -162,7 +162,7 @@ Quay lại Apps Script → **Cài đặt dự án** → **Script Properties** �
 3. Điền:
    - **Description**: `khaosat v1`
    - **Execute as**: **Me** (bạn)
-   - **Who has access**: **Anyone** ⚠️ phải là Anyone (không có @sapulico) để KTV truy cập được không cần Google login
+   - **Who has access**: **Anyone** ⚠️ phải là Anyone (không có @sapulico) để Người khảo sát truy cập được không cần Google login
 4. Bấm **Deploy**. Cấp quyền lần nữa nếu hỏi.
 5. Copy **Web app URL** (kết thúc bằng `/exec`).
 6. So sánh với `appsScriptUrl` trong `js/config.js`:
@@ -265,10 +265,10 @@ Ba lỗi cùng lúc khiến hệ thống bị lộ thật:
 3. **`active=FALSE`** trong sheet `taikhoan` → user bị từ chối login.
 4. **Permission server-side**: demo không thể submit dù có gọi đúng API.
 5. **Mật khẩu không nằm trong Sheets** — mở được file cũng không thấy gì; băm lặp nhiều vòng, salt riêng từng người.
-6. **Mật khẩu tạm phải đổi ngay lần đăng nhập đầu** — admin không biết mật khẩu thật của KTV.
+6. **Mật khẩu tạm phải đổi ngay lần đăng nhập đầu** — admin không biết mật khẩu thật của người khảo sát.
 
 ### Khuyến nghị bắt buộc
-- **Mật khẩu KTV ≥10 ký tự, có chữ hoa + số + đặc biệt**. Không dùng tên/sinh nhật. Mỗi người một mật khẩu riêng — không dùng chung 1 tài khoản cho cả tổ.
+- **Mật khẩu Người khảo sát ≥10 ký tự, có chữ hoa + số + đặc biệt**. Không dùng tên/sinh nhật. Mỗi người một mật khẩu riêng — không dùng chung 1 tài khoản cho cả tổ.
 - **`AUTH_SALT` và `PWD_PEPPER` ≥32 ký tự random**, khác nhau. Không tiết lộ.
 - **`CLOUDINARY_API_SECRET`** chỉ trong Script Properties. KHÔNG bao giờ vào git.
 - **KHÔNG bao giờ ghi mật khẩu thật vào README/SETUP/commit message.**
@@ -292,10 +292,10 @@ Ba lỗi cùng lúc khiến hệ thống bị lộ thật:
 **Q: Chạy `initSheets` lại có mất data không?**
 A: Không. Script chỉ tạo sheet còn thiếu, skip sheet đã có.
 
-**Q: Muốn thêm 1 KTV mới?**
+**Q: Muốn thêm 1 người khảo sát mới?**
 A: Đăng nhập `admin` → menu → **👥 Quản lý user** → **+ Thêm user**. Không sửa sheet bằng tay nữa.
 
-**Q: KTV quên mật khẩu?**
+**Q: Người khảo sát quên mật khẩu?**
 A: **👥 Quản lý user** → nút **🔑 PWD** → đặt mật khẩu tạm → nhắn riêng cho người đó. Họ đăng nhập xong sẽ bị bắt đổi sang mật khẩu riêng ngay.
 
 **Q: Mật khẩu lưu ở đâu? Mở Google Sheets có xem được không?**
@@ -308,4 +308,4 @@ A: **Không.** Token đang dùng vẫn sống tới khi hết hạn 8h. Nếu c�
 A: Vào `manage.html` → filter "Trạng thái: Đã xoá" → tìm bản ghi → bấm **Khôi phục**. Dữ liệu chữ phục hồi, **ảnh đính kèm thì không** (đã xoá vĩnh viễn Cloudinary lúc soft-delete).
 
 **Q: Apps Script báo "Exceeded maximum execution time"?**
-A: Endpoint `kpi` hoặc `report` chạy quá 6 phút (quota free). Khi data > 50k row, cần tối ưu thêm sheet cache. Tạm thời: chia nhỏ filter (chỉ 1 tháng/lần, ít KTV).
+A: Endpoint `kpi` hoặc `report` chạy quá 6 phút (quota free). Khi data > 50k row, cần tối ưu thêm sheet cache. Tạm thời: chia nhỏ filter (chỉ 1 tháng/lần, ít Người khảo sát).

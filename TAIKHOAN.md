@@ -9,11 +9,11 @@
 
 | Muốn làm gì | Làm thế nào |
 |---|---|
-| Thêm KTV mới | `users.html` → **+ Thêm user** |
-| KTV quên mật khẩu | `users.html` → nút **🔑 PWD** → đặt mật khẩu tạm → nhắn riêng |
+| Thêm Người khảo sát mới | `users.html` → **+ Thêm user** |
+| Người khảo sát quên mật khẩu | `users.html` → nút **🔑 PWD** → đặt mật khẩu tạm → nhắn riêng |
 | Đổi mật khẩu của chính mình | Đăng nhập → trang **Đổi mật khẩu** |
 | Cho nghỉ việc / khoá tài khoản | `users.html` → **🚫 Vô hiệu** (đừng xoá dòng — mất lịch sử KPI) |
-| Đổi vai trò (KTV → quản lý) | `users.html` → **Sửa** → chọn vai trò |
+| Đổi vai trò (Người khảo sát → quản lý) | `users.html` → **Sửa** → chọn vai trò |
 | Đổi mật khẩu cho **tất cả** | Apps Script → chạy `resetAllPasswords()` |
 | Đá văng mọi phiên đăng nhập | Apps Script → đổi `AUTH_SALT` trong Thuộc tính tập lệnh |
 | Xem ai đang phải đổi mật khẩu | `users.html` → cột Trạng thái, nhãn ⚠ *phải đổi MK* |
@@ -33,7 +33,7 @@ Apps Script, Thuộc tính tập lệnh  ←  MẬT KHẨU (chỉ người mở 
                  "must_change":true,"updated_at":"2026-08-16 09:30:00"}
 ```
 
-Mật khẩu **chỉ lưu dạng băm một chiều**, không lưu chữ thật. Kể cả anh — người có toàn quyền — mở Thuộc tính tập lệnh ra cũng **không đọc ngược được** mật khẩu của KTV. Đó là chủ đích: anh đặt mật khẩu *tạm*, KTV tự đặt mật khẩu *riêng*.
+Mật khẩu **chỉ lưu dạng băm một chiều**, không lưu chữ thật. Kể cả anh — người có toàn quyền — mở Thuộc tính tập lệnh ra cũng **không đọc ngược được** mật khẩu của người khảo sát. Đó là chủ đích: anh đặt mật khẩu *tạm*, Người khảo sát tự đặt mật khẩu *riêng*.
 
 ### Vì sao phải đổi (sự cố 2026-08-16)
 
@@ -55,7 +55,7 @@ Ba lỗi xảy ra cùng lúc:
 |---|---|---|---|---|---|---|---|---|
 | `admin` | Quản lý văn phòng | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `user` | Quản lý phụ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
-| `user1` | **KTV hiện trường** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| `user1` | **người khảo sát hiện trường** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | `demo` | Xem thử / đào tạo | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 Bảng quyền đọc từ sheet **`phan quyen`** lúc chạy, cache 60 giây — anh tick/bỏ tick trong sheet là có hiệu lực trong vòng 1 phút, không cần sửa code.
@@ -71,11 +71,11 @@ Bảng quyền đọc từ sheet **`phan quyen`** lúc chạy, cache 60 giây �
 ```
 Anh đặt mật khẩu TẠM
       ↓
-KTV đăng nhập bằng mật khẩu tạm
+Người khảo sát đăng nhập bằng mật khẩu tạm
       ↓
 App CHẶN mọi trang, đẩy sang "Đổi mật khẩu"    ← không vào được index.html
       ↓
-KTV đặt mật khẩu RIÊNG (≥8 ký tự, khác tên đăng nhập)
+Người khảo sát đặt mật khẩu RIÊNG (≥8 ký tự, khác tên đăng nhập)
       ↓
 Vào app bình thường. Anh không biết mật khẩu này.
 ```
@@ -181,8 +181,8 @@ Muốn chắc hơn: nâng `PWD_ITERS` (đầu section CREDENTIAL STORE trong `Co
 
 | Tình huống | Cách xử lý |
 |---|---|
-| KTV quên mật khẩu | `users.html` → 🔑 PWD → đặt tạm → nhắn riêng |
-| KTV bị khoá do sai 5 lần | Đợi 5 phút, tự mở |
+| Người khảo sát quên mật khẩu | `users.html` → 🔑 PWD → đặt tạm → nhắn riêng |
+| Người khảo sát bị khoá do sai 5 lần | Đợi 5 phút, tự mở |
 | Nghi 1 mật khẩu bị lộ | 🔑 PWD đặt lại cho riêng người đó |
 | Nghi nhiều mật khẩu bị lộ | `resetAllPasswords()` |
 | Nghi `AUTH_SALT` bị lộ | Đổi trong Thuộc tính tập lệnh → mọi người đăng nhập lại |
