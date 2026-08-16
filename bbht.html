@@ -61,6 +61,27 @@
 
     /* Các phần tử chỉ hiển thị trên web, ẩn khi xuất PDF */
     .no-capture { }
+
+    /* Phụ lục ảnh — dùng <table> chứ không dùng CSS grid, vì Word không hiểu grid */
+    .bb-photo-title {
+      font-size: 10.5pt;
+      font-weight: bold;
+      margin: 10px 0 4px;
+    }
+    .bb-photo-table { width: 100%; border-collapse: collapse; }
+    .bb-photo-table td {
+      width: 33.33%;
+      padding: 3px;
+      vertical-align: top;
+      text-align: center;
+      border: none;
+    }
+    .bb-photo-table img {
+      width: 100%;
+      max-width: 175px;
+      border: 1px solid #999;
+    }
+    .bb-photo-cap { font-size: 8pt; color: #555; }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -132,12 +153,28 @@
         <div id="types-checkboxes" class="flex flex-wrap gap-2"></div>
       </div>
 
+      <!-- Tuỳ chọn phụ lục ảnh -->
+      <div class="mb-4">
+        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+          <input id="chk-photos" type="checkbox" checked class="w-4 h-4 accent-blue-700">
+          📷 Kèm phụ lục ảnh hiện trường
+        </label>
+        <p class="text-xs text-gray-500 mt-1 ml-6">
+          Ảnh được nhúng thẳng vào file — mở ở máy khác vẫn thấy. Nhiều ảnh thì file nặng và xuất lâu hơn.
+        </p>
+      </div>
+
       <!-- Nút hành động -->
       <div class="flex flex-wrap gap-3">
         <button id="btn-load"
                 class="bg-blue-700 hover:bg-blue-800 text-white px-6 font-medium rounded-lg transition"
                 style="min-height:44px">
           🔄 Tải dữ liệu
+        </button>
+        <button id="btn-export-word"
+                class="hidden bg-blue-800 hover:bg-blue-900 text-white px-6 font-medium rounded-lg transition"
+                style="min-height:44px">
+          📝 Xuất Word
         </button>
         <button id="btn-export-pdf"
                 class="hidden bg-green-700 hover:bg-green-800 text-white px-6 font-medium rounded-lg transition"
@@ -329,6 +366,9 @@
               </td>
             </tr>
           </table>
+
+          <!-- PHỤ LỤC ẢNH — js/bbht.js đổ vào, rỗng khi không tick "Kèm ảnh" -->
+          <div id="bbht-photos"></div>
 
         </div>
         <!-- /bbht-preview -->

@@ -1,7 +1,7 @@
 // sw.js — Service Worker đơn giản: precache shell + stale-while-revalidate cho assets.
 // Network only cho Apps Script + Cloudinary (đừng cache API response).
 
-const CACHE_NAME = 'khaosat-v3';
+const CACHE_NAME = 'khaosat-v4';
 
 const SHELL = [
   './',
@@ -42,6 +42,7 @@ const SHELL = [
   './js/bbht.js',
   './js/bangron.js',
   './js/change-password.js',
+  './js/photos.js',
   './js/help.js'
 ];
 
