@@ -635,12 +635,14 @@ export const TDK_LIST = [
 | Nơi lưu | cột `password_hash` trong sheet | Script Property `CRED_<username>` |
 | Ai đọc được | ai mở được file Sheets | chỉ người mở được Apps Script editor |
 | Salt | **chung** 1 `AUTH_SALT` cho mọi user | **riêng** 32 hex mỗi user |
-| Băm | SHA-256 **1 vòng** | HMAC-SHA256 lặp `PWD_ITERS` vòng (mặc định 2000) |
+| Băm | SHA-256 **1 vòng** | HMAC-SHA256 lặp `PWD_ITERS` vòng (mặc định **100**) |
 | Pepper | `AUTH_SALT` | `PWD_PEPPER` (fallback `AUTH_SALT`) |
 
 Bản ghi: `{v:1, salt, hash, iters, must_change, updated_at}`. **Không bao giờ lưu plaintext** — kể cả admin cũng không đọc ngược ra mật khẩu thật.
 
-Vì sao salt riêng + lặp nhiều vòng: salt riêng khiến 2 người trùng mật khẩu vẫn ra hash khác nhau (không dò một lần ra cả hệ thống); lặp nhiều vòng khiến mỗi lần thử tốn thời gian gấp `iters` lần, dò từ điển trở nên vô vọng.
+Vì sao salt riêng + lặp nhiều vòng: salt riêng khiến 2 người trùng mật khẩu vẫn ra hash khác nhau (không dò một lần ra cả hệ thống); lặp nhiều vòng khiến mỗi lần thử tốn thời gian gấp `iters` lần.
+
+> **`PWD_ITERS` chỉ ảnh hưởng lúc đăng nhập.** `deriveHash` chỉ chạy trong `handleLogin` và `handleChangePassword`. `verifyToken` — thứ mọi request khác đi qua — **không băm mật khẩu**. Nên tăng số vòng không làm app chậm đi lúc dùng; đã chốt 100 theo yêu cầu ưu tiên tốc độ đăng nhập.
 
 **Hàm chính** (section CREDENTIAL STORE trong `Code.gs`): `setPassword` · `verifyPassword` · `deriveHash` · `benchmarkHash` (đo để chọn `PWD_ITERS`) · `resetAllPasswords` (đổi hết + xoá cột `password_hash`) · `setPasswordThuCong`.
 

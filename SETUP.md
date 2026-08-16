@@ -80,13 +80,15 @@ Copy đoạn giữa `/d/` và `/edit` — để sang Bước B.
 > Lý do đổi: trước đây cột `password_hash` nằm ngay trong sheet, ai mở được file là
 > thấy toàn bộ hash — mà sheet lại từng bị publish ra web.
 
-### C2.1 — Đo tốc độ băm rồi chọn số vòng lặp
+### C2.1 — (Tuỳ chọn) Đo tốc độ băm
 
-1. Apps Script → chọn hàm **`benchmarkHash`** → ▶ Run.
-2. Xem Execution log, chọn số vòng lớn nhất mà vẫn **dưới ~300ms** (log có in sẵn gợi ý).
-3. Nếu khác 2000, sửa hằng `PWD_ITERS` ở đầu section CREDENTIAL STORE trong `Code.gs` → Lưu.
+Mặc định `PWD_ITERS = 100` — chọn mức này để **đăng nhập nhanh nhất**.
 
-Băm càng nhiều vòng thì người lấy được hash càng tốn thời gian dò, nhưng đăng nhập cũng chậm hơn — nên đo để cân bằng.
+Muốn xem nó tốn bao lâu: Apps Script → chọn hàm **`benchmarkHash`** → ▶ Run → xem Execution log.
+
+> Chi phí băm **chỉ trả 1 lần lúc đăng nhập** (mỗi người 1–2 lần/ngày). Submit form, xem KPI, tải báo cáo đều đi qua token, **không băm lần nào** — nên tăng số vòng cũng không làm app chậm đi trong lúc dùng.
+
+Nếu muốn chắc hơn: nâng `PWD_ITERS` lên 500–1000 ở đầu section CREDENTIAL STORE trong `Code.gs`. Bản ghi cũ vẫn đăng nhập bình thường vì mỗi bản ghi tự nhớ số vòng của nó.
 
 ### C2.2 — Đặt mật khẩu tạm cho tất cả
 
