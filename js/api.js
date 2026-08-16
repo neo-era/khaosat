@@ -240,7 +240,7 @@ export async function uploadImageToDrive(file, surveyType) {
  * Ưu tiên Google Drive qua Apps Script. Nếu Drive lỗi (hay gặp nhất: script chưa
  * được cấp quyền Drive, hoặc DRIVE_FOLDER_ID chưa cấu hình) thì tự chuyển sang
  * Cloudinary unsigned upload — chạy thẳng từ trình duyệt, không cần quyền OAuth.
- * Nhờ vậy KTV ngoài hiện trường không bị kẹt khi backend trục trặc.
+ * Nhờ vậy người khảo sát ngoài hiện trường không bị kẹt khi backend trục trặc.
  *
  * Cả 2 dạng URL đều được phần còn lại của hệ thống hiểu: Code.gs khi xoá bản ghi
  * tự phân biệt `drive.google.com` (trash file) và Cloudinary (destroy API).

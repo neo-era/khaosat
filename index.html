@@ -27,7 +27,7 @@
     </div>
     <div class="max-w-4xl mx-auto px-3 pb-2 flex items-center gap-2 text-xs text-gray-600 border-t border-gray-100 pt-1">
       <span id="user-name" class="truncate flex-1"></span>
-      <span id="role-badge" class="px-2 py-0.5 rounded-full font-medium"></span>
+      <span id="role-badge" class="px-2 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap"></span>
     </div>
   </header>
 
@@ -45,7 +45,7 @@
       <li><a href="docs.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📚</span> Tài liệu tham khảo</a></li>
       <li class="menu-schedule hidden"><a href="schedule.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📅</span> Lịch công tác</a></li>
       <li class="menu-my-kpi hidden"><a href="my-kpi.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🎯</span> KPI của tôi</a></li>
-      <li class="menu-admin hidden"><a href="kpi.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📊</span> KPI tổng (tất cả KTV)</a></li>
+      <li class="menu-admin hidden"><a href="kpi.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📊</span> KPI tổng (tất cả)</a></li>
       <li class="menu-admin hidden"><a href="manage.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">🗂️</span> Quản lý bản ghi</a></li>
       <li class="menu-admin hidden"><a href="report.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📈</span> Báo cáo tổng hợp</a></li>
       <li class="menu-admin hidden"><a href="bbht.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📝</span> Biên bản hiện trường</a></li>
@@ -80,7 +80,7 @@
     const user = requireAuth();
 
     // ===== Header: user info + role badge =====
-    const ROLE_DISPLAY = { admin: 'Quản lý', user: 'Quản lý', user1: 'KTV', demo: 'Demo' };
+    const ROLE_DISPLAY = { admin: 'Quản lý', user: 'Quản lý', user1: 'Người khảo sát', demo: 'Demo' };
     const ROLE_COLOR = {
       admin: 'bg-purple-100 text-purple-800',
       user:  'bg-purple-100 text-purple-800',

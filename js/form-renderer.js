@@ -99,7 +99,7 @@ async function autoMarkScheduleDone() {
   }
 }
 
-/** Hiển thị badge nhỏ ở đầu form nếu KTV có lịch pending hôm nay match schemaKey. */
+/** Hiển thị badge nhỏ ở đầu form nếu Người khảo sát có lịch pending hôm nay match schemaKey. */
 async function showScheduleBadge() {
   if (!state.user || state.user.role === 'demo') return;
   try {
@@ -138,7 +138,7 @@ async function loadEditRow() {
     const banner = document.createElement('div');
     banner.className = 'bg-yellow-100 border-l-4 border-yellow-500 text-yellow-900 p-3 mb-3 rounded text-sm';
     banner.innerHTML = `✏️ <strong>Đang sửa bản ghi STT #${escapeHtml(String(state.editStt))}</strong>
-      &middot; KTV gốc: ${escapeHtml(row['Người khảo sát'] || row['Username'] || '?')}
+      &middot; Người khảo sát gốc: ${escapeHtml(row['Người khảo sát'] || row['Username'] || '?')}
       &middot; Gửi lúc: ${escapeHtml(row['Submitted At'] || '?')}<br>
       <span class="text-xs">Lưu ý: Người khảo sát, STT, Ngày khảo sát, Submitted At được giữ nguyên — chỉ sửa thông tin nghiệp vụ.</span>`;
     state.container.insertBefore(banner, state.container.firstChild);

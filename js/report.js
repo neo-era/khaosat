@@ -47,7 +47,7 @@ async function buildUserFilter() {
       sel.appendChild(opt);
     }
   } catch (e) {
-    // Im lặng, để dropdown rỗng = "tất cả KTV"
+    // Im lặng, để dropdown rỗng = "tất cả người khảo sát"
   }
 }
 
@@ -239,7 +239,7 @@ function renderAreaB(rows, types) {
 }
 
 // =====================================================================
-// AREA C — Pivot KTV × Loại
+// AREA C — Pivot Người khảo sát × Loại
 // =====================================================================
 function renderAreaC(rows, types) {
   const div = document.getElementById('areaC');
@@ -250,7 +250,7 @@ function renderAreaC(rows, types) {
   const usedTypes = types.length > 0 && types.length < SCHEMA_KEYS.length ? types : SCHEMA_KEYS;
 
   let html = '<table class="w-full text-sm min-w-[800px]"><thead class="bg-gray-100 border-b"><tr>';
-  html += '<th class="px-2 py-2 text-left text-xs font-semibold sticky left-0 bg-gray-100">KTV</th>';
+  html += '<th class="px-2 py-2 text-left text-xs font-semibold sticky left-0 bg-gray-100">Người khảo sát</th>';
   for (const t of usedTypes) {
     html += `<th class="px-1 py-2 text-center text-xs font-semibold" title="${escapeHtml(SCHEMAS[t] ? SCHEMAS[t].name : t)}">${SCHEMAS[t] ? SCHEMAS[t].icon : '📋'}</th>`;
   }
@@ -410,8 +410,8 @@ function exportCsv() {
   }
 
   // C
-  sections.push('\n## Vùng C — Pivot KTV × Loại');
-  sections.push(['KTV', 'Họ tên', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'].map(csvEscape).join(','));
+  sections.push('\n## Vùng C — Pivot Người khảo sát × Loại');
+  sections.push(['Người khảo sát', 'Họ tên', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'].map(csvEscape).join(','));
   for (const r of state.data.areaC) {
     sections.push([
       csvEscape(r.username), csvEscape(r.full_name),
@@ -496,13 +496,13 @@ function exportXlsx() {
     r.total
   ]);
   const wsC = XLSX.utils.aoa_to_sheet([
-    ['Vùng C — Pivot KTV × Loại'],
+    ['Vùng C — Pivot Người khảo sát × Loại'],
     [],
     headerC,
     ...rowsC
   ]);
   wsC['!cols'] = [{wch:12},{wch:24}, ...allTypes.map(() => ({wch:14})), {wch:10}];
-  XLSX.utils.book_append_sheet(wb, wsC, 'C-Pivot KTV');
+  XLSX.utils.book_append_sheet(wb, wsC, 'C-Pivot Người khảo sát');
 
   // Sheet D: Heatmap Phường
   if (state.data.areaD && state.data.areaD.length > 0) {
@@ -564,7 +564,7 @@ function exportPdf() {
 
   // === Trang 3: Vùng C Pivot ===
   doc.addPage();
-  drawPdfHeader(doc, 'Vung C — Pivot KTV x Loai', dateStr);
+  drawPdfHeader(doc, 'Vung C — Pivot Người khảo sát x Loai', dateStr);
   doc.autoTable({
     startY: 28,
     head: [['User', 'Ho ten', ...allTypes.map(t => SCHEMAS[t].name), 'Tong']],

@@ -19,7 +19,7 @@ export async function initSchedule(currentUser) {
   // Default range = từ hôm nay đến 7 ngày
   applyPreset('week');
 
-  // Populate KTV filter cho admin/user
+  // Populate Người khảo sát filter cho admin/user
   if (canWrite) {
     try {
       const u = await apiUsers();
@@ -36,7 +36,7 @@ export async function initSchedule(currentUser) {
       }
     } catch (e) { /* fallback empty */ }
   } else {
-    // user1 → ẩn dropdown KTV (server tự filter own)
+    // user1 → ẩn dropdown Người khảo sát (server tự filter own)
     document.getElementById('filter-ktv').style.display = 'none';
   }
 
@@ -213,7 +213,7 @@ async function handleCreate(e) {
       khu_vuc: document.getElementById('f-khuvuc').value.trim(),
       ghi_chu: document.getElementById('f-ghichu').value.trim()
     };
-    if (!item.ktv_username) throw new Error('Chọn KTV');
+    if (!item.ktv_username) throw new Error('Chọn Người khảo sát');
     if (!item.ngay) throw new Error('Chọn ngày');
     await apiScheduleCreate([item]);
     showToast('✅ Đã thêm lịch', 'success');

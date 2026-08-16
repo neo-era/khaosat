@@ -22,7 +22,7 @@
  *   action=list     — body {token, type?, username?, from?, to?, includeDeleted?} → danh sách bản ghi
  *   action=delete   — body {token, type, stt} → soft-delete + xoá ảnh Cloudinary
  *   action=restore  — body {token, type, stt} → khôi phục soft-delete (không khôi phục ảnh)
- *   action=kpi      — body {token, month: "YYYY-MM"} → KPI tháng cho từng KTV
+ *   action=kpi      — body {token, month: "YYYY-MM"} → KPI tháng cho từng người khảo sát
  *   action=report   — body {token, types[], from, to, usernames[], status, groupBy} → 3 vùng aggregation
  */
 
@@ -181,7 +181,7 @@ const KPI_DEFAULTS = [
 const PHAN_QUYEN_DEFAULTS = [
   ['admin', true,  true,  true,  true,  true,  'Quản lý văn phòng — toàn quyền'],
   ['user',  true,  true,  true,  true,  true,  'Quản lý phụ (cùng quyền admin)'],
-  ['user1', true,  false, false, false, false, 'KTV hiện trường — chỉ nhập KS'],
+  ['user1', true,  false, false, false, false, 'người khảo sát hiện trường — chỉ nhập KS'],
   ['demo',  false, false, false, false, false, 'Tài khoản xem thử — readonly']
 ];
 
@@ -1904,7 +1904,7 @@ function handleDelete(body) {
  * action=update — sửa bản ghi đã submit.
  * Body: { token, type, stt, data, photos? }
  * Permission: edit.
- * KHÔNG ghi đè: STT, Submitted At, Username, Người khảo sát (giữ KTV gốc), Deleted At, Deleted By.
+ * KHÔNG ghi đè: STT, Submitted At, Username, Người khảo sát (giữ Người khảo sát gốc), Deleted At, Deleted By.
  * Ghi đè được: các field business + Ảnh (URLs) nếu photos được truyền (mảng URLs).
  */
 function handleUpdate(body) {
@@ -2001,7 +2001,7 @@ function handleKpi(body) {
   const idxR = tkHeader.indexOf('role');
   const idxA = tkHeader.indexOf('active');
 
-  // Tập hợp KTV (admin/user/user1 — không tính demo)
+  // Tập hợp Người khảo sát (admin/user/user1 — không tính demo)
   const ktvs = [];
   for (let i = 1; i < tkData.length; i++) {
     const role = tkData[i][idxR];
@@ -2063,7 +2063,7 @@ function handleKpi(body) {
     });
   });
 
-  // Tính 5 chỉ tiêu cho mỗi KTV
+  // Tính 5 chỉ tiêu cho mỗi người khảo sát
   const results = Object.keys(userStats).map(u => {
     const s = userStats[u];
     const frequency = Math.min(s.total / targets.target_submissions_per_month, 1) * 100;
@@ -2797,7 +2797,7 @@ function notifyAdmins(type, sheetName, data, stt, user, rowNum, sheetId) {
         </div>
         <div style="border:1px solid #e5e7eb; border-top:0; padding:16px; border-radius:0 0 8px 8px">
           <p style="margin:0 0 12px">Loại: <strong>${escapeHtmlGs(sheetName)}</strong> · STT <strong>#${stt}</strong></p>
-          <p style="margin:0 0 12px; color:#666; font-size:13px">KTV: <strong>${escapeHtmlGs(user.full_name)}</strong> (@${escapeHtmlGs(user.username)})</p>
+          <p style="margin:0 0 12px; color:#666; font-size:13px">Người khảo sát: <strong>${escapeHtmlGs(user.full_name)}</strong> (@${escapeHtmlGs(user.username)})</p>
           <table style="border-collapse:collapse; width:100%; font-size:14px; border:1px solid #e5e7eb">${rowsHtml}</table>
           ${photoHtml}
           <p style="margin-top:16px">
