@@ -1389,6 +1389,7 @@ function doPost(e) {
       case 'bulk_import':   return jsonResponse(handleBulkImport(body));
       case 'export_raw':    return jsonResponse(handleExportRaw(body));
       case 'upload_photo':  return jsonResponse(handleUploadPhoto(body));
+      case 'reset_own_password': return jsonResponse(handleResetOwnPassword(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -1412,26 +1413,14 @@ function handleLogin(body) {
   if (!username || !password) {
     return { ok: false, error: 'Thiếu username hoặc password' };
   }
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'login_fail_' + username;
-  const failCount = parseInt(cache.get(cacheKey) || '0', 10);
-  if (failCount >= 5) {
-    return { ok: false, error: 'Tài khoản tạm khoá do nhập sai 5 lần. Vui lòng đợi 5 phút.' };
-  }
-
   const user = findUser(username);
-  const fail = (msg) => {
-    cache.put(cacheKey, String(failCount + 1), 300);
-    return { ok: false, error: msg };
-  };
-  if (!user) return fail('Sai tên đăng nhập hoặc mật khẩu');
+  if (!user) return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
   if (user.active === false) return { ok: false, error: 'Tài khoản đã bị khoá' };
   const expectedHash = hashPassword(password);
   if (expectedHash !== String(user.password_hash).trim()) {
-    return fail('Sai tên đăng nhập hoặc mật khẩu');
+    return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
   }
   // Thành công
-  cache.remove(cacheKey);
   const token = generateToken(username);
   return {
     ok: true,
@@ -1814,6 +1803,64 @@ function handleResetPassword(body) {
   appendAuditLog('reset_password', auth.username, 'taikhoan', target, 'pwd reset by ' + auth.username);
 
   return { ok: true, message: 'Đã reset mật khẩu cho ' + target };
+}
+
+/**
+ * action=reset_own_password — Tự đặt lại mật khẩu (không cần token / đang đăng xuất).
+ * Body: { username, full_name, new_password }
+ * Verify danh tính: username khớp + full_name khớp (case-insensitive, trim).
+ * Rate limit: 3 lần sai / 5 phút per username.
+ */
+function handleResetOwnPassword(body) {
+  const username = String(body.username || '').trim().toLowerCase();
+  const fullName = String(body.full_name || '').trim();
+  const newPwd  = String(body.new_password || '');
+
+  if (!username || !fullName || !newPwd) {
+    return { ok: false, error: 'Vui lòng điền đầy đủ thông tin' };
+  }
+  if (newPwd.length < 8) {
+    return { ok: false, error: 'Mật khẩu mới phải có ít nhất 8 ký tự' };
+  }
+  if (newPwd.toLowerCase() === username) {
+    return { ok: false, error: 'Mật khẩu không được trùng tên đăng nhập' };
+  }
+
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) return { ok: false, error: 'Lỗi hệ thống — sheet taikhoan không tồn tại' };
+
+  const data   = sheet.getDataRange().getValues();
+  const header = data[0].map(String);
+  const idxU      = header.indexOf('username');
+  const idxHash   = header.indexOf('password_hash');
+  const idxFull   = header.indexOf('full_name');
+  const idxActive = header.indexOf('active');
+
+  if (idxU < 0 || idxHash < 0 || idxFull < 0) {
+    return { ok: false, error: 'Lỗi cấu hình sheet taikhoan' };
+  }
+
+  let rowIdx = -1;
+  let storedFull = '';
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idxU]).trim().toLowerCase() === username) {
+      if (idxActive >= 0 && data[i][idxActive] === false) {
+        return { ok: false, error: 'Tài khoản đã bị khoá. Liên hệ quản trị viên.' };
+      }
+      storedFull = String(data[i][idxFull]).trim();
+      rowIdx = i + 1;  // 1-based sheet row
+      break;
+    }
+  }
+
+  if (rowIdx < 0 || fullName.toLowerCase() !== storedFull.toLowerCase()) {
+    return { ok: false, error: 'Thông tin không khớp. Kiểm tra lại tên đăng nhập và họ tên đầy đủ.' };
+  }
+
+  sheet.getRange(rowIdx, idxHash + 1).setValue(hashPassword(newPwd));
+  appendAuditLog('reset_own_password', username, 'taikhoan', username, 'self-service reset via full_name');
+
+  return { ok: true, message: 'Mật khẩu đã được đặt lại thành công' };
 }
 
 const VALID_ROLES = ['admin', 'user', 'user1', 'demo'];

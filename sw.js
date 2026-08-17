@@ -35,7 +35,8 @@ const SHELL = [
   './js/map.js',
   './js/users.js',
   './js/docs.js',
-  './js/schedule.js'
+  './js/schedule.js',
+  './js/install.js'
 ];
 
 self.addEventListener('install', (event) => {
