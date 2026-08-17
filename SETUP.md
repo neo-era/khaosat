@@ -35,14 +35,20 @@ Copy đoạn giữa `/d/` và `/edit` — để sang Bước B.
    | Key | Value | Ghi chú |
    |---|---|---|
    | `SPREADSHEET_ID` | ID copy ở Bước A | |
-   | `AUTH_SALT` | Chuỗi random ≥32 ký tự | Sinh bằng cách: mở Console trình duyệt (F12 → Console) gõ `Array.from({length:48}, () => Math.random().toString(36)[2]).join('')` → copy kết quả |
+   | `AUTH_SALT` | Chuỗi random ≥32 ký tự | Ký token đăng nhập. Sinh bằng: mở Console trình duyệt (F12 → Console) gõ `Array.from({length:48}, () => Math.random().toString(36)[2]).join('')` |
+   | `PWD_PEPPER` | **Đừng tự gõ** — chạy hàm `taoPwdPepper()` (xem C2.0) | Băm mật khẩu. Tách riêng khỏi `AUTH_SALT` để đổi được mà không đá văng mọi phiên đăng nhập. Không đặt thì hệ thống tự dùng `AUTH_SALT`. |
+   | `DRIVE_FOLDER_ID` | ID thư mục Drive chứa ảnh | Lấy từ URL thư mục: `/drive/folders/`**`<ID>`** |
    | `CLOUDINARY_CLOUD_NAME` | Để trống tạm, điền ở Bước E | |
    | `CLOUDINARY_API_KEY` | Để trống tạm, điền ở Bước E | |
    | `CLOUDINARY_API_SECRET` | Để trống tạm, điền ở Bước E | |
 
 6. Bấm **Lưu thuộc tính kịch bản**.
 
-> 🔒 `AUTH_SALT` và `CLOUDINARY_API_SECRET` **chỉ tồn tại ở đây**, không bao giờ vào git. Nếu rò rỉ, sinh lại salt mới sẽ vô hiệu hoá toàn bộ token đang dùng → user phải đăng nhập lại.
+> 🔒 `AUTH_SALT`, `PWD_PEPPER`, `CLOUDINARY_API_SECRET` **chỉ tồn tại ở đây**, không bao giờ vào git.
+> - Đổi `AUTH_SALT` → mọi token đang dùng bị vô hiệu, ai cũng phải đăng nhập lại.
+> - Đổi `PWD_PEPPER` → **mọi mật khẩu ngừng hoạt động**, phải chạy `resetAllPasswords()` đặt lại toàn bộ.
+
+> 📌 **Mật khẩu người dùng cũng nằm trong Script Properties**, dưới các khoá `CRED_<username>` — do hệ thống tự ghi, đừng sửa tay. Xem Bước C2.
 
 ---
 
@@ -65,54 +71,64 @@ Copy đoạn giữa `/d/` và `/edit` — để sang Bước B.
 
 > Có thể chạy `initSheets` lại nhiều lần an toàn — script tự skip sheet đã tồn tại.
 
-## Bước C2 — Migrate sheet `taikhoan` (chạy 1 lần)
+## Bước C2 — Đặt mật khẩu cho toàn bộ user (chạy 1 lần)
 
-Sheet `taikhoan` đang ở format cũ (header tiếng Việt + password plaintext). Cần đổi sang format mới (header English + password hash + thêm cột active).
+> **Mật khẩu KHÔNG lưu trong Google Sheets.** Từ 2026-08-16, mật khẩu nằm trong
+> Script Properties dưới khoá `CRED_<username>`, dạng salt riêng từng người + băm lặp nhiều vòng.
+> Sheet `taikhoan` chỉ còn danh bạ: `username, full_name, role, active, created_at`.
+>
+> Lý do đổi: trước đây cột `password_hash` nằm ngay trong sheet, ai mở được file là
+> thấy toàn bộ hash — mà sheet lại từng bị publish ra web.
 
-1. Trong Apps Script Code.gs, dropdown hàm → chọn **`migrateTaikhoan`** → ▶ Run.
-2. Mở **View → Logs**, xem kết quả:
-   - Phải thấy "Renamed columns: tenDangNhap → username, …".
-   - "Added active column: TRUE".
-   - "Migrated passwords: admin, demo, user1, ndan, ndthang, mnhuy, lnhien, lvhung, ltqthuc, thluu" (10 user).
-3. Mở Google Sheets sheet `taikhoan` — verify:
-   - Header: `username, password_hash, full_name, role, active, created_at`.
-   - Mật khẩu cột `password_hash` giờ là chuỗi hex 64 ký tự (vd `7d4f8a2b...`).
-   - Cột `active` mới, tất cả TRUE.
-4. **Mật khẩu plaintext gốc vẫn dùng được**:
-   - `admin` login bằng `admin123` (hash đã match).
-   - `demo` login bằng `demo123`.
-   - `user1`/`ndan`/`ndthang`/`lnhien`/... login bằng `123`.
-   - `mnhuy` login bằng `huy123`, `lvhung` login bằng `hung123`, v.v.
-5. **Khuyến nghị MẠNH**: ngay sau migration, đổi mật khẩu cho các user dùng `123` (yếu) sang chuỗi mạnh hơn. Cách:
-   ```javascript
-   // Trong Apps Script, chạy:
-   Logger.log(hashPassword('MatKhauMoi@2026'));  // copy hash trả về
-   // Paste vào cột password_hash của user X
-   ```
+### C2.0 — Tạo `PWD_PEPPER` (làm TRƯỚC, chỉ 1 lần)
 
-> Migration **idempotent**: chạy lại không gây hại (đã migrate thì skip).
+Apps Script → chọn hàm **`taoPwdPepper`** → ▶ Run. Xong. Không phải gõ, không phải copy chuỗi bí mật đi đâu cả — nó sinh ra và nằm luôn trong Thuộc tính tập lệnh.
+
+> **Đừng tự sinh chuỗi rồi dán vào.** Chrome nay chặn dán code vào Console (bắt gõ `allow pasting`) — cảnh báo đó là đúng, đừng vượt qua nó. Và chuỗi bí mật mà đi qua clipboard hay tin nhắn thì coi như đã lộ.
+
+Hàm này **từ chối ghi đè** nếu `PWD_PEPPER` đã có, vì ghi đè sẽ làm mọi mật khẩu ngừng hoạt động.
+
+> ⚠️ **Thứ tự quan trọng**: phải chạy `taoPwdPepper()` **trước** `resetAllPasswords()`. Làm ngược lại thì mật khẩu vừa phát cho mọi người hỏng ngay, phải phát lại lần nữa. (Hàm có kiểm và báo nếu anh lỡ làm ngược.)
+
+### C2.1 — (Tuỳ chọn) Đo tốc độ băm
+
+Mặc định `PWD_ITERS = 100` — chọn mức này để **đăng nhập nhanh nhất**.
+
+Muốn xem nó tốn bao lâu: Apps Script → chọn hàm **`benchmarkHash`** → ▶ Run → xem Execution log.
+
+> Chi phí băm **chỉ trả 1 lần lúc đăng nhập** (mỗi người 1–2 lần/ngày). Submit form, xem KPI, tải báo cáo đều đi qua token, **không băm lần nào** — nên tăng số vòng cũng không làm app chậm đi trong lúc dùng.
+
+Nếu muốn chắc hơn: nâng `PWD_ITERS` lên 500–1000 ở đầu section CREDENTIAL STORE trong `Code.gs`. Bản ghi cũ vẫn đăng nhập bình thường vì mỗi bản ghi tự nhớ số vòng của nó.
+
+### C2.2 — Đặt mật khẩu tạm cho tất cả
+
+1. Apps Script → chọn hàm **`resetAllPasswords`** → ▶ Run.
+2. Hàm này sẽ:
+   - Sinh mật khẩu tạm 12 ký tự cho **từng** user trong sheet `taikhoan`.
+   - Ghi vào Script Properties, kèm cờ bắt đổi ở lần đăng nhập đầu.
+   - **Xoá hẳn cột `password_hash`** khỏi sheet.
+3. Mở **Execution log** → copy bảng `username / mật khẩu tạm` → phát **riêng** cho từng người (nhắn cá nhân, không đăng lên nhóm).
+4. Mở sheet `taikhoan` xác nhận cột `password_hash` đã biến mất.
+
+> Mỗi người đăng nhập lần đầu bằng mật khẩu tạm sẽ **bị buộc đổi sang mật khẩu riêng** trước khi vào được app. Admin không biết mật khẩu thật của ai.
+
+### C2.3 — Quên mật khẩu 1 người
+
+- **Cách 1 (khuyến nghị)**: admin vào **users.html** → nút **🔑 PWD** → đặt mật khẩu tạm.
+- **Cách 2**: Apps Script → sửa `USERNAME` / `MAT_KHAU` trong hàm `setPasswordThuCong()` → Run.
 
 ---
 
-## Bước D — Thêm user mới (nếu cần)
+## Bước D — Thêm user mới
 
-10 user đã có sẵn sau migration ở Bước C2. Nếu muốn thêm KTV mới:
+Làm trên giao diện, **không** sửa sheet bằng tay:
 
-1. Trong Apps Script, chạy:
-   ```javascript
-   Logger.log(hashPassword('MatKhauMoi@2026'));
-   ```
-   Copy hash trong Logs.
-2. Mở sheet `taikhoan`, thêm dòng mới:
-   - `username` = vd `ndtam`
-   - `password_hash` = paste hash
-   - `full_name` = `Nguyễn Đại Tâm`
-   - `role` = chọn `admin`/`user`/`user1`/`demo` từ dropdown
-   - `active` = TRUE (tick checkbox)
-   - `created_at` = `=NOW()`
+1. Đăng nhập bằng tài khoản `admin` → menu → **👥 Quản lý user**.
+2. Bấm **+ Thêm user** → điền username, mật khẩu tạm (≥8 ký tự), họ tên, vai trò.
+3. Đưa mật khẩu tạm cho người đó — họ sẽ bị bắt đổi ngay lần đăng nhập đầu.
 
-> Vô hiệu hoá user: bỏ tick `active` (= FALSE). Không xoá row để giữ lịch sử KPI.
-> Đổi mật khẩu: chạy lại `hashPassword('mật-khẩu-mới')`, paste đè vào cột `password_hash`.
+> Vô hiệu hoá user: nút **🚫 Vô hiệu** (giữ nguyên dòng để không mất lịch sử KPI).
+> Thêm dòng thẳng vào sheet `taikhoan` vẫn được, nhưng user đó **chưa có mật khẩu** — cột Trạng thái trong users.html sẽ hiện ⛔ *chưa có MK*, phải bấm 🔑 PWD đặt cho họ.
 
 ---
 
@@ -146,7 +162,7 @@ Quay lại Apps Script → **Cài đặt dự án** → **Script Properties** �
 3. Điền:
    - **Description**: `khaosat v1`
    - **Execute as**: **Me** (bạn)
-   - **Who has access**: **Anyone** ⚠️ phải là Anyone (không có @sapulico) để KTV truy cập được không cần Google login
+   - **Who has access**: **Anyone** ⚠️ phải là Anyone (không có @sapulico) để Người khảo sát truy cập được không cần Google login
 4. Bấm **Deploy**. Cấp quyền lần nữa nếu hỏi.
 5. Copy **Web app URL** (kết thúc bằng `/exec`).
 6. So sánh với `appsScriptUrl` trong `js/config.js`:
@@ -166,23 +182,25 @@ cloudinaryName: 'tên-cloud-name-của-bạn',
 cloudinaryPreset: 'khaosat_unsigned',
 ```
 
-URL Apps Script và `sheetsCsvUrl` đã có sẵn — chỉ verify giống với deploy thực tế.
+URL Apps Script đã có sẵn — chỉ verify giống với deploy thực tế.
 
 Save file.
 
 ---
 
-## Bước H — Publish-to-web Google Sheets (cho report)
+## Bước H — ⛔ KHÔNG publish Google Sheets ra web
 
-1. Trong Google Sheets, menu **Tệp** → **Chia sẻ** → **Xuất bản lên web**.
-2. Tab **Liên kết**:
-   - Toàn bộ tài liệu / chọn sheet: tuỳ. Mặc định **Toàn bộ tài liệu**.
-   - **Định dạng đã xuất bản**: **Giá trị được phân tách bằng dấu phẩy (.csv)**
-3. Bấm **Xuất bản** → **OK** xác nhận.
-4. Copy URL hiện ra (kết thúc bằng `pub?output=csv` hoặc tương tự).
-5. So sánh với `sheetsCsvUrl` trong `js/config.js` — khác thì cập nhật.
+Bước này trước đây hướng dẫn bật **Tệp → Chia sẻ → Xuất bản lên web** để lấy URL CSV. **Đã bỏ hẳn.**
 
-> URL này public — ai có URL đều đọc được. Đã ghi trong CLAUDE.md mục 17.
+Ngày 2026-08-16 phát hiện URL đó đang phát tán **chính sheet `taikhoan`** (username + password_hash + họ tên + vai trò) ra internet, ai có URL đều tải về được mà không cần đăng nhập. Trong khi **không dòng code nào trong app đọc URL này** — nó chỉ là một phương án dự phòng chưa bao giờ dùng tới.
+
+**Nếu file của anh đang bật publish, tắt ngay:**
+
+1. Google Sheets → **Tệp** → **Chia sẻ** → **Xuất bản lên web**
+2. Bấm **Nội dung đã xuất bản và cài đặt** → **Dừng xuất bản**
+3. Kiểm lại: mở URL cũ, phải ra lỗi thay vì bảng dữ liệu
+
+> Cần đọc dữ liệu ở đâu thì gọi Apps Script — có kiểm token và phân quyền. Đừng publish sheet.
 
 ---
 
@@ -228,24 +246,44 @@ Repo này **PUBLIC** trên GitHub theo quyết định của SAPULICO (CLAUDE.md
 | File | Public lộ gì | Mức độ |
 |---|---|---|
 | `js/config.js` | URL Apps Script + Cloudinary name + preset | Ai cũng POST request được, bị chặn bởi token+role+rate limit |
-| `js/config.js` | URL Sheets CSV publish | Ai cũng đọc data sheet được publish |
+
+### ⚠️ Sự cố 2026-08-16 — đã xử lý, ghi lại để không lặp
+
+Ba lỗi cùng lúc khiến hệ thống bị lộ thật:
+
+1. File này (**public trên GitHub**) từng ghi thẳng mật khẩu plaintext của 10 tài khoản.
+2. Sheet `taikhoan` bị **publish ra web** → username + password_hash tải về được tự do.
+3. Mật khẩu lưu ngay trong sheet dữ liệu, băm 1 vòng SHA-256, salt dùng chung.
+
+Đã khắc phục: mật khẩu chuyển sang Script Properties (salt riêng + băm lặp), đổi toàn bộ mật khẩu, ngưng publish sheet, xoá `sheetsCsvUrl`.
+
+> Git history vẫn còn mật khẩu cũ — **không xoá được**. Đó là lý do bắt buộc đổi hết mật khẩu chứ không chỉ sửa file.
 
 ### Lớp bảo vệ
 1. **Mọi action ngoài `login`** yêu cầu token hợp lệ. Không token → reject ngay.
 2. **Login rate limit**: 5 lần sai/phút → khoá username 5 phút (qua Apps Script CacheService).
 3. **`active=FALSE`** trong sheet `taikhoan` → user bị từ chối login.
 4. **Permission server-side**: demo không thể submit dù có gọi đúng API.
+5. **Mật khẩu không nằm trong Sheets** — mở được file cũng không thấy gì; băm lặp nhiều vòng, salt riêng từng người.
+6. **Mật khẩu tạm phải đổi ngay lần đăng nhập đầu** — admin không biết mật khẩu thật của người khảo sát.
 
 ### Khuyến nghị bắt buộc
-- **Mật khẩu KTV ≥10 ký tự, có chữ hoa + số + đặc biệt**. Không dùng tên/sinh nhật.
-- **`AUTH_SALT` ≥32 ký tự random**. Không tiết lộ.
+- **Mật khẩu Người khảo sát ≥10 ký tự, có chữ hoa + số + đặc biệt**. Không dùng tên/sinh nhật. Mỗi người một mật khẩu riêng — không dùng chung 1 tài khoản cho cả tổ.
+- **`AUTH_SALT` và `PWD_PEPPER` ≥32 ký tự random**, khác nhau. Không tiết lộ.
 - **`CLOUDINARY_API_SECRET`** chỉ trong Script Properties. KHÔNG bao giờ vào git.
-- **Theo dõi Apps Script Executions** định kỳ (1 lần/tuần). Nếu thấy nhiều fail login bất thường → rotate URL (Manage Deployments → New version → URL cũ vẫn dùng được nhưng đổi version sau khi cập nhật config.js).
-- **Tránh share URL** Apps Script lên public (social, blog, support ticket public).
+- **KHÔNG bao giờ ghi mật khẩu thật vào README/SETUP/commit message.**
+- **KHÔNG publish Google Sheets ra web** (xem Bước H).
+- **Theo dõi Apps Script Executions** định kỳ (1 lần/tuần). Thấy nhiều fail login bất thường → xem xét đổi URL deploy.
+- **Cân nhắc chuyển repo sang Private** — đây là cách rẻ nhất để URL Apps Script không nằm công khai.
 
 ### Nếu nghi rò rỉ
-1. Vào Apps Script → Project Settings → đổi `AUTH_SALT` sang chuỗi mới → mọi token đang dùng tự vô hiệu, user phải đăng nhập lại.
-2. Nếu nghi `CLOUDINARY_API_SECRET` rò rỉ: vào Cloudinary Dashboard → API Keys → Regenerate → cập nhật lại Apps Script Properties.
+| Rò rỉ cái gì | Làm gì | Hệ quả |
+|---|---|---|
+| Mật khẩu 1 người | users.html → 🔑 PWD đặt lại | Chỉ người đó phải đổi |
+| Nhiều mật khẩu | Chạy `resetAllPasswords()` | Tất cả nhận mật khẩu tạm, phải đổi khi đăng nhập |
+| `AUTH_SALT` | Đổi trong Script Properties | Mọi token vô hiệu, ai cũng đăng nhập lại. **Mật khẩu không ảnh hưởng** |
+| `PWD_PEPPER` | Đổi trong Script Properties | **Mọi mật khẩu ngừng hoạt động** → phải chạy `resetAllPasswords()` |
+| `CLOUDINARY_API_SECRET` | Cloudinary Dashboard → API Keys → Regenerate | Cập nhật lại Script Properties |
 
 ---
 
@@ -254,14 +292,20 @@ Repo này **PUBLIC** trên GitHub theo quyết định của SAPULICO (CLAUDE.md
 **Q: Chạy `initSheets` lại có mất data không?**
 A: Không. Script chỉ tạo sheet còn thiếu, skip sheet đã có.
 
-**Q: Muốn thêm 1 KTV mới?**
-A: Mở Apps Script → chạy `hashPassword('mật-khẩu-mới')` → copy hash → thêm dòng mới trong sheet `taikhoan` với role `user1`, active TRUE.
+**Q: Muốn thêm 1 người khảo sát mới?**
+A: Đăng nhập `admin` → menu → **👥 Quản lý user** → **+ Thêm user**. Không sửa sheet bằng tay nữa.
 
-**Q: Quên hash, muốn reset mật khẩu user X?**
-A: Chạy `hashPassword('mật-khẩu-mới')` → paste đè vào cột `password_hash` của user X. Token cũ vẫn còn hạn 8h, sau đó user phải đăng nhập lại với mật khẩu mới.
+**Q: Người khảo sát quên mật khẩu?**
+A: **👥 Quản lý user** → nút **🔑 PWD** → đặt mật khẩu tạm → nhắn riêng cho người đó. Họ đăng nhập xong sẽ bị bắt đổi sang mật khẩu riêng ngay.
+
+**Q: Mật khẩu lưu ở đâu? Mở Google Sheets có xem được không?**
+A: Không. Sheet `taikhoan` chỉ còn danh bạ (tên, họ tên, vai trò, trạng thái). Mật khẩu nằm trong Script Properties dưới khoá `CRED_<username>`, và **chỉ lưu dạng băm** — kể cả admin cũng không đọc ngược ra mật khẩu thật được.
+
+**Q: Đổi mật khẩu thì token cũ có bị đá ra không?**
+A: **Không.** Token đang dùng vẫn sống tới khi hết hạn 8h. Nếu cần đá văng ngay mọi phiên, đổi `AUTH_SALT`.
 
 **Q: Bản ghi xoá nhầm — khôi phục được không?**
 A: Vào `manage.html` → filter "Trạng thái: Đã xoá" → tìm bản ghi → bấm **Khôi phục**. Dữ liệu chữ phục hồi, **ảnh đính kèm thì không** (đã xoá vĩnh viễn Cloudinary lúc soft-delete).
 
 **Q: Apps Script báo "Exceeded maximum execution time"?**
-A: Endpoint `kpi` hoặc `report` chạy quá 6 phút (quota free). Khi data > 50k row, cần tối ưu thêm sheet cache. Tạm thời: chia nhỏ filter (chỉ 1 tháng/lần, ít KTV).
+A: Endpoint `kpi` hoặc `report` chạy quá 6 phút (quota free). Khi data > 50k row, cần tối ưu thêm sheet cache. Tạm thời: chia nhỏ filter (chỉ 1 tháng/lần, ít Người khảo sát).

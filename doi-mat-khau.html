@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Đổi mật khẩu — Khảo sát SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-b from-blue-50 to-blue-100 min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-6">
+      <div class="text-6xl mb-2">🔑</div>
+      <h1 class="text-2xl font-bold text-blue-900 tracking-wide">Đổi mật khẩu</h1>
+      <p id="hello" class="text-sm text-gray-600 mt-1"></p>
+    </div>
+
+    <!-- Banner chỉ hiện khi bị BẮT đổi (mật khẩu tạm do admin đặt) -->
+    <div id="force-banner"
+         class="hidden mb-4 text-sm bg-yellow-50 border border-yellow-300 text-yellow-900 rounded-lg p-3">
+      Đây là mật khẩu tạm do quản trị viên đặt. Vui lòng đặt mật khẩu riêng của bạn
+      trước khi dùng tiếp.
+    </div>
+
+    <form id="pwd-form" class="bg-white rounded-xl shadow-xl p-6 space-y-4" novalidate>
+      <div>
+        <label for="cur" class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu hiện tại</label>
+        <input id="cur" type="password" autocomplete="current-password" required autofocus
+               class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+               style="min-height:44px">
+      </div>
+
+      <div>
+        <label for="new1" class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu mới</label>
+        <input id="new1" type="password" autocomplete="new-password" required
+               class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+               style="min-height:44px">
+        <p class="text-xs text-gray-500 mt-1">Tối thiểu 8 ký tự, không trùng tên đăng nhập.</p>
+      </div>
+
+      <div>
+        <label for="new2" class="block text-sm font-medium text-gray-700 mb-1">Nhập lại mật khẩu mới</label>
+        <input id="new2" type="password" autocomplete="new-password" required
+               class="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+               style="min-height:44px">
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+        <input id="show-pwd" type="checkbox" class="w-4 h-4 accent-blue-700">
+        Hiện mật khẩu
+      </label>
+
+      <div id="error-msg" class="hidden text-red-700 text-sm bg-red-50 border border-red-200 rounded-lg p-3"></div>
+      <div id="ok-msg" class="hidden text-green-800 text-sm bg-green-50 border border-green-200 rounded-lg p-3"></div>
+
+      <button id="submit-btn" type="submit"
+        class="w-full bg-blue-700 text-white py-3 rounded-lg font-semibold hover:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+        style="min-height:44px">
+        Đổi mật khẩu
+      </button>
+    </form>
+
+    <div class="text-center mt-4 space-x-3">
+      <a id="link-home" href="index.html" class="text-sm text-blue-700 underline hover:no-underline">Về trang chủ</a>
+      <button id="btn-logout" class="text-sm text-red-700 underline hover:no-underline">Đăng xuất</button>
+    </div>
+    <p class="text-center text-xs text-gray-400 mt-3">Quên mật khẩu hiện tại? Liên hệ quản trị viên.</p>
+  </div>
+
+  <script type="module">
+    import { initChangePassword } from './js/change-password.js';
+    initChangePassword();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

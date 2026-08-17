@@ -37,7 +37,7 @@ export async function initMap(user) {
   });
   state.map.addLayer(state.cluster);
 
-  // Populate KTV filter nếu admin/user (user1 chỉ thấy của mình → ẩn dropdown)
+  // Populate Người khảo sát filter nếu admin/user (user1 chỉ thấy của mình → ẩn dropdown)
   if (hasPermission('manage') || hasPermission('report')) {
     try {
       const u = await apiUsers();
@@ -51,7 +51,7 @@ export async function initMap(user) {
       }
     } catch (e) { /* fallback empty */ }
   } else {
-    // user1 → ẩn dropdown KTV (server tự filter own)
+    // user1 → ẩn dropdown Người khảo sát (server tự filter own)
     const sel = document.getElementById('filter-user');
     if (sel) sel.style.display = 'none';
   }
@@ -149,7 +149,7 @@ function buildPopup(r) {
       </div>
       <div style="font-size:12px; color:#666; margin-bottom:2px">STT #${escapeHtml(String(r['STT']))} ${isDeleted ? '<span style="color:#dc2626">· đã xoá</span>' : ''}</div>
       <div style="font-size:12px; margin-bottom:2px"><strong>Tuyến:</strong> ${escapeHtml(tuyen)}</div>
-      <div style="font-size:12px; margin-bottom:2px"><strong>KTV:</strong> ${escapeHtml(ktv)}</div>
+      <div style="font-size:12px; margin-bottom:2px"><strong>Người khảo sát:</strong> ${escapeHtml(ktv)}</div>
       <div style="font-size:11px; color:#888; margin-bottom:6px">${escapeHtml(date)}</div>
       <button class="btn-detail" style="background:#1d4ed8; color:white; padding:6px 12px; border-radius:6px; border:none; cursor:pointer; font-size:12px">Xem chi tiết</button>
     </div>

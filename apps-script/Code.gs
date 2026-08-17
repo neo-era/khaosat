@@ -22,7 +22,7 @@
  *   action=list     — body {token, type?, username?, from?, to?, includeDeleted?} → danh sách bản ghi
  *   action=delete   — body {token, type, stt} → soft-delete + xoá ảnh Cloudinary
  *   action=restore  — body {token, type, stt} → khôi phục soft-delete (không khôi phục ảnh)
- *   action=kpi      — body {token, month: "YYYY-MM"} → KPI tháng cho từng KTV
+ *   action=kpi      — body {token, month: "YYYY-MM"} → KPI tháng cho từng người khảo sát
  *   action=report   — body {token, types[], from, to, usernames[], status, groupBy} → 3 vùng aggregation
  */
 
@@ -49,10 +49,11 @@ const SHEET_MAP = {
   vo_tu:          '12, Vo tu',
   tc_den_kc_xa:   '13 Tăng cường đèn kc xa',
   decal_so_tru:   '14 Decal số trụ',
-  nang_mong:      '15. Nâng móng'
+  nang_mong:      '15. Nâng móng',
+  thao_go_bang_ron: '16. Thao go bang ron'
 };
 
-/** Header gốc của 15 loại khảo sát (NGUYÊN VĂN tiếng Việt, đồng bộ schemas.js + CLAUDE.md mục 5). */
+/** Header gốc của 16 loại khảo sát (NGUYÊN VĂN tiếng Việt, đồng bộ schemas.js + CLAUDE.md mục 5). */
 const HEADERS = {
   tang_cuong_den: [
     'STT','Hẻm','Tuyến đường','Quận','Phường','Tủ điều khiển',
@@ -127,6 +128,10 @@ const HEADERS = {
     'Độ cao nâng','Số lượng','Quy cách móng',
     'Chiều cao nắp cửa trụ (từ mặt bích đến nắp cửa trụ)',
     'Người khảo sát','Ngày khảo sát','Ghi chú','link'
+  ],
+  thao_go_bang_ron: [
+    'STT','Tuyến đường','Quận','Phường','Vị trí','Loại quảng cáo','Số lượng',
+    'Người khảo sát','Ngày khảo sát','kinh độ','vĩ độ','Ghi chú','Link Google Map'
   ]
 };
 
@@ -142,14 +147,15 @@ const NO_GPS_TYPES = ['hkn'];
  *   GPS_LINK_TYPES    : chỉ lưu link Google Map (cột 'link')
  *   NO_GPS_TYPES      : không có GPS, bỏ qua khi tính pct_gps
  */
-const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa'];
+const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa', 'thao_go_bang_ron'];
 const GPS_LINK_TYPES    = [
   'thay_den', 'tc_noi', 'cap_luon_can', 'tc_ngam', 'thay_can',
   'thay_tru', 'choa_den', 'nap_tru', 'vo_tu',
   'tc_den_kc_xa', 'decal_so_tru', 'nang_mong'
 ];
 
-const TAIKHOAN_HEADER = ['username', 'password_hash', 'full_name', 'role', 'active', 'created_at'];
+// Sheet taikhoan chỉ còn danh bạ — mật khẩu nằm ở Script Properties (xem CREDENTIAL STORE)
+const TAIKHOAN_HEADER = ['username', 'full_name', 'role', 'active', 'created_at'];
 const KPI_TARGETS_HEADER = ['param', 'value'];
 const PHAN_QUYEN_HEADER = ['vaiTro', 'submit', 'delete', 'kpi', 'manage', 'report', 'moTa'];
 const AUDIT_HEADER = ['timestamp', 'action', 'username', 'target_sheet', 'target_stt', 'note'];
@@ -175,7 +181,7 @@ const KPI_DEFAULTS = [
 const PHAN_QUYEN_DEFAULTS = [
   ['admin', true,  true,  true,  true,  true,  'Quản lý văn phòng — toàn quyền'],
   ['user',  true,  true,  true,  true,  true,  'Quản lý phụ (cùng quyền admin)'],
-  ['user1', true,  false, false, false, false, 'KTV hiện trường — chỉ nhập KS'],
+  ['user1', true,  false, false, false, false, 'người khảo sát hiện trường — chỉ nhập KS'],
   ['demo',  false, false, false, false, false, 'Tài khoản xem thử — readonly']
 ];
 
@@ -270,10 +276,10 @@ function safe(v) {
 // =====================================================================
 
 /**
- * Hash password để paste vào sheet taikhoan.
- * Cách dùng: trong Apps Script Editor, chạy:
- *   Logger.log(hashPassword('MatKhauMoi@2026'));
- * Copy hash trong Logs paste vào cột password_hash.
+ * @deprecated Từ 2026-08-16 mật khẩu KHÔNG còn lưu trong sheet taikhoan.
+ * Kho mật khẩu mới nằm ở Script Properties (xem section CREDENTIAL STORE).
+ * Tạo/đổi mật khẩu: dùng trang users.html, hoặc chạy setPassword('user','matkhau').
+ * Giữ hàm này chỉ để verify được các bản ghi cũ chưa migrate.
  */
 function hashPassword(plain) {
   if (!plain) throw new Error('plain password is empty');
@@ -322,6 +328,7 @@ function findUser(username) {
   if (data.length < 2) return null;
   const header = data[0].map(String);
   const idxUser = header.indexOf('username');
+  // password_hash: cột cũ, chỉ còn dùng để verify user chưa migrate sang Script Properties
   const idxHash = header.indexOf('password_hash');
   const idxName = header.indexOf('full_name');
   const idxRole = header.indexOf('role');
@@ -340,6 +347,293 @@ function findUser(username) {
     }
   }
   return null;
+}
+
+// =====================================================================
+// CREDENTIAL STORE — mật khẩu lưu trong Script Properties, KHÔNG lưu trong Sheets
+// =====================================================================
+//
+// Vì sao đổi (2026-08-16): trước đây `password_hash` nằm ngay trong sheet
+// `taikhoan`, nên ai mở được file Google Sheets là thấy toàn bộ hash; sheet lại
+// còn bị publish ra web nên hash lộ công khai. Nay:
+//   - Mật khẩu nằm ở Script Properties → chỉ người mở được Apps Script editor thấy.
+//   - Sheet `taikhoan` chỉ còn danh bạ: username / full_name / role / active.
+//
+// Bản ghi: Script Property `CRED_<username thường>` chứa JSON
+//   { v:1, salt:<32 hex>, hash:<64 hex>, iters:<số>, must_change:<bool>, updated_at:<string> }
+//
+// Khác biệt so với cách cũ: salt RIÊNG từng user (cũ: chung 1 AUTH_SALT) và băm
+// lặp nhiều vòng thay vì 1 vòng SHA-256, để làm chậm việc dò mật khẩu.
+
+/**
+ * Số vòng lặp băm — chọn 100 để đăng nhập nhanh nhất có thể.
+ *
+ * Chi phí này CHỈ trả 1 lần lúc đăng nhập (và lúc đổi mật khẩu). Mọi thao tác
+ * khác — submit form, xem KPI, tải báo cáo — đi qua verifyToken, KHÔNG băm lần nào.
+ * Nên có tăng lên cũng không làm app chậm đi trong lúc dùng.
+ *
+ * 100 vòng = kẻ dò mật khẩu phải tốn gấp 100 lần thời gian so với băm 1 vòng.
+ * Muốn chắc hơn thì chạy benchmarkHash() rồi nâng lên 500–1000; bản ghi cũ vẫn
+ * dùng được vì mỗi bản ghi tự nhớ số vòng của nó.
+ */
+const PWD_ITERS = 100;
+
+/** Độ dài tối thiểu của mật khẩu (dùng chung cho mọi nơi đặt/đổi mật khẩu). */
+const PWD_MIN_LEN = 8;
+
+/** Pepper cho băm mật khẩu. Tách khỏi AUTH_SALT để đổi được mà không huỷ token. */
+function getPwdPepper() {
+  return getProp('PWD_PEPPER') || getSalt();
+}
+
+/**
+ * Sinh và cài đặt PWD_PEPPER — admin chạy tay 1 lần, TRƯỚC resetAllPasswords().
+ *
+ * Chạy hàm này thay vì tự sinh chuỗi ở nơi khác: chuỗi bí mật không đi qua
+ * clipboard, không qua Console trình duyệt, không qua tin nhắn — sinh ra và nằm
+ * luôn trong Script Properties.
+ *
+ * An toàn: từ chối nếu PWD_PEPPER đã tồn tại (ghi đè = làm hỏng mọi mật khẩu).
+ */
+function taoPwdPepper() {
+  const props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty('PWD_PEPPER')) {
+    const msg = 'PWD_PEPPER đã có sẵn — KHÔNG ghi đè. Ghi đè sẽ làm mọi mật khẩu ' +
+                'ngừng hoạt động. Thật sự muốn đổi thì xoá tay trong Thuộc tính tập lệnh, ' +
+                'chạy lại hàm này, rồi BẮT BUỘC chạy resetAllPasswords().';
+    Logger.log(msg);
+    return { ok: false, error: msg };
+  }
+
+  // Đếm mật khẩu đã tạo — nếu đã có thì đặt pepper bây giờ sẽ làm chúng hỏng
+  const soMatKhauDaCo = Object.keys(props.getProperties())
+    .filter(k => k.indexOf('CRED_') === 0).length;
+
+  // 64 ký tự hex từ 2 UUID — ngẫu nhiên tốt hơn Math.random()
+  const pepper = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  props.setProperty('PWD_PEPPER', pepper);
+
+  const result = {
+    ok: true,
+    da_tao: true,
+    do_dai: pepper.length,
+    so_mat_khau_da_co: soMatKhauDaCo,
+    buoc_tiep_theo: soMatKhauDaCo > 0
+      ? '⚠️ Đã có ' + soMatKhauDaCo + ' mật khẩu tạo trước đó — chúng vừa ngừng hoạt động. ' +
+        'PHẢI chạy resetAllPasswords() ngay để đặt lại.'
+      : 'Xong. Giờ chạy resetAllPasswords() để đặt mật khẩu tạm cho mọi người.'
+  };
+  // KHÔNG log giá trị pepper — nó nằm trong Thuộc tính tập lệnh là đủ
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function credKey(username) {
+  return 'CRED_' + String(username).trim().toLowerCase();
+}
+
+function readCred(username) {
+  const raw = PropertiesService.getScriptProperties().getProperty(credKey(username));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    Logger.log('readCred: bản ghi hỏng cho ' + username + ' — ' + e);
+    return null;
+  }
+}
+
+function writeCred(username, obj) {
+  PropertiesService.getScriptProperties().setProperty(credKey(username), JSON.stringify(obj));
+}
+
+function deleteCred(username) {
+  PropertiesService.getScriptProperties().deleteProperty(credKey(username));
+}
+
+/** Salt ngẫu nhiên 32 ký tự hex. */
+function randomSalt() {
+  return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').slice(0, 32);
+}
+
+/**
+ * Băm mật khẩu: lặp HMAC-SHA256 `iters` vòng, khoá = pepper bí mật.
+ * Lặp nhiều vòng khiến kẻ có được file hash vẫn phải tốn rất nhiều thời gian để dò.
+ */
+function deriveHash(password, saltHex, iters) {
+  const keyBytes = Utilities.newBlob(getPwdPepper()).getBytes();
+  let cur = Utilities.computeHmacSha256Signature(
+    Utilities.newBlob(String(password) + saltHex).getBytes(), keyBytes);
+  for (let i = 1; i < iters; i++) {
+    cur = Utilities.computeHmacSha256Signature(cur, keyBytes);
+  }
+  return bytesToHex(cur);
+}
+
+/**
+ * Đặt mật khẩu cho 1 user (ghi đè nếu đã có).
+ * @param {string} username
+ * @param {string} plain
+ * @param {boolean} [mustChange=true] - bắt user đổi ở lần đăng nhập kế tiếp
+ */
+function setPassword(username, plain, mustChange) {
+  const err = validatePasswordRule(username, plain);
+  if (err) throw new Error(err);
+  const salt = randomSalt();
+  writeCred(username, {
+    v: 1,
+    salt: salt,
+    hash: deriveHash(plain, salt, PWD_ITERS),
+    iters: PWD_ITERS,
+    must_change: mustChange !== false,
+    updated_at: nowVnString()
+  });
+  return true;
+}
+
+/** Quy tắc mật khẩu dùng chung. Trả về chuỗi lỗi, hoặc null nếu hợp lệ. */
+function validatePasswordRule(username, plain) {
+  const p = String(plain || '');
+  if (p.length < PWD_MIN_LEN) return 'Mật khẩu phải từ ' + PWD_MIN_LEN + ' ký tự trở lên';
+  if (p.toLowerCase() === String(username || '').toLowerCase()) {
+    return 'Mật khẩu không được trùng tên đăng nhập';
+  }
+  return null;
+}
+
+/**
+ * Kiểm tra mật khẩu.
+ * @returns {{ok: boolean, must_change: boolean, legacy: boolean}}
+ *
+ * Có đường tương thích ngược: user chưa có bản ghi CRED_ (chưa chạy
+ * resetAllPasswords) vẫn đăng nhập được bằng hash cũ trong sheet, và hệ thống
+ * tự chuyển họ sang kho mới ngay lúc đó. Nhờ vậy không ai bị khoá ngoài giữa chừng.
+ */
+function verifyPassword(username, plain, legacyHashFromSheet) {
+  const cred = readCred(username);
+
+  if (cred) {
+    const calc = deriveHash(plain, cred.salt, cred.iters || PWD_ITERS);
+    if (calc !== cred.hash) return { ok: false, must_change: false, legacy: false };
+    return { ok: true, must_change: cred.must_change === true, legacy: false };
+  }
+
+  // Chưa có bản ghi mới → thử hash cũ trong sheet
+  const legacy = String(legacyHashFromSheet || '').trim();
+  if (!legacy) return { ok: false, must_change: false, legacy: false };
+  if (hashPassword(plain) !== legacy) return { ok: false, must_change: false, legacy: false };
+
+  // Đúng mật khẩu cũ → chuyển sang kho mới, và bắt đổi vì mật khẩu cũ coi như đã lộ
+  try {
+    const salt = randomSalt();
+    writeCred(username, {
+      v: 1, salt: salt, hash: deriveHash(plain, salt, PWD_ITERS), iters: PWD_ITERS,
+      must_change: true, updated_at: nowVnString()
+    });
+    Logger.log('Đã chuyển mật khẩu của ' + username + ' sang Script Properties');
+  } catch (e) {
+    Logger.log('Không ghi được cred cho ' + username + ': ' + e);
+  }
+  return { ok: true, must_change: true, legacy: true };
+}
+
+/**
+ * Đo tốc độ băm để chọn PWD_ITERS. Admin chạy tay 1 lần (không bắt buộc).
+ *
+ * Con số in ra là thời gian NGƯỜI DÙNG PHẢI ĐỢI THÊM khi bấm nút Đăng nhập —
+ * mỗi ngày 1-2 lần, không phải mỗi thao tác.
+ */
+function benchmarkHash() {
+  const salt = randomSalt();
+  const out = [];
+  [50, 100, 200, 500, 1000, 2000].forEach(n => {
+    const t0 = Date.now();
+    deriveHash('mat-khau-thu-nghiem', salt, n);
+    out.push({ iters: n, ms: Date.now() - t0 });
+  });
+  // Gợi ý: số vòng lớn nhất mà người dùng vẫn thấy "bấm là vào" (dưới 200ms)
+  const goi_y = (out.filter(r => r.ms <= 200).pop() || out[0]).iters;
+  const result = {
+    ok: true,
+    PWD_ITERS_dang_dung: PWD_ITERS,
+    thoi_gian_dang_nhap_hien_tai_ms: (out.filter(r => r.iters === PWD_ITERS)[0] || {}).ms,
+    goi_y_neu_muon_chac_hon: goi_y,
+    chi_tiet: out,
+    ghi_chu: 'Chi phi nay chi tra 1 lan luc dang nhap, khong anh huong luc dung app.'
+  };
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+/**
+ * ĐỔI TOÀN BỘ MẬT KHẨU + xoá cột password_hash khỏi sheet. Admin chạy tay 1 lần.
+ *
+ * Dùng khi mật khẩu cũ bị coi là đã lộ (trường hợp 2026-08-16: mật khẩu plaintext
+ * bị commit vào repo public). Sinh mật khẩu tạm cho từng user, bắt đổi ở lần
+ * đăng nhập đầu.
+ *
+ * Mật khẩu tạm chỉ hiện 1 lần trong Execution log — copy phát cho từng người rồi thôi.
+ */
+function resetAllPasswords() {
+  const sheet = getSpreadsheet().getSheetByName('taikhoan');
+  if (!sheet) throw new Error('Sheet taikhoan không tồn tại');
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) throw new Error('Sheet taikhoan chưa có user nào');
+
+  const header = data[0].map(String);
+  const idxUser = header.indexOf('username');
+  if (idxUser < 0) throw new Error('Sheet thiếu cột username');
+
+  const danh_sach = [];
+  for (let i = 1; i < data.length; i++) {
+    const u = String(data[i][idxUser] || '').trim();
+    if (!u) continue;
+    const tmp = randomPassword(12);
+    setPassword(u, tmp, true);
+    danh_sach.push({ username: u, mat_khau_tam: tmp });
+  }
+
+  // Xoá hẳn cột password_hash — dữ liệu nhạy cảm không còn lý do nằm trong sheet
+  const idxHash = header.indexOf('password_hash');
+  let da_xoa_cot = false;
+  if (idxHash >= 0) {
+    sheet.deleteColumn(idxHash + 1);
+    da_xoa_cot = true;
+  }
+
+  appendAuditLog('reset_all_passwords', 'system', 'taikhoan', String(danh_sach.length),
+    'users=' + danh_sach.map(x => x.username).join(','));
+
+  Logger.log('===== MẬT KHẨU TẠM — COPY PHÁT CHO TỪNG NGƯỜI RỒI XOÁ LOG =====');
+  danh_sach.forEach(x => Logger.log(x.username + '\t' + x.mat_khau_tam));
+  Logger.log('===== Tất cả sẽ bị bắt đổi mật khẩu ở lần đăng nhập đầu =====');
+
+  return { ok: true, so_user: danh_sach.length, da_xoa_cot_password_hash: da_xoa_cot,
+           danh_sach: danh_sach };
+}
+
+/** Sinh mật khẩu ngẫu nhiên, bỏ các ký tự dễ nhìn nhầm (0 O o l 1 I). */
+function randomPassword(len) {
+  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789@#$%';
+  let s = '';
+  for (let i = 0; i < (len || 12); i++) {
+    s += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return s;
+}
+
+/** Đặt lại mật khẩu 1 user từ editor (tiện khi ai đó quên mật khẩu). */
+function setPasswordThuCong() {
+  // ⚠️ Sửa 2 giá trị dưới đây rồi chạy hàm này:
+  const USERNAME = 'PASTE_USERNAME';
+  const MAT_KHAU = 'PASTE_MAT_KHAU_MOI';
+  if (USERNAME === 'PASTE_USERNAME') {
+    throw new Error('Sửa USERNAME và MAT_KHAU trong hàm setPasswordThuCong() trước khi chạy.');
+  }
+  setPassword(USERNAME, MAT_KHAU, true);
+  Logger.log('Đã đặt mật khẩu cho ' + USERNAME + '. User sẽ bị bắt đổi ở lần đăng nhập đầu.');
+  return { ok: true };
 }
 
 // =====================================================================
@@ -577,10 +871,19 @@ function initSheets() {
 }
 
 /**
- * Migrate sheet taikhoan từ format cũ (tiếng Việt + password plaintext) sang mới.
- * Idempotent: chạy lại an toàn.
+ * @deprecated LỖI THỜI từ 2026-08-16 — hàm này ghi mật khẩu vào cột `password_hash`,
+ * mà cột đó đã bị bỏ (mật khẩu chuyển sang Script Properties).
+ * Chạy nó bây giờ sẽ dựng lại cột chứa dữ liệu nhạy cảm trong sheet.
+ * Cần đặt lại mật khẩu thì dùng `resetAllPasswords()` hoặc `setPasswordThuCong()`.
  */
 function migrateTaikhoan() {
+  throw new Error(
+    'migrateTaikhoan() đã lỗi thời: mật khẩu không còn lưu trong sheet. ' +
+    'Dùng resetAllPasswords() (đổi hết) hoặc setPasswordThuCong() (1 user).');
+}
+
+/** Bản cũ, giữ lại để tham khảo lịch sử. Không gọi tới. */
+function migrateTaikhoan_DEPRECATED() {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName('taikhoan');
   if (!sheet) throw new Error('Sheet taikhoan không tồn tại');
@@ -1389,6 +1692,8 @@ function doPost(e) {
       case 'bulk_import':   return jsonResponse(handleBulkImport(body));
       case 'export_raw':    return jsonResponse(handleExportRaw(body));
       case 'upload_photo':  return jsonResponse(handleUploadPhoto(body));
+      case 'photo_base64':  return jsonResponse(handlePhotoBase64(body));
+      case 'change_password': return jsonResponse(handleChangePassword(body));
       case 'reset_own_password': return jsonResponse(handleResetOwnPassword(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
@@ -1416,10 +1721,10 @@ function handleLogin(body) {
   const user = findUser(username);
   if (!user) return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
   if (user.active === false) return { ok: false, error: 'Tài khoản đã bị khoá' };
-  const expectedHash = hashPassword(password);
-  if (expectedHash !== String(user.password_hash).trim()) {
-    return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
-  }
+
+  const check = verifyPassword(username, password, user.password_hash);
+  if (!check.ok) return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
+
   // Thành công
   const token = generateToken(username);
   return {
@@ -1428,8 +1733,34 @@ function handleLogin(body) {
     username: user.username,
     full_name: user.full_name,
     role: user.role,
+    must_change: check.must_change === true,
     expires_at: Date.now() + TOKEN_TTL_MS
   };
+}
+
+/**
+ * action=change_password — user tự đổi mật khẩu của CHÍNH MÌNH.
+ * Body: { token, current_password, new_password }
+ * Mọi role đăng nhập đều gọi được (không cần quyền users_manage).
+ */
+function handleChangePassword(body) {
+  const auth = verifyToken(body.token);
+  const current = String(body.current_password || '');
+  const next = String(body.new_password || '');
+
+  const ruleErr = validatePasswordRule(auth.username, next);
+  if (ruleErr) return { ok: false, error: ruleErr };
+  if (current === next) return { ok: false, error: 'Mật khẩu mới phải khác mật khẩu hiện tại' };
+
+  const user = findUser(auth.username);
+  if (!user) return { ok: false, error: 'Không tìm thấy tài khoản' };
+
+  const check = verifyPassword(auth.username, current, user.password_hash);
+  if (!check.ok) return { ok: false, error: 'Mật khẩu hiện tại không đúng' };
+
+  setPassword(auth.username, next, false);
+  appendAuditLog('change_password', auth.username, 'taikhoan', auth.username, 'user tự đổi');
+  return { ok: true, message: 'Đã đổi mật khẩu' };
 }
 
 function handleSubmit(body) {
@@ -1562,7 +1893,7 @@ function handleDelete(body) {
  * action=update — sửa bản ghi đã submit.
  * Body: { token, type, stt, data, photos? }
  * Permission: edit.
- * KHÔNG ghi đè: STT, Submitted At, Username, Người khảo sát (giữ KTV gốc), Deleted At, Deleted By.
+ * KHÔNG ghi đè: STT, Submitted At, Username, Người khảo sát (giữ Người khảo sát gốc), Deleted At, Deleted By.
  * Ghi đè được: các field business + Ảnh (URLs) nếu photos được truyền (mảng URLs).
  */
 function handleUpdate(body) {
@@ -1659,7 +1990,7 @@ function handleKpi(body) {
   const idxR = tkHeader.indexOf('role');
   const idxA = tkHeader.indexOf('active');
 
-  // Tập hợp KTV (admin/user/user1 — không tính demo)
+  // Tập hợp Người khảo sát (admin/user/user1 — không tính demo)
   const ktvs = [];
   for (let i = 1; i < tkData.length; i++) {
     const role = tkData[i][idxR];
@@ -1721,7 +2052,7 @@ function handleKpi(body) {
     });
   });
 
-  // Tính 5 chỉ tiêu cho mỗi KTV
+  // Tính 5 chỉ tiêu cho mỗi người khảo sát
   const results = Object.keys(userStats).map(u => {
     const s = userStats[u];
     const frequency = Math.min(s.total / targets.target_submissions_per_month, 1) * 100;
@@ -1771,38 +2102,19 @@ function handleResetPassword(body) {
   const newPwd = String(body.new_password || '');
 
   if (!target) return { ok: false, error: 'Thiếu username cần reset' };
-  if (newPwd.length < 8) return { ok: false, error: 'Mật khẩu phải ≥ 8 ký tự' };
-  if (newPwd.toLowerCase() === target.toLowerCase()) {
-    return { ok: false, error: 'Mật khẩu không được trùng username' };
-  }
+  const ruleErr = validatePasswordRule(target, newPwd);
+  if (ruleErr) return { ok: false, error: ruleErr };
 
-  // Tìm row của target user
-  const sheet = getSpreadsheet().getSheetByName('taikhoan');
-  if (!sheet) return { ok: false, error: 'Sheet taikhoan không tồn tại' };
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { ok: false, error: 'Sheet taikhoan rỗng' };
+  // Xác nhận user tồn tại trong danh bạ trước khi ghi mật khẩu
+  if (!findUser(target)) return { ok: false, error: 'Không tìm thấy user: ' + target };
 
-  const header = data[0].map(String);
-  const idxU = header.indexOf('username');
-  const idxHash = header.indexOf('password_hash');
-  if (idxU < 0 || idxHash < 0) return { ok: false, error: 'Sheet thiếu cột username/password_hash' };
-
-  let rowIdx = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idxU]).trim() === target) {
-      rowIdx = i + 1;  // 1-based
-      break;
-    }
-  }
-  if (rowIdx < 0) return { ok: false, error: 'Không tìm thấy user: ' + target };
-
-  // Hash + ghi đè (KHÔNG log password — chỉ log username + người thực hiện)
-  const newHash = hashPassword(newPwd);
-  sheet.getRange(rowIdx, idxHash + 1).setValue(newHash);
+  // Ghi vào Script Properties, KHÔNG ghi vào sheet. must_change=true để user tự
+  // đặt mật khẩu riêng — admin không cần biết mật khẩu thật của họ.
+  setPassword(target, newPwd, true);
 
   appendAuditLog('reset_password', auth.username, 'taikhoan', target, 'pwd reset by ' + auth.username);
 
-  return { ok: true, message: 'Đã reset mật khẩu cho ' + target };
+  return { ok: true, message: 'Đã đặt mật khẩu tạm cho ' + target + '. Người này sẽ phải đổi ở lần đăng nhập kế tiếp.' };
 }
 
 /**
@@ -1826,38 +2138,19 @@ function handleResetOwnPassword(body) {
     return { ok: false, error: 'Mật khẩu không được trùng tên đăng nhập' };
   }
 
-  const sheet = getSpreadsheet().getSheetByName('taikhoan');
-  if (!sheet) return { ok: false, error: 'Lỗi hệ thống — sheet taikhoan không tồn tại' };
-
-  const data   = sheet.getDataRange().getValues();
-  const header = data[0].map(String);
-  const idxU      = header.indexOf('username');
-  const idxHash   = header.indexOf('password_hash');
-  const idxFull   = header.indexOf('full_name');
-  const idxActive = header.indexOf('active');
-
-  if (idxU < 0 || idxHash < 0 || idxFull < 0) {
-    return { ok: false, error: 'Lỗi cấu hình sheet taikhoan' };
+  const user = findUser(username);
+  if (!user) {
+    return { ok: false, error: 'Thông tin không khớp. Kiểm tra lại tên đăng nhập và họ tên đầy đủ.' };
   }
-
-  let rowIdx = -1;
-  let storedFull = '';
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idxU]).trim().toLowerCase() === username) {
-      if (idxActive >= 0 && data[i][idxActive] === false) {
-        return { ok: false, error: 'Tài khoản đã bị khoá. Liên hệ quản trị viên.' };
-      }
-      storedFull = String(data[i][idxFull]).trim();
-      rowIdx = i + 1;  // 1-based sheet row
-      break;
-    }
+  if (user.active === false) {
+    return { ok: false, error: 'Tài khoản đã bị khoá. Liên hệ quản trị viên.' };
   }
-
-  if (rowIdx < 0 || fullName.toLowerCase() !== storedFull.toLowerCase()) {
+  if (fullName.toLowerCase() !== String(user.full_name || '').trim().toLowerCase()) {
     return { ok: false, error: 'Thông tin không khớp. Kiểm tra lại tên đăng nhập và họ tên đầy đủ.' };
   }
 
-  sheet.getRange(rowIdx, idxHash + 1).setValue(hashPassword(newPwd));
+  // Lưu vào Script Properties (không ghi vào sheet). must_change=false vì user tự đặt.
+  setPassword(username, newPwd, false);
   appendAuditLog('reset_own_password', username, 'taikhoan', username, 'self-service reset via full_name');
 
   return { ok: true, message: 'Mật khẩu đã được đặt lại thành công' };
@@ -1883,8 +2176,8 @@ function handleUserCreate(body) {
   // Validate
   if (!username) return { ok: false, error: 'Thiếu username' };
   if (!/^[a-zA-Z0-9_.-]+$/.test(username)) return { ok: false, error: 'Username chỉ chứa chữ/số/dấu chấm/gạch dưới/gạch ngang' };
-  if (password.length < 8) return { ok: false, error: 'Mật khẩu phải ≥ 8 ký tự' };
-  if (password.toLowerCase() === username.toLowerCase()) return { ok: false, error: 'Mật khẩu không được trùng username' };
+  const pwdErr = validatePasswordRule(username, password);
+  if (pwdErr) return { ok: false, error: pwdErr };
   if (!full_name) return { ok: false, error: 'Thiếu họ tên' };
   if (VALID_ROLES.indexOf(role) < 0) return { ok: false, error: 'Role không hợp lệ: ' + role };
 
@@ -1902,8 +2195,7 @@ function handleUserCreate(body) {
     }
   }
 
-  // Build row theo header thực tế
-  const idxHash = header.indexOf('password_hash');
+  // Build row theo header thực tế — sheet chỉ giữ danh bạ, KHÔNG có mật khẩu
   const idxName = header.indexOf('full_name');
   const idxRole = header.indexOf('role');
   const idxA = header.indexOf('active');
@@ -1911,17 +2203,20 @@ function handleUserCreate(body) {
 
   const newRow = new Array(header.length).fill('');
   newRow[idxU] = username;
-  if (idxHash >= 0) newRow[idxHash] = hashPassword(password);
   if (idxName >= 0) newRow[idxName] = full_name;
   if (idxRole >= 0) newRow[idxRole] = role;
   if (idxA >= 0) newRow[idxA] = active;
   if (idxC >= 0) newRow[idxC] = nowVnString();
   sheet.appendRow(newRow);
 
+  // Mật khẩu vào Script Properties. must_change=true → user tự đặt lại ở lần đầu.
+  setPassword(username, password, true);
+
   appendAuditLog('user_create', auth.username, 'taikhoan', username,
     'role=' + role + ' active=' + active);
 
-  return { ok: true, username: username, message: 'Đã tạo user ' + username };
+  return { ok: true, username: username,
+           message: 'Đã tạo user ' + username + '. Người này sẽ phải đổi mật khẩu ở lần đăng nhập đầu.' };
 }
 
 /**
@@ -2015,12 +2310,16 @@ function handleUsers(body) {
     if (!includeInactive && !active) continue;
     const u = String(data[i][idxU] || '').trim();
     if (!u) continue;
+    const cred = readCred(u);
     users.push({
       username: u,
       full_name: String(data[i][idxN] || ''),
       role: String(data[i][idxR] || ''),
       active: active,
-      created_at: idxC >= 0 ? String(data[i][idxC] || '') : ''
+      created_at: idxC >= 0 ? String(data[i][idxC] || '') : '',
+      // Cho users.html hiển thị trạng thái mật khẩu (không bao giờ trả hash)
+      must_change: !!(cred && cred.must_change),
+      has_password: !!cred
     });
   }
   return { ok: true, users: users };
@@ -2194,6 +2493,52 @@ function extractCloudinaryPublicId(url) {
 // =====================================================================
 
 /**
+ * TEST QUYỀN DRIVE — admin chạy tay trong Apps Script Editor.
+ *
+ * Vì sao cần: validateSheets() chỉ đọc Google Sheets, KHÔNG chạm Drive, nên nó
+ * chạy OK cả khi quyền Drive chưa được cấp. Hàm này gọi thẳng DriveApp để:
+ *   1. Ép hiện màn hình "Cần cấp quyền" có dòng về Google Drive.
+ *   2. Báo rõ DRIVE_FOLDER_ID trỏ vào thư mục nào, có ghi được không.
+ *
+ * Chạy xong thấy ok:true nghĩa là quyền Drive đã đủ → sang bước Deploy new version.
+ */
+function testDriveAccess() {
+  const rootId = getProp('DRIVE_FOLDER_ID');
+  if (!rootId) {
+    const msg = 'CHƯA SET DRIVE_FOLDER_ID trong Script Properties';
+    Logger.log(msg);
+    return { ok: false, error: msg };
+  }
+
+  const result = { ok: false, drive_folder_id: rootId };
+  try {
+    const root = DriveApp.getFolderById(rootId);
+    result.folder_name = root.getName();
+    result.folder_url = root.getUrl();
+
+    // Thử tạo + xoá 1 file rỗng để chắc chắn có quyền GHI, không chỉ quyền đọc
+    const probe = root.createFile('__test_quyen_ghi.txt', 'test', MimeType.PLAIN_TEXT);
+    probe.setTrashed(true);
+    result.can_write = true;
+
+    // Liệt kê thư mục con để đối chiếu với cấu trúc mong đợi
+    const subs = [];
+    const it = root.getFolders();
+    while (it.hasNext()) subs.push(it.next().getName());
+    result.subfolders = subs;
+    result.has_Bangron = subs.indexOf('Bangron') >= 0;
+
+    result.ok = true;
+    result.message = 'Quyền Drive OK. Tiếp theo: Deploy → Manage deployments → New version.';
+  } catch (err) {
+    result.error = String(err);
+    result.message = 'Chưa có quyền Drive. Chạy lại hàm này và bấm "Xem lại quyền" → Cho phép.';
+  }
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+/**
  * Nhận base64 ảnh từ frontend → lưu vào Google Drive → trả về URL xem công khai.
  * Script Properties cần: DRIVE_FOLDER_ID = ID thư mục Drive gốc.
  */
@@ -2212,12 +2557,7 @@ function handleUploadPhoto(body) {
   if (!rootId) return { ok: false, error: 'DRIVE_FOLDER_ID chưa cấu hình trong Script Properties' };
 
   try {
-    let parent = DriveApp.getFolderById(rootId);
-    const parts = folder.split('/').filter(Boolean);
-    for (const part of parts) {
-      const iter = parent.getFoldersByName(part);
-      parent = iter.hasNext() ? iter.next() : parent.createFolder(part);
-    }
+    const parent = getOrCreateFolderPath(rootId, folder);
     const bytes = Utilities.base64Decode(base64);
     const blob  = Utilities.newBlob(bytes, mime, fname);
     const file  = parent.createFile(blob);
@@ -2228,6 +2568,89 @@ function handleUploadPhoto(body) {
   } catch (err) {
     Logger.log('handleUploadPhoto error: ' + err);
     return { ok: false, error: String(err) };
+  }
+}
+
+/**
+ * Lấy (hoặc tạo) thư mục theo đường dẫn 'a/b/c' tính từ thư mục gốc rootId.
+ *
+ * Dùng LockService: form gửi nhiều ảnh SONG SONG, nếu không khoá thì 5 request
+ * cùng thấy thư mục chưa tồn tại và cùng tạo → Drive sinh 5 thư mục TRÙNG TÊN
+ * (Drive cho phép trùng tên), ảnh nằm rải rác mỗi nơi một ít.
+ * Kết quả được cache 6 tiếng theo đường dẫn để đỡ quét lại.
+ */
+function getOrCreateFolderPath(rootId, path) {
+  const cache = CacheService.getScriptCache();
+  const key = 'drivefolder_' + rootId + '_' + path;
+  const cachedId = cache.get(key);
+  if (cachedId) {
+    try { return DriveApp.getFolderById(cachedId); } catch (e) { cache.remove(key); }
+  }
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) {
+    Logger.log('getOrCreateFolderPath: không lấy được lock, chạy không khoá');
+  }
+  try {
+    let parent = DriveApp.getFolderById(rootId);
+    const parts = path.split('/').filter(Boolean);
+    for (const part of parts) {
+      const iter = parent.getFoldersByName(part);
+      parent = iter.hasNext() ? iter.next() : parent.createFolder(part);
+    }
+    cache.put(key, parent.getId(), 21600);  // 6 tiếng
+    return parent;
+  } finally {
+    try { lock.releaseLock(); } catch (e) { /* chưa lấy được lock */ }
+  }
+}
+
+/**
+ * Đọc 1 ảnh Drive trả về base64 — dùng cho trang báo cáo khi cần nội tuyến ảnh
+ * vào file PDF (html2canvas không vẽ được ảnh Drive vì thiếu header CORS).
+ * Body: { token, url }  →  { ok, mimeType, base64 }
+ */
+function handlePhotoBase64(body) {
+  const auth = verifyToken(body.token);
+  if (!auth) return { ok: false, error: 'Token không hợp lệ hoặc hết hạn' };
+
+  const url = String(body.url || '');
+  const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) return { ok: false, error: 'URL không phải Google Drive' };
+
+  const fileId = m[1];
+
+  // Cách 1: đọc trực tiếp qua DriveApp (nhanh, ổn định nhất)
+  try {
+    const blob = DriveApp.getFileById(fileId).getBlob();
+    return {
+      ok: true,
+      mimeType: blob.getContentType() || 'image/jpeg',
+      base64: Utilities.base64Encode(blob.getBytes())
+    };
+  } catch (err) {
+    Logger.log('handlePhotoBase64 DriveApp fail: ' + err);
+  }
+
+  // Cách 2 (dự phòng): tải qua HTTP. Ảnh đã share ANYONE_WITH_LINK nên đọc được
+  // mà không cần quyền Drive — dùng khi script chưa được cấp lại quyền.
+  try {
+    const res = UrlFetchApp.fetch(
+      'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1600',
+      { muteHttpExceptions: true, followRedirects: true });
+    if (res.getResponseCode() === 200) {
+      const blob = res.getBlob();
+      return {
+        ok: true,
+        mimeType: blob.getContentType() || 'image/jpeg',
+        base64: Utilities.base64Encode(blob.getBytes()),
+        via: 'http'
+      };
+    }
+    return { ok: false, error: 'Không tải được ảnh (HTTP ' + res.getResponseCode() + ')' };
+  } catch (err2) {
+    Logger.log('handlePhotoBase64 HTTP fail: ' + err2);
+    return { ok: false, error: String(err2) };
   }
 }
 
@@ -2402,7 +2825,7 @@ function notifyAdmins(type, sheetName, data, stt, user, rowNum, sheetId) {
         </div>
         <div style="border:1px solid #e5e7eb; border-top:0; padding:16px; border-radius:0 0 8px 8px">
           <p style="margin:0 0 12px">Loại: <strong>${escapeHtmlGs(sheetName)}</strong> · STT <strong>#${stt}</strong></p>
-          <p style="margin:0 0 12px; color:#666; font-size:13px">KTV: <strong>${escapeHtmlGs(user.full_name)}</strong> (@${escapeHtmlGs(user.username)})</p>
+          <p style="margin:0 0 12px; color:#666; font-size:13px">Người khảo sát: <strong>${escapeHtmlGs(user.full_name)}</strong> (@${escapeHtmlGs(user.username)})</p>
           <table style="border-collapse:collapse; width:100%; font-size:14px; border:1px solid #e5e7eb">${rowsHtml}</table>
           ${photoHtml}
           <p style="margin-top:16px">

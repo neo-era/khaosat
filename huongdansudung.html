@@ -31,7 +31,7 @@
     </div>
     <!-- Tab bar -->
     <div class="max-w-5xl mx-auto px-3 pb-1 flex gap-1 overflow-x-auto">
-      <button data-tab="ktv"   onclick="switchTab('ktv')"   class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">👷 KTV hiện trường</button>
+      <button data-tab="ktv"   onclick="switchTab('ktv')"   class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">👷 Người khảo sát</button>
       <button data-tab="admin" onclick="switchTab('admin')" class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">🏢 Quản lý (Admin)</button>
       <button data-tab="chung" onclick="switchTab('chung')" class="tab-btn px-3 py-1.5 rounded-t text-sm font-medium whitespace-nowrap">⚙️ Tính năng chung</button>
     </div>
@@ -40,7 +40,7 @@
   <main class="max-w-5xl mx-auto px-3 py-4 pb-24">
 
     <!-- ══════════════════════════════════════════
-         TAB 1 — KTV HIỆN TRƯỜNG
+         TAB 1 — Người khảo sát HIỆN TRƯỜNG
     ══════════════════════════════════════════ -->
     <div id="tab-ktv" class="tab-content space-y-4">
 
@@ -121,7 +121,7 @@
           <h2 class="font-semibold">3. Trang chủ — chọn loại khảo sát</h2>
         </div>
         <div class="p-4 space-y-3 text-sm">
-          <p>Trang chủ hiện lưới <strong>15 loại khảo sát</strong>. Nhấn vào loại cần nhập:</p>
+          <p>Trang chủ hiện lưới <strong>16 loại khảo sát</strong>. Nhấn vào loại cần nhập:</p>
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             <div class="border rounded-lg p-2 text-center">💡 Tăng cường đèn</div>
             <div class="border rounded-lg p-2 text-center">🔌 Ngầm hóa</div>
@@ -138,7 +138,12 @@
             <div class="border rounded-lg p-2 text-center">🛣️ TC đèn kc xa</div>
             <div class="border rounded-lg p-2 text-center">🔢 Decal số trụ</div>
             <div class="border rounded-lg p-2 text-center">⛏️ Nâng móng</div>
+            <div class="border rounded-lg p-2 text-center">🚩 Tháo gỡ băng rôn</div>
           </div>
+          <p class="text-xs text-gray-600">
+            Riêng <strong>🚩 Tháo gỡ băng rôn</strong> cho chụp <strong>tối đa 5 ảnh</strong> (các loại khác 3 ảnh),
+            và không có ô "Tủ điều khiển".
+          </p>
         </div>
       </div>
 
@@ -262,10 +267,10 @@
           <h2 class="font-semibold">1. Trang KPI tổng (kpi.html)</h2>
         </div>
         <div class="p-4 space-y-3 text-sm text-gray-700">
-          <p>Vào menu → <strong>"KPI tổng (tất cả KTV)"</strong>. Chọn tháng → nhấn <strong>"Tải dữ liệu"</strong>.</p>
+          <p>Vào menu → <strong>"KPI tổng (tất cả)"</strong>. Chọn tháng → nhấn <strong>"Tải dữ liệu"</strong>.</p>
           <ul class="list-disc list-inside space-y-1">
-            <li>Bảng hiện điểm KPI tất cả KTV trong tháng, sort theo Tổng giảm dần.</li>
-            <li>Nhấn tên KTV → modal chi tiết: danh sách bản ghi + biểu đồ số bản theo ngày.</li>
+            <li>Bảng hiện điểm KPI tất cả người khảo sát trong tháng, sort theo Tổng giảm dần.</li>
+            <li>Nhấn tên Người khảo sát → modal chi tiết: danh sách bản ghi + biểu đồ số bản theo ngày.</li>
             <li>Nhấn header cột để sắp xếp theo chỉ tiêu đó.</li>
           </ul>
           <div class="flex flex-wrap gap-2 text-xs">
@@ -290,7 +295,7 @@
           <div>
             <h3 class="font-semibold mb-2">Tìm kiếm bản ghi</h3>
             <ul class="list-disc list-inside space-y-1">
-              <li>Filter theo: Loại KS, KTV, khoảng ngày, trạng thái, từ khóa tự do.</li>
+              <li>Filter theo: Loại KS, Người khảo sát, khoảng ngày, trạng thái, từ khóa tự do.</li>
               <li>Nhấn <strong>"Tìm"</strong> → bảng kết quả hiện bên dưới (50 bản/trang).</li>
               <li>Nhấn ảnh → mở lightbox xem ảnh đính kèm.</li>
             </ul>
@@ -351,7 +356,7 @@
             <h3 class="font-semibold mb-2">Bộ lọc</h3>
             <ul class="list-disc list-inside space-y-1 text-xs">
               <li><strong>Loại KS</strong>: Ctrl-click để chọn nhiều. Không chọn = tất cả.</li>
-              <li><strong>KTV</strong>: Ctrl-click để chọn nhiều. Không chọn = tất cả KTV.</li>
+              <li><strong>Người khảo sát</strong>: Ctrl-click để chọn nhiều. Không chọn = tất cả người khảo sát.</li>
               <li><strong>Thời gian</strong>: nhập tay hoặc dùng preset nhanh (Tháng này / Tháng trước / Quý này / Năm nay).</li>
               <li><strong>Group by</strong>: Ngày / Tuần / Tháng / Quý — ảnh hưởng đến biểu đồ cột.</li>
             </ul>
@@ -367,7 +372,7 @@
               <p class="text-xs text-gray-600">Cột chồng theo loại, trục X = thời gian. Hover để xem chi tiết.</p>
             </div>
             <div class="border rounded-lg p-3">
-              <p class="font-medium text-sm mb-1">🔢 Vùng C — Pivot KTV × Loại</p>
+              <p class="font-medium text-sm mb-1">🔢 Vùng C — Pivot Người khảo sát × Loại</p>
               <p class="text-xs text-gray-600">Bảng chéo: click số để xem danh sách bản ghi cụ thể.</p>
             </div>
             <div class="border rounded-lg p-3">
@@ -385,6 +390,42 @@
               <li><strong>Xuất CSV</strong>: mỗi loại = 1 file .csv riêng, mở được bằng Excel.</li>
               <li>Phù hợp để nộp hồ sơ hoặc đối chiếu với file Excel gốc.</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Báo cáo băng rôn -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden section-anchor" id="bao-cao-bang-ron">
+        <div class="bg-purple-700 text-white px-4 py-3 flex items-center gap-2">
+          <span class="text-xl">🚩</span>
+          <h2 class="font-semibold">3b. Báo cáo tháo gỡ băng rôn (bangron.html)</h2>
+        </div>
+        <div class="p-4 space-y-3 text-sm text-gray-700">
+          <p>Menu → <strong>"Báo cáo băng rôn"</strong>. Đây là báo cáo <strong>kèm hình ảnh hiện trường</strong>,
+             dành riêng cho loại khảo sát <em>Tháo gỡ băng rôn</em> — thay cho cách báo bằng Zalo.</p>
+
+          <ol class="list-decimal list-inside space-y-1 text-xs">
+            <li>Chọn khoảng ngày, quận/phường, Người khảo sát, loại quảng cáo → nhấn <strong>"Tải dữ liệu"</strong>.</li>
+            <li>Chọn kiểu trình bày:
+              <strong>🖼️ Báo cáo hình ảnh</strong> (bảng tổng hợp + ảnh từng tuyến) hoặc
+              <strong>📋 Văn bản hành chính</strong> (có quốc hiệu, chữ ký, phụ lục ảnh).</li>
+            <li>Bấm vào các ô <span class="border-b border-dotted border-gray-500">gạch chấm</span> để điền số văn bản, người ký, nhận xét.</li>
+            <li>Xuất file.</li>
+          </ol>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div class="border rounded-lg p-2">
+              <p class="font-medium mb-1">🖨️ In / Lưu PDF</p>
+              <p class="text-gray-600">Nên dùng nút này. Trong hộp thoại in chọn máy in <em>"Save as PDF"</em>. Chữ nét, ảnh chắc chắn hiện.</p>
+            </div>
+            <div class="border rounded-lg p-2">
+              <p class="font-medium mb-1">📄 Xuất PDF</p>
+              <p class="text-gray-600">Tự tạo file PDF. Chờ lâu hơn vì phải tải từng ảnh về; chọn khoảng ngày ngắn nếu nhiều ảnh.</p>
+            </div>
+            <div class="border rounded-lg p-2">
+              <p class="font-medium mb-1">📊 Xuất Excel</p>
+              <p class="text-gray-600">Bảng dữ liệu + link 5 ảnh mỗi dòng + dòng tổng cộng số tấm.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -420,8 +461,8 @@
         </div>
         <div class="p-4 space-y-2 text-sm text-gray-700">
           <ul class="list-disc list-inside space-y-1">
-            <li>Admin/user tạo lịch phân công: KTV nào, ngày nào, loại KS nào, khu vực nào.</li>
-            <li>KTV vào <strong>"Lịch công tác"</strong> xem việc của mình hôm nay/tuần này.</li>
+            <li>Admin/user tạo lịch phân công: người khảo sát nào, ngày nào, loại KS nào, khu vực nào.</li>
+            <li>người khảo sát vào <strong>"Lịch công tác"</strong> xem việc của mình hôm nay/tuần này.</li>
             <li>Khi submit form xong, lịch công tác tương ứng <strong>tự đánh dấu "Đã xong"</strong>.</li>
             <li>Trạng thái: <span class="text-blue-600 font-medium">Pending</span> / <span class="text-green-600 font-medium">Done</span> / <span class="text-gray-500 font-medium">Skipped</span>.</li>
           </ul>
@@ -451,10 +492,10 @@
         <div class="p-4 space-y-2 text-sm text-gray-700">
           <p>Xem vị trí GPS của các bản khảo sát trên bản đồ TP.HCM.</p>
           <ul class="list-disc list-inside space-y-1">
-            <li>Filter theo loại, KTV (nếu admin), khoảng ngày, trạng thái.</li>
+            <li>Filter theo loại, Người khảo sát (nếu admin), khoảng ngày, trạng thái.</li>
             <li>Zoom out → các điểm gần nhau tự gộp (cluster). Zoom in → tách ra từng điểm.</li>
-            <li>Nhấn vào điểm → popup: loại KS, STT, KTV, tuyến đường. Nhấn "Mở chi tiết" để xem full.</li>
-            <li>KTV chỉ thấy điểm của mình. Admin/user thấy tất cả.</li>
+            <li>Nhấn vào điểm → popup: loại KS, STT, Người khảo sát, tuyến đường. Nhấn "Mở chi tiết" để xem full.</li>
+            <li>người khảo sát chỉ thấy điểm của mình. Admin/user thấy tất cả.</li>
           </ul>
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
             Chỉ bản ghi có GPS mới hiển thị trên bản đồ. Loại "Hộp kín nước (HKN)" không có GPS nên không có điểm trên bản đồ.
@@ -473,7 +514,7 @@
             <li>Danh sách văn bản pháp luật, tiêu chuẩn kỹ thuật, hướng dẫn nội bộ.</li>
             <li>Tìm kiếm nhanh bằng ô search. Lọc theo danh mục.</li>
             <li>Nhấn tên tài liệu → mở link trực tiếp.</li>
-            <li>Admin/user có thể <strong>thêm/xoá</strong> tài liệu mới. KTV chỉ xem.</li>
+            <li>Admin/user có thể <strong>thêm/xoá</strong> tài liệu mới. người khảo sát chỉ xem.</li>
           </ul>
         </div>
       </div>
@@ -556,7 +597,7 @@
                 <td class="border px-3 py-2 text-center">❌</td>
                 <td class="border px-3 py-2 text-center">❌</td>
                 <td class="border px-3 py-2 text-center">❌</td>
-                <td class="border px-2 py-2">KTV hiện trường — chỉ nhập</td>
+                <td class="border px-2 py-2">người khảo sát hiện trường — chỉ nhập</td>
               </tr>
               <tr class="bg-gray-50">
                 <td class="border px-3 py-2 font-bold text-gray-500">demo</td>
