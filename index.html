@@ -50,10 +50,57 @@
       <li class="menu-admin hidden"><a href="report.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📈</span> Báo cáo tổng hợp</a></li>
       <li class="menu-admin hidden"><a href="bbht.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">📝</span> Biên bản hiện trường</a></li>
       <li class="menu-users-manage hidden"><a href="users.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-800" style="min-height:44px"><span class="text-xl">👥</span> Quản lý user</a></li>
+      <!-- PWA install — Chrome/Edge/Android: ẩn mặc định, hiện khi beforeinstallprompt kích hoạt -->
+      <li>
+        <button data-install-chrome
+          class="hidden w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-blue-50 text-blue-700"
+          style="min-height:44px">
+          <span class="text-xl">📲</span> Cài đặt ứng dụng
+        </button>
+      </li>
+      <!-- PWA install — iOS Safari: ẩn mặc định, hiện trên iOS -->
+      <li>
+        <button data-install-ios
+          class="hidden w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-blue-50 text-blue-700"
+          style="min-height:44px">
+          <span class="text-xl">📲</span> Cài đặt ứng dụng
+        </button>
+      </li>
       <li class="border-t mt-1"><a href="huongdansudung.html" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-100 text-gray-700" style="min-height:44px"><span class="text-xl">📖</span> Hướng dẫn sử dụng</a></li>
       <li class="border-t mt-2"><button id="menu-logout" class="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-red-50 text-red-700" style="min-height:44px"><span class="text-xl">↪</span> Đăng xuất</button></li>
     </ul>
   </nav>
+
+  <!-- Modal hướng dẫn cài đặt iOS -->
+  <div id="ios-install-modal" class="hidden fixed inset-0 bg-black/60 z-[70] flex items-end sm:items-center justify-center p-4">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-sm p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-gray-800">📲 Cài đặt ứng dụng</h3>
+        <button data-ios-close class="w-10 h-10 rounded-full hover:bg-gray-100 text-gray-500 text-xl flex items-center justify-center">✕</button>
+      </div>
+      <p class="text-sm text-gray-500 mb-4">Thêm vào màn hình chính trên iPhone / iPad:</p>
+      <div class="space-y-4 text-sm">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">1</div>
+          <p class="text-gray-700">Nhấn nút <strong>Chia sẻ</strong> (⬆️) ở thanh công cụ Safari phía dưới màn hình</p>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
+          <p class="text-gray-700">Cuộn xuống, chọn <strong>"Thêm vào màn hình chính"</strong></p>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">3</div>
+          <p class="text-gray-700">Nhấn <strong>"Thêm"</strong> ở góc trên bên phải</p>
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-blue-700 bg-blue-50 rounded-lg p-3">
+        💡 Sau khi cài, app sẽ chạy toàn màn hình như ứng dụng thật — không cần mở Safari nữa. Có thể dùng offline.
+      </p>
+      <button data-ios-close class="mt-4 w-full bg-blue-700 text-white py-3 rounded-xl font-semibold" style="min-height:44px">
+        Đã hiểu
+      </button>
+    </div>
+  </div>
 
   <main class="max-w-4xl mx-auto px-3 py-4">
     <div id="demo-banner" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 mb-4 text-sm rounded">
@@ -75,6 +122,7 @@
     import { syncQueue } from './js/api.js';
     import { escapeHtml, showToast } from './js/utils.js';
     import { initHelp } from './js/help.js';
+    import { initInstallPrompt } from './js/install.js';
 
     const user = requireAuth();
 
@@ -206,6 +254,7 @@
     // Chạy nền khi load page
     trySync();
     initHelp('auto');
+    initInstallPrompt();
 
     // ===== Đăng ký service worker =====
     if ('serviceWorker' in navigator) {
