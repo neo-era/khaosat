@@ -99,7 +99,7 @@ async function autoMarkScheduleDone() {
   }
 }
 
-/** Hiển thị badge nhỏ ở đầu form nếu KTV có lịch pending hôm nay match schemaKey. */
+/** Hiển thị badge nhỏ ở đầu form nếu Người khảo sát có lịch pending hôm nay match schemaKey. */
 async function showScheduleBadge() {
   if (!state.user || state.user.role === 'demo') return;
   try {
@@ -138,7 +138,7 @@ async function loadEditRow() {
     const banner = document.createElement('div');
     banner.className = 'bg-yellow-100 border-l-4 border-yellow-500 text-yellow-900 p-3 mb-3 rounded text-sm';
     banner.innerHTML = `✏️ <strong>Đang sửa bản ghi STT #${escapeHtml(String(state.editStt))}</strong>
-      &middot; KTV gốc: ${escapeHtml(row['Người khảo sát'] || row['Username'] || '?')}
+      &middot; Người khảo sát gốc: ${escapeHtml(row['Người khảo sát'] || row['Username'] || '?')}
       &middot; Gửi lúc: ${escapeHtml(row['Submitted At'] || '?')}<br>
       <span class="text-xs">Lưu ý: Người khảo sát, STT, Ngày khảo sát, Submitted At được giữ nguyên — chỉ sửa thông tin nghiệp vụ.</span>`;
     state.container.insertBefore(banner, state.container.firstChild);
@@ -518,18 +518,24 @@ function renderGpsBlock() {
   return div;
 }
 
+/** Số ảnh hiện trường tối đa của loại KS hiện tại (schema khai `maxPhotos`, mặc định 3). */
+function maxPhotos() {
+  return (state.schema && state.schema.maxPhotos) || 3;
+}
+
 function renderImageBlock() {
+  const max = maxPhotos();
   const div = document.createElement('div');
   div.id = 'image-block';
   div.className = 'mt-4 pt-4 border-t';
   div.innerHTML = `
     <div class="flex items-center justify-between mb-2">
       <label class="text-sm font-medium text-gray-700">📷 Ảnh hiện trường</label>
-      <span id="photo-count" class="text-xs text-gray-500">0/3 ảnh</span>
+      <span id="photo-count" class="text-xs text-gray-500">0/${max} ảnh</span>
     </div>
     <label id="photo-add-btn" class="block w-full bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:bg-blue-100 mb-3" style="min-height:44px">
       <input id="photo-input" type="file" accept="image/*" multiple capture="environment" class="hidden">
-      <span class="text-blue-700 font-medium">+ Chụp ảnh / Chọn từ thư viện (tối đa 3 ảnh)</span>
+      <span class="text-blue-700 font-medium">+ Chụp ảnh / Chọn từ thư viện (tối đa ${max} ảnh)</span>
     </label>
     <div id="photo-grid" class="grid grid-cols-3 gap-2"></div>
   `;
@@ -718,9 +724,10 @@ function updateGpsUI() {
 // =====================================================================
 
 function handleFileSelect(e) {
-  const remaining = 3 - state.photos.length;
+  const max = maxPhotos();
+  const remaining = max - state.photos.length;
   if (remaining <= 0) {
-    showToast('Đã đủ 3 ảnh. Xoá 1 ảnh trước khi thêm.', 'warning');
+    showToast(`Đã đủ ${max} ảnh. Xoá 1 ảnh trước khi thêm.`, 'warning');
     e.target.value = '';
     return;
   }
@@ -758,7 +765,8 @@ async function uploadOne(item) {
     });
 
     // 3. Upload blob đã đóng dấu lên Drive
-    item.url = await uploadBlobToDrive(stamped, state.schemaKey);
+    //    schema.driveFolder cho phép loại KS chỉ định thư mục riêng (vd băng rôn)
+    item.url = await uploadBlobToDrive(stamped, state.schema.driveFolder || state.schemaKey);
     item.status = 'done';
   } catch (e) {
     item.status = 'error';
@@ -858,10 +866,11 @@ function renderImageFieldPreview(fieldKey) {
 function renderPhotoGrid() {
   const grid = document.getElementById('photo-grid');
   if (!grid) return;
+  const max = maxPhotos();
   const countEl = document.getElementById('photo-count');
-  if (countEl) countEl.textContent = `${state.photos.length}/3 ảnh`;
+  if (countEl) countEl.textContent = `${state.photos.length}/${max} ảnh`;
   const addBtn = document.getElementById('photo-add-btn');
-  if (addBtn) addBtn.classList.toggle('hidden', state.photos.length >= 3);
+  if (addBtn) addBtn.classList.toggle('hidden', state.photos.length >= max);
   grid.innerHTML = '';
   for (const p of state.photos) {
     const cell = document.createElement('div');

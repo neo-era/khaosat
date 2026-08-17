@@ -195,7 +195,8 @@
 
         try {
           const user = await login(username, password);
-          location.replace(defaultHomeFor(user.role));
+          // Mật khẩu tạm do admin đặt → bắt đổi trước khi vào app
+          location.replace(user.must_change ? 'doi-mat-khau.html' : defaultHomeFor(user.role));
         } catch (err) {
           showError(String(err.message || err));
           btn.disabled = false;

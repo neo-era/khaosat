@@ -27,7 +27,7 @@
           <option value="">📋 Tất cả loại</option>
         </select>
         <select id="filter-user" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
-          <option value="">👤 Tất cả KTV</option>
+          <option value="">👤 Tất cả người khảo sát</option>
         </select>
         <select id="filter-status" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
           <option value="active">✅ Đang hoạt động</option>
@@ -59,7 +59,7 @@
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">STT</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Loại</th>
             <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700">Tuyến đường / Vị trí</th>
-            <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700">KTV</th>
+            <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700">Người khảo sát</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Ngày</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Ảnh</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Trạng thái</th>
@@ -114,7 +114,7 @@
         const res = await apiUsers();
         users = res.users || [];
       } catch (e) {
-        showToast('Không tải được danh sách KTV: ' + e.message, 'warning', 4000);
+        showToast('Không tải được danh sách Người khảo sát: ' + e.message, 'warning', 4000);
       }
       initManage(users);
     })();

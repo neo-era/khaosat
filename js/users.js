@@ -54,6 +54,9 @@ function renderTable() {
         ${u.active
           ? '<span class="text-green-700 text-xs">✅ Hoạt động</span>'
           : '<span class="text-red-700 text-xs">🚫 Vô hiệu</span>'}
+        ${u.has_password === false
+          ? '<div class="text-xs text-red-700 mt-0.5" title="Chưa có mật khẩu trong kho — bấm 🔑 PWD để đặt">⛔ chưa có MK</div>'
+          : (u.must_change ? '<div class="text-xs text-yellow-700 mt-0.5" title="Đang dùng mật khẩu tạm, sẽ bị bắt đổi khi đăng nhập">⚠ phải đổi MK</div>' : '')}
       </td>
       <td class="px-2 py-2 text-xs text-gray-500">${escapeHtml(u.created_at || '')}</td>
       <td class="px-2 py-2 text-right whitespace-nowrap">
@@ -151,14 +154,19 @@ async function handleFormSubmit(e) {
 }
 
 async function resetPwd(u) {
-  const newPwd = prompt('Mật khẩu MỚI cho ' + u.username + ' (≥ 8 ký tự):');
+  const newPwd = prompt('Mật khẩu TẠM cho ' + u.username + ' (≥ 8 ký tự).\n'
+    + u.username + ' sẽ bị bắt đổi sang mật khẩu riêng ở lần đăng nhập kế tiếp:');
   if (!newPwd) return;
   if (newPwd.length < 8) { showToast('Mật khẩu phải ≥ 8 ký tự', 'error'); return; }
-  const confirmPwd = prompt('Xác nhận lại mật khẩu mới:');
+  if (newPwd.toLowerCase() === u.username.toLowerCase()) {
+    showToast('Mật khẩu không được trùng tên đăng nhập', 'error'); return;
+  }
+  const confirmPwd = prompt('Xác nhận lại mật khẩu tạm:');
   if (newPwd !== confirmPwd) { showToast('Hai lần nhập không khớp', 'error'); return; }
   try {
     await apiResetPassword(u.username, newPwd);
-    showToast('✅ Đã reset password ' + u.username, 'success');
+    showToast('✅ Đã đặt mật khẩu tạm cho ' + u.username + ' — người này phải đổi khi đăng nhập', 'success', 5000);
+    await loadUsers();   // cập nhật nhãn "phải đổi MK"
   } catch (e) {
     showToast('Lỗi: ' + e.message, 'error', 4000);
   }

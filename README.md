@@ -1,20 +1,22 @@
 # Khảo sát chiếu sáng SAPULICO
 
-Web app cho **kỹ thuật viên (KTV) SAPULICO** khảo sát hiện trường hệ thống chiếu sáng đô thị TP.HCM. KTV nhập dữ liệu qua điện thoại (chụp ảnh, lấy GPS tự động), dữ liệu đẩy thẳng vào Google Sheets. Thay thế quy trình ghi giấy → nhập Excel văn phòng cũ.
+Web app cho **kỹ thuật viên (Người khảo sát) SAPULICO** khảo sát hiện trường hệ thống chiếu sáng đô thị TP.HCM. Người khảo sát nhập dữ liệu qua điện thoại (chụp ảnh, lấy GPS tự động), dữ liệu đẩy thẳng vào Google Sheets. Thay thế quy trình ghi giấy → nhập Excel văn phòng cũ.
 
 - 🔗 **Mở app trên điện thoại**: https://<github-user>.github.io/khaosat/login.html (cập nhật sau khi deploy)
 - 📊 **Google Sheets dữ liệu**: file `khao-sat-ke-hoach` (chỉ tài khoản SAPULICO truy cập)
 
 ---
 
-## Dành cho KTV (role `user1`)
+## Dành cho người khảo sát (role `user1`)
 
 ### 1. Đăng nhập lần đầu
 
 1. Mở trình duyệt **Chrome** (Android) hoặc **Safari** (iPhone).
 2. Vào URL ở trên.
 3. Nhập **tên đăng nhập** và **mật khẩu** quản lý đã cấp.
-4. Tick "Nhớ đăng nhập" để không phải gõ lại trong 8 tiếng.
+4. Lần đăng nhập đầu, app bắt **đặt mật khẩu riêng** — mật khẩu quản lý cấp chỉ là mật khẩu tạm. Đặt ≥8 ký tự, không trùng tên đăng nhập.
+
+> Phiên đăng nhập kéo dài 8 tiếng và **mất khi đóng tab trình duyệt**. Đóng tab rồi mở lại thì phải đăng nhập lại.
 
 ### 2. Cài app vào màn hình chính (PWA)
 
@@ -54,9 +56,9 @@ Sau đăng nhập, admin được đẩy thẳng vào **trang KPI**. Menu góc p
 
 | Trang | Đường dẫn | Chức năng |
 |---|---|---|
-| **KPI** | `kpi.html` | Bảng chấm điểm KTV theo tháng — 5 chỉ tiêu, xếp loại A/B/C/D, export CSV |
+| **KPI** | `kpi.html` | Bảng chấm điểm Người khảo sát theo tháng — 5 chỉ tiêu, xếp loại A/B/C/D, export CSV |
 | **Quản lý bản ghi** | `manage.html` | Tìm/xoá/khôi phục bản ghi cũ. Soft-delete (data có thể khôi phục, ảnh thì không) |
-| **Báo cáo tổng hợp** | `report.html` | Tổng hợp số liệu theo loại / thời gian / KTV — bảng + biểu đồ + pivot, export CSV |
+| **Báo cáo tổng hợp** | `report.html` | Tổng hợp số liệu theo loại / thời gian / Người khảo sát — bảng + biểu đồ + pivot, export CSV |
 
 Sửa data trực tiếp trên **Google Sheets** (file `khao-sat-ke-hoach`) nếu cần điều chỉnh chi tiết — không có UI sửa trong app (an toàn).
 
@@ -71,7 +73,9 @@ Sửa data trực tiếp trên **Google Sheets** (file `khao-sat-ke-hoach`) nế
 | `user1` | ✓ | ✓ | ✗ | ✗ |
 | `demo` | ✓ | ✗ (xem thử) | ✗ | ✗ |
 
-Tài khoản lưu trong sheet `taikhoan`. Admin tạo user qua Google Sheets (xem `SETUP.md` Bước D).
+Danh bạ tài khoản nằm trong sheet `taikhoan` (tên, họ tên, vai trò, trạng thái). **Mật khẩu KHÔNG nằm trong Google Sheets** — lưu riêng trong Script Properties dạng băm, mở file Sheets cũng không thấy.
+
+Admin tạo/khoá user và đặt mật khẩu tạm qua trang **👥 Quản lý user** (`users.html`), không sửa sheet bằng tay. Xem `SETUP.md` Bước D.
 
 ---
 
@@ -84,12 +88,13 @@ Người setup (1 lần duy nhất): xem `SETUP.md`.
 ## Known Issues
 
 - **`js/config.js → cloudinaryName`** đang là placeholder `your-cloud-name`. Cập nhật giá trị thật từ Cloudinary Dashboard (SETUP.md Bước E) trước khi đi live, nếu không nút "Chụp ảnh" sẽ fail upload.
-- **Trang `manage.html` — dropdown filter KTV** hiện rỗng (chỉ "Tất cả"). Workaround: dùng bộ lọc khác (loại / thời gian / search) hoặc mở Google Sheets xem trực tiếp. Sẽ thêm endpoint `apiUsers()` trong v1.1.
+- **Trang `manage.html` — dropdown filter Người khảo sát** hiện rỗng (chỉ "Tất cả"). Workaround: dùng bộ lọc khác (loại / thời gian / search) hoặc mở Google Sheets xem trực tiếp. Sẽ thêm endpoint `apiUsers()` trong v1.1.
 - **Khi xoá bản ghi (soft-delete) → ảnh Cloudinary xoá vĩnh viễn**, không khôi phục được. Đây là design intent (giải phóng storage Cloudinary free 25GB).
 - **Apps Script `kpi` / `report` có thể chậm 3–8 giây** khi data >1000 bản. Nếu vượt 6 phút (quota free) sẽ timeout — chia nhỏ filter (chỉ 1 tháng/lần).
-- **Token TTL 8 tiếng**. KTV làm việc xuyên đêm cần đăng nhập lại lúc sáng. Có thể tăng trong `js/config.js → sessionTimeoutHours` (nhưng cũng phải đổi `TOKEN_TTL_MS` trong Code.gs).
+- **Token TTL 8 tiếng**. Người khảo sát làm việc xuyên đêm cần đăng nhập lại lúc sáng. Có thể tăng trong `js/config.js → sessionTimeoutHours` (nhưng cũng phải đổi `TOKEN_TTL_MS` trong Code.gs).
 - **Sheet `Audit` chỉ tự tạo khi có lần delete/restore đầu tiên**. Trước đó sẽ không thấy sheet này — đúng design, không phải bug.
-- **Repo PUBLIC trên GitHub** → URL Apps Script + Sheets CSV bị lộ. Bảo vệ qua token + role + rate limit. Đặt mật khẩu KTV mạnh ≥10 ký tự.
+- **Repo PUBLIC trên GitHub** → URL Apps Script bị lộ. Bảo vệ qua token + role + rate limit. Đặt mật khẩu Người khảo sát mạnh ≥10 ký tự, mỗi người một mật khẩu riêng.
+- **KHÔNG publish Google Sheets ra web.** Tháng 8/2026 từng bật nhầm, làm lộ cả sheet `taikhoan` ra internet. Đã tắt và bỏ `sheetsCsvUrl` khỏi `js/config.js`.
 
 ---
 
