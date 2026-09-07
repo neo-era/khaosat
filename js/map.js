@@ -4,15 +4,23 @@ import { apiList, apiUsers } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
+import { createBoundaryLayer } from './boundaries.js';
 
 // Trung tâm TP.HCM
 const CENTER = [10.7769, 106.7009];
 const DEFAULT_ZOOM = 11;
 
+// Nhớ trạng thái bật/tắt lớp ranh giới giữa các lần mở trang
+const RANH_KEY = 'map_show_ranh';
+const RANH_LABEL = '🏙️ Ranh phường/xã';
+
 const state = {
   user: null,
   map: null,
-  cluster: null
+  cluster: null,
+  layerControl: null,
+  boundary: null,        // { polygons, labels, ... } sau khi tải xong
+  boundaryLoading: false
 };
 
 export async function initMap(user) {
@@ -30,6 +38,8 @@ export async function initMap(user) {
     attribution: '© OpenStreetMap contributors',
     maxZoom: 19
   }).addTo(state.map);
+  state.layerControl = L.control.layers(null, null, { collapsed: false, position: 'topright' })
+    .addTo(state.map);
   state.cluster = L.markerClusterGroup({
     chunkedLoading: true,
     spiderfyOnMaxZoom: true,
@@ -58,6 +68,49 @@ export async function initMap(user) {
 
   document.getElementById('btn-load').onclick = loadMarkers;
   await loadMarkers();
+
+  // Nạp ranh giới SAU marker để không làm chậm lần vẽ đầu; lỗi ở đây không chặn bản đồ.
+  if (localStorage.getItem(RANH_KEY) === '0') addBoundaryPlaceholder();
+  else showBoundary();
+}
+
+// Checkbox "bật lớp" hiện ngay cả khi dữ liệu chưa tải — tick vào mới fetch (nạp lười).
+function addBoundaryPlaceholder() {
+  const stub = L.layerGroup();
+  state.layerControl.addOverlay(stub, RANH_LABEL);
+  state.map.on('overlayadd', function onAdd(e) {
+    if (e.layer !== stub) return;
+    state.map.off('overlayadd', onAdd);
+    state.map.removeLayer(stub);
+    state.layerControl.removeLayer(stub);
+    showBoundary();
+  });
+}
+
+async function showBoundary() {
+  if (state.boundaryLoading) return;
+  if (state.boundary) {
+    state.map.addLayer(state.boundary.polygons);
+    return;
+  }
+  state.boundaryLoading = true;
+  try {
+    state.boundary = await createBoundaryLayer(state.map);
+    state.map.addLayer(state.boundary.polygons);
+    state.layerControl.addOverlay(state.boundary.polygons, RANH_LABEL);
+    // Lớp được add TRƯỚC khi vào layer control nên 'overlayadd' không bắn cho lần
+    // bật này — ghi tay, nếu không thì bật từ trạng thái tắt sẽ không được nhớ.
+    localStorage.setItem(RANH_KEY, '1');
+    state.map.on('overlayadd overlayremove', (e) => {
+      if (!state.boundary || e.layer !== state.boundary.polygons) return;
+      localStorage.setItem(RANH_KEY, e.type === 'overlayadd' ? '1' : '0');
+    });
+  } catch (err) {
+    showToast('Không tải được ranh hành chính: ' + err.message, 'error', 4000);
+    addBoundaryPlaceholder();
+  } finally {
+    state.boundaryLoading = false;
+  }
 }
 
 function buildTypeFilter() {
