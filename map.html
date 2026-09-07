@@ -33,6 +33,52 @@
       border-color: #dc2626;
       opacity: 0.55;
     }
+
+    /* Nhãn tên phường/xã của lớp ranh hành chính (js/boundaries.js).
+       Không có nền — dùng viền chữ trắng để đọc được trên mọi nền bản đồ. */
+    /* Div ngoài do Leaflet định vị (nó tự gán transform inline) → để kích thước 0,
+       chữ nằm trong span và tự căn giữa quanh toạ độ. */
+    .ranh-label {
+      width: 0 !important;
+      height: 0 !important;
+      margin: 0 !important;
+      background: none;
+      border: none;
+      pointer-events: none;
+    }
+    .ranh-label > span {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -50%);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.1;
+      color: #4c1d95;
+      white-space: nowrap;
+      text-shadow:
+        -1px -1px 0 #fff,  1px -1px 0 #fff,
+        -1px  1px 0 #fff,  1px  1px 0 #fff,
+         0   -1px 0 #fff,  0    1px 0 #fff,
+        -1px  0   0 #fff,  1px  0   0 #fff;
+    }
+
+    /* Control bật/tắt lớp: tap target >= 44px trên mobile */
+    .leaflet-control-layers label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .leaflet-control-layers input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+    .leaflet-control-layers-expanded {
+      padding: 4px 10px 4px 8px;
+    }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col">
