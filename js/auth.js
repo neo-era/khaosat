@@ -2,7 +2,7 @@
 // PERMISSIONS đồng bộ với DEFAULT_PERMISSIONS trong apps-script/Code.gs.
 // Server vẫn là source of truth — frontend dùng map này chỉ để hide/show UI.
 
-import { apiLogin } from './api.js';
+import { apiLogin, apiRefresh } from './api.js';
 import { saveToken, getToken, clearToken } from './storage.js';
 
 export const PERMISSIONS = {
@@ -45,21 +45,29 @@ export function getAuthHeader() {
   return t ? { token: t.token } : {};
 }
 
+// Token còn dưới ngưỡng này thì tự gia hạn khi mở trang (gia hạn trượt).
+// Server cấp token 1 năm cho phiên "ghi nhớ", nên người dùng đều đặn không bao
+// giờ bị đăng xuất; máy bỏ không quá 1 năm thì hết hạn thật.
+const REFRESH_BEFORE_MS = 180 * 24 * 60 * 60 * 1000;  // 180 ngày
+
 /**
  * Login → lưu token vào storage tuỳ remember.
+ * @param {boolean} [remember=true] - true: localStorage (giữ phiên sau khi đóng
+ *   trình duyệt, token 1 năm). false: sessionStorage, token 8 tiếng.
  * @returns {Promise<{username, full_name, role}>}
  * @throws Error với message hiển thị được cho user.
  */
-export async function login(username, password) {
-  const res = await apiLogin(username, password);
+export async function login(username, password, remember = true) {
+  const res = await apiLogin(username, password, remember);
   saveToken({
     token: res.token,
     username: res.username,
     full_name: res.full_name,
     role: res.role,
     must_change: res.must_change === true,
+    remember: res.remember === true,
     expires_at: res.expires_at
-  });
+  }, res.remember === true);
   return {
     username: res.username,
     full_name: res.full_name,
@@ -111,7 +119,28 @@ export function requireAuth(requiredAction) {
     location.replace('index.html');
     throw new Error('redirecting due to missing permission');
   }
+  maybeRefreshToken();   // fire-and-forget, không chặn render trang
   return u;
+}
+
+/**
+ * Gia hạn token nếu sắp hết hạn. Gọi ngầm ở mỗi trang qua requireAuth().
+ * Thất bại thì im lặng: có thể chỉ là mất mạng tạm thời — không đá user ra
+ * ngoài. Token thực sự hỏng/hết hạn sẽ bị getToken() hoặc request kế tiếp bắt.
+ */
+async function maybeRefreshToken() {
+  const t = getToken();
+  if (!t || !t.expires_at) return;
+  if (t.expires_at - Date.now() > REFRESH_BEFORE_MS) return;
+  try {
+    const res = await apiRefresh(t.remember === true);
+    saveToken(Object.assign({}, t, {
+      token: res.token,
+      expires_at: res.expires_at,
+      full_name: res.full_name,
+      role: res.role
+    }), res.remember === true);
+  } catch (e) { /* bỏ qua — xem doc ở trên */ }
 }
 
 /** Trang mặc định sau khi login theo role. */

@@ -31,7 +31,12 @@
 // =====================================================================
 
 const TZ = 'Asia/Ho_Chi_Minh';
-const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;  // 8 tiếng
+const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;              // phiên thường: 8 tiếng
+const TOKEN_TTL_REMEMBER_MS = 365 * 24 * 60 * 60 * 1000;  // "Ghi nhớ đăng nhập": 1 năm
+// Ngưỡng gia hạn trượt nằm ở client (js/auth.js REFRESH_BEFORE_MS): mỗi lần mở
+// trang, nếu token sắp hết hạn thì gọi action=refresh. Người dùng thường xuyên
+// không bao giờ bị đăng xuất, còn token bị lộ vẫn có hạn chết.
+// Thu hồi ngay lập tức = đặt active=FALSE trong sheet taikhoan (verifyToken kiểm mỗi request).
 
 /** Mapping type-key → tên sheet trong Google Sheets (giữ NGUYÊN VĂN). */
 const SHEET_MAP = {
@@ -286,9 +291,13 @@ function hashPassword(plain) {
   return sha256Hex(String(plain) + getSalt());
 }
 
-/** Sinh token stateless 8 tiếng. */
-function generateToken(username) {
-  const expiresAt = Date.now() + TOKEN_TTL_MS;
+/**
+ * Sinh token stateless.
+ * @param {string} username
+ * @param {number} [ttlMs] - mặc định TOKEN_TTL_MS (8 tiếng).
+ */
+function generateToken(username, ttlMs) {
+  const expiresAt = Date.now() + (ttlMs || TOKEN_TTL_MS);
   const payload = username + '|' + expiresAt;
   const sig = hmacSha256Hex(payload, getSalt());
   return Utilities.base64EncodeWebSafe(payload + '|' + sig);
@@ -1671,6 +1680,7 @@ function doPost(e) {
   try {
     switch (action) {
       case 'login':   return jsonResponse(handleLogin(body));
+      case 'refresh': return jsonResponse(handleRefresh(body));
       case 'submit':  return jsonResponse(handleSubmit(body));
       case 'list':    return jsonResponse(handleList(body));
       case 'delete':  return jsonResponse(handleDelete(body));
@@ -1726,15 +1736,38 @@ function handleLogin(body) {
   if (!check.ok) return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
 
   // Thành công
-  const token = generateToken(username);
+  const remember = body.remember === true;
+  const ttl = remember ? TOKEN_TTL_REMEMBER_MS : TOKEN_TTL_MS;
   return {
     ok: true,
-    token: token,
+    token: generateToken(username, ttl),
     username: user.username,
     full_name: user.full_name,
     role: user.role,
     must_change: check.must_change === true,
-    expires_at: Date.now() + TOKEN_TTL_MS
+    remember: remember,
+    expires_at: Date.now() + ttl
+  };
+}
+
+/**
+ * action=refresh — gia hạn token còn hiệu lực (không cần nhập lại mật khẩu).
+ * Body: { token, remember }
+ * Mọi role đăng nhập đều gọi được. Token hết hạn/user bị khoá → verifyToken throw,
+ * client bắt lỗi và đẩy về login.
+ */
+function handleRefresh(body) {
+  const user = verifyToken(body.token);
+  const remember = body.remember === true;
+  const ttl = remember ? TOKEN_TTL_REMEMBER_MS : TOKEN_TTL_MS;
+  return {
+    ok: true,
+    token: generateToken(user.username, ttl),
+    username: user.username,
+    full_name: user.full_name,
+    role: user.role,
+    remember: remember,
+    expires_at: Date.now() + ttl
   };
 }
 

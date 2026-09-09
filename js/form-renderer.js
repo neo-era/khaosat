@@ -440,20 +440,38 @@ function renderField(field) {
     wrapImg.dataset.key = field.key;
     wrapImg.dataset.label = field.label;
 
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'image/*';
-    fileInput.capture = 'environment';
-    fileInput.className = 'hidden';
-    fileInput.id = 'img-input-' + field.key;
-    wrapImg.appendChild(fileInput);
+    // Hai input: một mở thẳng camera, một mở thư viện ảnh.
+    // KHÔNG đặt capture cho input thư viện — thuộc tính này khiến Android/iOS
+    // mở luôn camera và BỎ HẲN lựa chọn chọn ảnh có sẵn.
+    const mkInput = (id, useCapture) => {
+      const el = document.createElement('input');
+      el.type = 'file';
+      el.accept = 'image/*';
+      // setAttribute chứ không phải el.capture = ... — Chrome không phản chiếu
+      // property này ra thuộc tính thật, gán property sẽ không có tác dụng gì.
+      if (useCapture) el.setAttribute('capture', 'environment');
+      el.className = 'hidden';
+      el.id = id;
+      wrapImg.appendChild(el);
+      return el;
+    };
+    // id 'img-input-<key>' = input thư viện (nút '🔄 Thay' trỏ vào id này)
+    const fileInput = mkInput('img-input-' + field.key, false);
+    const camInput = mkInput('img-input-' + field.key + '-cam', true);
 
-    const btn = document.createElement('label');
-    btn.htmlFor = fileInput.id;
-    btn.className = 'block w-full bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100 text-sm';
-    btn.style.minHeight = '44px';
-    btn.innerHTML = '<span class="text-blue-700 font-medium">📷 Chụp ảnh bản vẽ</span>';
-    wrapImg.appendChild(btn);
+    const btnRow = document.createElement('div');
+    btnRow.className = 'grid grid-cols-2 gap-2';
+    const mkBtn = (forId, label) => {
+      const b = document.createElement('label');
+      b.htmlFor = forId;
+      b.className = 'flex items-center justify-center bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100 text-sm';
+      b.style.minHeight = '44px';
+      b.innerHTML = '<span class="text-blue-700 font-medium">' + label + '</span>';
+      btnRow.appendChild(b);
+    };
+    mkBtn(camInput.id, '📷 Chụp');
+    mkBtn(fileInput.id, '🖼️ Thư viện');
+    wrapImg.appendChild(btnRow);
 
     const preview = document.createElement('div');
     preview.className = 'hidden';
@@ -461,6 +479,7 @@ function renderField(field) {
     wrapImg.appendChild(preview);
 
     fileInput.onchange = (e) => handleImageFieldSelect(e, field.key, field.label);
+    camInput.onchange = (e) => handleImageFieldSelect(e, field.key, field.label);
 
     // Replace input mặc định bằng block tự custom — thoát khỏi luồng `input.id =...` ở dưới
     if (field.hint) {
@@ -533,10 +552,16 @@ function renderImageBlock() {
       <label class="text-sm font-medium text-gray-700">📷 Ảnh hiện trường</label>
       <span id="photo-count" class="text-xs text-gray-500">0/${max} ảnh</span>
     </div>
-    <label id="photo-add-btn" class="block w-full bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-4 text-center cursor-pointer hover:bg-blue-100 mb-3" style="min-height:44px">
-      <input id="photo-input" type="file" accept="image/*" multiple capture="environment" class="hidden">
-      <span class="text-blue-700 font-medium">+ Chụp ảnh / Chọn từ thư viện (tối đa ${max} ảnh)</span>
-    </label>
+    <div id="photo-add-btn" class="grid grid-cols-2 gap-2 mb-3">
+      <label class="flex items-center justify-center bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100" style="min-height:44px">
+        <input id="photo-input-cam" type="file" accept="image/*" multiple capture="environment" class="hidden">
+        <span class="text-blue-700 font-medium text-sm">📷 Chụp ảnh</span>
+      </label>
+      <label class="flex items-center justify-center bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-3 text-center cursor-pointer hover:bg-blue-100" style="min-height:44px">
+        <input id="photo-input" type="file" accept="image/*" multiple class="hidden">
+        <span class="text-blue-700 font-medium text-sm">🖼️ Thư viện</span>
+      </label>
+    </div>
     <div id="photo-grid" class="grid grid-cols-3 gap-2"></div>
   `;
   return div;
@@ -551,6 +576,7 @@ function bindEvents() {
   document.getElementById('btn-home').onclick = goHome;
   document.getElementById('btn-submit').onclick = handleSubmit;
   document.getElementById('photo-input').onchange = handleFileSelect;
+  document.getElementById('photo-input-cam').onchange = handleFileSelect;
   const gpsBtn = document.getElementById('btn-gps-refresh');
   if (gpsBtn) gpsBtn.onclick = refreshGps;
   const geocodeBtn = document.getElementById('btn-gps-geocode');

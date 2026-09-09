@@ -30,8 +30,13 @@ function requireToken() {
 
 // ===== Auth =====
 
-export async function apiLogin(username, password) {
-  return postJson({ action: 'login', username, password });
+export async function apiLogin(username, password, remember) {
+  return postJson({ action: 'login', username, password, remember: remember === true });
+}
+
+/** Gia hạn token còn hiệu lực — không cần nhập lại mật khẩu. */
+export async function apiRefresh(remember) {
+  return postJson({ action: 'refresh', token: requireToken(), remember: remember === true });
 }
 
 // ===== CRUD bản ghi =====
