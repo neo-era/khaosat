@@ -656,7 +656,11 @@ Vì sao salt riêng + lặp nhiều vòng: salt riêng khiến 2 người trùng
 
 ### Authentication & phân quyền
 - **Password hashing**: xem 7.1 — lặp HMAC-SHA256 với salt riêng từng user, lưu trong Script Properties.
-- **Token**: sau khi login thành công, sinh token = `base64(username + "|" + expiresAt + "|" + HMAC_SHA256(username + expiresAt, salt))`. `expiresAt` = now + 8h. Stateless, không cần lưu DB.
+- **Token**: sau khi login thành công, sinh token = `base64(username + "|" + expiresAt + "|" + HMAC_SHA256(username + expiresAt, salt))`. Stateless, không cần lưu DB.
+- **Hạn token phụ thuộc ô "Ghi nhớ đăng nhập"** ở `login.html` (mặc định bật):
+  - bật → `TOKEN_TTL_REMEMBER_MS` = **1 năm**, token lưu `localStorage` (còn sau khi đóng trình duyệt);
+  - tắt → `TOKEN_TTL_MS` = **8 tiếng**, token lưu `sessionStorage` (mất khi đóng tab — dùng khi mượn máy).
+- **Gia hạn trượt**: `requireAuth()` gọi ngầm `action=refresh` khi token còn dưới `REFRESH_BEFORE_MS` (180 ngày, khai trong `js/auth.js`). Người dùng đều đặn không bao giờ bị đăng xuất; máy bỏ không quá 1 năm thì hết hạn thật. Refresh lỗi (mất mạng) thì bỏ qua, KHÔNG đá user ra ngoài.
 - **Verify token** mỗi request: decode → kiểm tra expiresAt > now → recompute HMAC → match thì OK, trả lại `{ username, role, full_name }` (đọc lại từ sheet `taikhoan`, để role/full_name luôn fresh nếu admin sửa).
 - **Rate limiting nhẹ**: giới hạn 5 lần login sai/phút từ cùng 1 username bằng `CacheService`. Sai quá → khoá 5 phút.
 - **active=FALSE** trong sheet `taikhoan` → từ chối login với message "Tài khoản đã bị khoá".
@@ -936,7 +940,7 @@ async function compressImage(file, maxDim = 1600, quality = 0.8) {
    - Hiện trạng thái "Đang lấy GPS..." / "Đã có GPS (sai số Xm)" / "Không có GPS".
    - Nút "Lấy lại GPS" luôn hiển thị.
 7. **Ảnh**:
-   - Cho phép chụp ảnh mới (`capture="environment"`) HOẶC chọn từ thư viện.
+   - **Hai nút riêng**: "📷 Chụp ảnh" (input có `capture="environment"`) và "🖼️ Thư viện" (input KHÔNG có `capture`). Bắt buộc tách đôi: đặt `capture` lên input duy nhất khiến Android/iOS mở thẳng camera và **bỏ hẳn** lựa chọn ảnh có sẵn. Lưu ý phải dùng `setAttribute('capture', ...)` — gán property `el.capture = ...` không tạo thuộc tính thật trên Chrome.
    - Cho phép nhiều ảnh (multiple).
    - Hiện preview lưới 3 cột với nút X để xóa từng ảnh.
    - Upload diễn ra ngay khi chọn (parallel), hiện progress.
@@ -977,7 +981,7 @@ Header trang chủ có:
 
 ### UI
 - Form đơn giản: 1 input username + 1 input password + 1 nút "Đăng nhập".
-- Có checkbox "Nhớ tôi" (mặc định bật) — kiểm soát việc lưu token vào `localStorage` (8 tiếng) hay `sessionStorage` (đến khi đóng tab).
+- Có checkbox "Ghi nhớ đăng nhập trên máy này" (mặc định bật) — bật thì token 1 năm lưu `localStorage`, tắt thì token 8 tiếng lưu `sessionStorage`. Xem mục 7.
 - Hiện lỗi inline: "Sai tên đăng nhập hoặc mật khẩu", "Tài khoản bị khoá", "Sai 5 lần, vui lòng đợi 5 phút".
 - Mobile-first như form khảo sát, button cao ≥44px.
 - Logo + tên app phía trên form.
@@ -1013,7 +1017,7 @@ Header trang chủ có:
 
 ### Bảo mật — biết rõ giới hạn
 - Mật khẩu hash SHA-256 + salt server-side là **đủ** cho nội bộ SAPULICO, **không đủ** cho hệ thống công khai. Không có 2FA, không lockout DB-side ngoài rate limit memory.
-- Token stateless không thể revoke trước khi hết hạn (trừ khi đổi salt — sẽ vô hiệu hoá TẤT CẢ token đang dùng).
+- Token stateless không thể revoke trước khi hết hạn (trừ khi đổi salt — sẽ vô hiệu hoá TẤT CẢ token đang dùng). Với phiên "ghi nhớ" (1 năm) điều này đáng lưu ý hơn: **cách thu hồi 1 người dùng là đặt `active = FALSE`** trong sheet `taikhoan` — `verifyToken` đọc lại sheet mỗi request nên có hiệu lực ngay. Mất điện thoại thì làm bước này.
 - Apps Script Web App `Anyone` nghĩa là endpoint public — bất kỳ ai có URL đều có thể spam request login. Rate limit ở mục 7 giảm thiểu, không loại bỏ.
 - **Khuyến nghị**: chỉ dùng URL Apps Script trong nội bộ, không công khai trên trang public.
 
@@ -1311,7 +1315,7 @@ export const CONFIG = {
   imageMaxDim: 1600,
   imageQuality: 0.8,
   autosaveInterval: 5000,
-  sessionTimeoutHours: 8,
+  sessionTimeoutHours: 8,   // chỉ còn ý nghĩa lịch sử — hạn token do Code.gs quyết định (mục 7)
 };
 ```
 

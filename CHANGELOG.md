@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## v2.2.0 — 2026-09-09 — Duy trì đăng nhập · sửa chọn ảnh trên điện thoại · ranh hành chính trên bản đồ
+
+### Duy trì đăng nhập
+- `login.html` thêm ô **"Ghi nhớ đăng nhập trên máy này"** (mặc định bật). Bật → token **1 năm** lưu `localStorage`, còn nguyên sau khi đóng trình duyệt. Tắt → giữ như cũ: token 8 tiếng trong `sessionStorage`.
+- `Code.gs`: thêm `TOKEN_TTL_REMEMBER_MS` (1 năm), `generateToken(username, ttlMs)`, và **endpoint mới `action=refresh`** gia hạn token còn hiệu lực mà không cần nhập lại mật khẩu.
+- `js/auth.js`: `requireAuth()` tự gọi refresh ngầm khi token còn dưới 180 ngày → người dùng đều đặn không bao giờ bị đăng xuất. Refresh lỗi (mất mạng) thì bỏ qua, không đá user ra ngoài.
+- ⚠️ **Phải deploy lại Apps Script Web App** (tạo version mới) thì phần này mới có tác dụng — hạn token nằm trong chữ ký, sửa client không đủ.
+- ⚠️ Thu hồi 1 phiên "ghi nhớ" (vd mất điện thoại): đặt `active = FALSE` cho user đó trong sheet `taikhoan`, có hiệu lực ngay ở request kế tiếp.
+
+### Sửa lỗi: điện thoại không chọn được ảnh từ thư viện
+- Nguyên nhân: input ảnh có `capture="environment"` → Android/iOS mở thẳng camera và **bỏ hẳn** lựa chọn ảnh có sẵn, dù nhãn nút ghi "Chụp ảnh / Chọn từ thư viện".
+- Sửa: tách thành **2 nút** — "📷 Chụp ảnh" (có `capture`) và "🖼️ Thư viện" (không `capture`). Áp dụng cho cả ảnh hiện trường lẫn trường "Bản vẽ".
+- Kèm sửa: dùng `setAttribute('capture', ...)` thay cho gán property `el.capture = ...` — Chrome không phản chiếu property này nên cách cũ không có tác dụng.
+
+### Bản đồ: lớp ranh hành chính
+- `map.html` thêm lớp **ranh giới 168 phường/xã TP.HCM sau sáp nhập 2025** (+ 8 xã khu Cần Giuộc), bật/tắt bằng layer control, hiện tên phường khi zoom ≥ 13.
+- Dữ liệu `data/ranh-hanh-chinh-2025.geojson` (176 vùng, 528 KB) sinh bởi `tools/build-ranh-hanh-chinh.mjs` từ ThangLeQuoc/vietnamese-provinces-database (MIT). **Không sửa tay file .geojson** — sửa script rồi chạy lại.
+- `sw.js`: `CACHE_NAME` lên `khaosat-v5` để đẩy bản mới cho máy đã cài PWA.
+
 ## v2.1.0 — 2026-08-16 — 🔒 Bảo mật: mật khẩu ra khỏi Google Sheets
 
 ### Sự cố phát hiện

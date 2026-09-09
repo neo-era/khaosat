@@ -79,21 +79,39 @@ export function getSubmittedToday() {
 }
 
 // ===== Auth token =====
-// Lưu vào sessionStorage — mất khi đóng tab (không nhớ qua session).
-// Schema: { token, username, full_name, role, expires_at }
+// Schema: { token, username, full_name, role, must_change, remember, expires_at }
+//
+// Nơi lưu tuỳ ô "Ghi nhớ đăng nhập" ở login.html:
+//   remember = true  → localStorage  (còn sau khi đóng trình duyệt)
+//   remember = false → sessionStorage (mất khi đóng tab — dùng khi mượn máy)
+// Chỉ giữ token ở ĐÚNG MỘT nơi để không bị lệch phiên giữa 2 kho.
 
 const TOKEN_KEY = 'auth';
 
-export function saveToken(obj) {
+/**
+ * @param {object} obj
+ * @param {boolean} [remember] - bỏ trống = giữ nguyên nơi đang lưu
+ *   (dùng khi chỉ cập nhật token/cờ, không phải đăng nhập mới).
+ */
+export function saveToken(obj, remember) {
   try {
-    sessionStorage.setItem(TOKEN_KEY, JSON.stringify(obj));
-    localStorage.removeItem(TOKEN_KEY);  // dọn token cũ nếu còn
+    const persist = remember === undefined
+      ? localStorage.getItem(TOKEN_KEY) !== null
+      : !!remember;
+    const s = JSON.stringify(obj);
+    if (persist) {
+      localStorage.setItem(TOKEN_KEY, s);
+      sessionStorage.removeItem(TOKEN_KEY);
+    } else {
+      sessionStorage.setItem(TOKEN_KEY, s);
+      localStorage.removeItem(TOKEN_KEY);
+    }
   } catch {}
 }
 
 export function getToken() {
   try {
-    const s = sessionStorage.getItem(TOKEN_KEY);
+    const s = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
     if (!s) return null;
     const obj = JSON.parse(s);
     if (!obj || !obj.token) return null;

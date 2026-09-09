@@ -40,6 +40,12 @@
             style="min-height:44px">
         </div>
 
+        <label for="remember" class="flex items-center gap-2 cursor-pointer select-none" style="min-height:44px">
+          <input id="remember" type="checkbox" checked class="w-5 h-5 accent-blue-700">
+          <span class="text-sm text-gray-700">Ghi nhớ đăng nhập trên máy này</span>
+        </label>
+        <p class="text-xs text-gray-500 -mt-2">Bỏ chọn nếu đang dùng máy chung — phiên sẽ mất khi đóng trình duyệt.</p>
+
         <div id="error-msg" class="hidden text-red-700 text-sm bg-red-50 border border-red-200 rounded-lg p-3"></div>
 
         <button id="submit-btn" type="submit"
@@ -194,7 +200,7 @@
         btn.textContent = '⏳ Đang đăng nhập...';
 
         try {
-          const user = await login(username, password);
+          const user = await login(username, password, document.getElementById('remember').checked);
           // Mật khẩu tạm do admin đặt → bắt đổi trước khi vào app
           location.replace(user.must_change ? 'doi-mat-khau.html' : defaultHomeFor(user.role));
         } catch (err) {
