@@ -8,6 +8,39 @@
 // countFrom: '<key>' → ô số tự đếm các con số trong trường <key> (người dùng vẫn sửa được).
 // Trường `nguoi_ks` ở mọi form sẽ được form-renderer auto-fill từ user.full_name (readonly).
 
+/**
+ * Thông số để dựng mô hình đường trong DIALux (thêm 2026-09-27) cho Thay đèn, Tăng cường đèn,
+ * Ngầm hóa. Label = tên cột mới trong sheet — PHẢI khớp DIALUX_COLS trong Code.gs.
+ * `withRoadBase`: thêm Độ rộng đường/Số làn xe/Dãy phân cách (Thay đèn chưa có 3 cột này).
+ * Trả object mới mỗi lần gọi vì trường đầu mang `section` (tiêu đề khối trên form).
+ */
+function dialuxFields(withRoadBase) {
+  const base = withRoadBase ? [
+    { label: 'Độ rộng đường',          key: 'do_rong_duong', type: 'decimal',  required: true,  hint: 'mét, mép bó vỉa tới mép bó vỉa' },
+    { label: 'Số làn xe',              key: 'so_lan_xe',     type: 'number',   required: false },
+    { label: 'Dãy phân cách',          key: 'day_phan_cach', type: 'select',   required: false, options: ['Có', 'Không'] }
+  ] : [];
+  const fields = base.concat([
+    { label: 'Bề rộng dải phân cách',  key: 'rong_dpc',      type: 'decimal',  required: false, hint: 'mét, bỏ trống nếu không có' },
+    { label: 'Bề rộng vỉa hè trái',    key: 'rong_vh_trai',  type: 'decimal',  required: false, hint: 'mét' },
+    { label: 'Bề rộng vỉa hè phải',    key: 'rong_vh_phai',  type: 'decimal',  required: false, hint: 'mét' },
+    { label: 'Loại mặt đường',         key: 'loai_mat_duong',type: 'select',   required: false, allowOther: true,
+      options: ['Nhựa', 'Bê tông'] },
+    { label: 'Kiểu bố trí trụ',        key: 'kieu_bo_tri',   type: 'select',   required: true,
+      options: ['1 bên', '2 bên đối xứng', '2 bên so le', 'Giữa dải phân cách'] },
+    { label: 'Khoảng cách trụ',        key: 'kc_tru',        type: 'decimal',  required: true,  hint: 'mét, giữa 2 trụ liên tiếp cùng bên' },
+    { label: 'Chiều cao trụ',          key: 'cao_tru',       type: 'decimal',  required: true,  hint: 'mét, chiều cao lắp đèn' },
+    { label: 'Chiều dài vươn cần',     key: 'vuon_can',      type: 'decimal',  required: false, hint: 'mét' },
+    { label: 'Góc nghiêng cần',        key: 'goc_can',       type: 'number',   required: false, hint: 'độ' },
+    { label: 'Khoảng cách trụ tới mép đường', key: 'kc_tru_mep', type: 'decimal', required: false, hint: 'mét' },
+    { label: 'Số đèn trên 1 trụ',      key: 'den_moi_tru',   type: 'number',   required: false },
+    { label: 'Loại đèn hiện hữu',      key: 'loai_den_hh',   type: 'select',   required: false, allowOther: true,
+      options: ['Sodium', 'LED', 'Metal halide'] }
+  ]);
+  fields[0].section = '📐 Thông số DIALux';
+  return fields;
+}
+
 /** Danh mục cỡ cáp dùng chung cho Thay cáp nổi / Thay cáp ngầm. */
 const LOAI_CAP = ['4x10', '4x10 + sợi thép', '4x11', '2x11', '5x10', 'Cu/XLPE/PVC/DSTA 4x10'];
 
@@ -24,7 +57,7 @@ export const SCHEMAS = {
       { label: 'Quận',                   key: 'quan',         type: 'quan',     required: true },
       { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
-      { label: 'Độ rộng đường',          key: 'do_rong_duong',type: 'decimal',  required: false, hint: 'mét' },
+      { label: 'Độ rộng đường',          key: 'do_rong_duong',type: 'decimal',  required: true,  hint: 'mét' },
       { label: 'Dãy phân cách',          key: 'day_phan_cach',type: 'select',   required: false, options: ['Có', 'Không'] },
       { label: 'Số làn xe',              key: 'so_lan_xe',    type: 'number',   required: false },
       { label: 'Đầu tuyến',              key: 'dau_tuyen',    type: 'text',     required: false },
@@ -39,7 +72,8 @@ export const SCHEMAS = {
       { label: 'Vị trí',                 key: 'vi_tri',       type: 'text',     required: false },
       { label: 'Tên hẻm',                key: 'ten_hem',      type: 'text',     required: false },
       { label: 'Trạng thái thiết kế',    key: 'trang_thai',   type: 'select',   required: false, options: ['Đã thiết kế', 'Chưa thiết kế'] },
-      { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' }
+      { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' },
+      ...dialuxFields(false)
     ]
   },
 
@@ -54,7 +88,7 @@ export const SCHEMAS = {
       { label: 'Quận',                   key: 'quan',         type: 'quan',     required: true },
       { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
-      { label: 'Độ rộng đường',          key: 'do_rong_duong',type: 'decimal',  required: false, hint: 'mét' },
+      { label: 'Độ rộng đường',          key: 'do_rong_duong',type: 'decimal',  required: true,  hint: 'mét' },
       { label: 'Dãy phân cách',          key: 'day_phan_cach',type: 'select',   required: false, options: ['Có', 'Không'] },
       { label: 'Số làn xe',              key: 'so_lan_xe',    type: 'number',   required: false },
       { label: 'Đầu tuyến',              key: 'dau_tuyen',    type: 'text',     required: false },
@@ -72,7 +106,8 @@ export const SCHEMAS = {
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
-      { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' }
+      { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' },
+      ...dialuxFields(false)
     ]
   },
 
@@ -98,7 +133,8 @@ export const SCHEMAS = {
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
-      { label: 'link',                   key: 'link_gmap',    type: 'link_gmap' }
+      { label: 'link',                   key: 'link_gmap',    type: 'link_gmap' },
+      ...dialuxFields(true)
     ]
   },
 

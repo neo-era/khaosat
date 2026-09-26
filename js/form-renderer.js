@@ -294,6 +294,12 @@ function renderField(field) {
 
   const wrap = document.createElement('div');
   wrap.className = 'field-wrap';
+  if (field.section) {
+    const head = document.createElement('div');
+    head.className = 'pt-4 mt-2 mb-3 border-t-2 border-blue-200 text-base font-semibold text-blue-800';
+    head.textContent = field.section;
+    wrap.appendChild(head);
+  }
 
   const label = document.createElement('label');
   label.className = 'block text-sm font-medium text-gray-700 mb-1';
