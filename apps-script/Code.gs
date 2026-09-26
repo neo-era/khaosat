@@ -66,6 +66,18 @@ const STT_PREFIX = {
   tc_den_kc_xa: 'TDX',   decal_so_tru: 'DST', nang_mong: 'NM', thao_go_bang_ron: 'BR'
 };
 
+/**
+ * Cột thông số DIALux (thêm 2026-09-27) — nối vào CUỐI phần cột gốc của Thay đèn,
+ * Tăng cường đèn, Ngầm hóa. Khớp NGUYÊN VĂN label trong dialuxFields() của js/schemas.js.
+ * Sheet đang chạy: chạy capNhatCotSheet() 1 lần để chèn cột.
+ */
+const DIALUX_ROAD_BASE = ['Độ rộng đường', 'Số làn xe', 'Dãy phân cách'];
+const DIALUX_COLS = [
+  'Bề rộng dải phân cách', 'Bề rộng vỉa hè trái', 'Bề rộng vỉa hè phải', 'Loại mặt đường',
+  'Kiểu bố trí trụ', 'Khoảng cách trụ', 'Chiều cao trụ', 'Chiều dài vươn cần', 'Góc nghiêng cần',
+  'Khoảng cách trụ tới mép đường', 'Số đèn trên 1 trụ', 'Loại đèn hiện hữu'
+];
+
 /** Header gốc của 16 loại khảo sát (NGUYÊN VĂN tiếng Việt, đồng bộ schemas.js + CLAUDE.md mục 5). */
 const HEADERS = {
   tang_cuong_den: [
@@ -73,19 +85,19 @@ const HEADERS = {
     'Độ rộng đường','Dãy phân cách','Số làn xe','Đầu tuyến','Cuối tuyến',
     'Số đèn dự kiến','ngày khảo sát','kinh độ','vĩ độ','Người khảo sát',
     'Bản vẽ','Ghi chú','Vị trí','Tên hẻm','Trạng thái thiết kế','Link Google Map'
-  ],
+  ].concat(DIALUX_COLS),
   ngam_hoa: [
     'STT','Tuyến đường','Quận','Phường','Tủ điều khiển','Độ rộng đường',
     'Dãy phân cách','Số làn xe','Đầu tuyến','Cuối tuyến','Số đèn dự kiến',
     'Đường nhựa','Vỉa hè các loại','Vỉa hè bê tông','Vỉa hè đá',
     'Số đèn thu hồi','CD cáp thu hồi','ngày khảo sát','kinh độ','vĩ độ',
-    'Người khảo sát','Bản vẽ','Ghi chú','Link Google Map'  // cột cuối thêm 2026-09-27 — sheet cũ chạy themCotLinkNgamHoa()
-  ],
+    'Người khảo sát','Bản vẽ','Ghi chú','Link Google Map'  // Link + DIALux thêm 2026-09-27 — sheet cũ chạy capNhatCotSheet()
+  ].concat(DIALUX_COLS),
   thay_den: [
     'STT','Tuyến đường','Quận','Phường','Tủ điều khiển','Đầu tuyến','Cuối tuyến',
     'Số đèn hiện hữu','Công suất đèn hiện hữu','Dây lên đèn','Năm lắp đặt',
     'ngày khảo sát','Người khảo sát','Bản vẽ','Ghi chú','link'
-  ],
+  ].concat(DIALUX_ROAD_BASE, DIALUX_COLS),
   hkn: [
     'STT','Tuyến đường','Quận','Phường','Tủ điều khiển','Năm lắp đặt',
     'Số lượng','Loại hộp (6A, 10A)','Người khảo sát','Ngày khảo sát',
@@ -2668,47 +2680,80 @@ function suaSttTrung() {
 }
 
 /**
- * Chèn cột "Link Google Map" vào sheet Ngầm hóa đang chạy (ngay sau "Ghi chú", trước
- * các cột bonus) và điền link cho các dòng cũ đã có kinh độ/vĩ độ. Admin chạy tay 1 lần.
- * Idempotent: cột đã có thì không làm gì. Code đọc cột theo TÊN nên thứ tự các lần gửi
- * trước/sau khi chèn đều không lệch.
+ * Chèn các cột còn thiếu so với HEADERS vào sheet đang chạy — admin chạy tay sau mỗi lần
+ * HEADERS thêm cột (2026-09-27: Link Google Map cho Ngầm hóa + khối DIALux cho Thay đèn,
+ * Tăng cường đèn, Ngầm hóa).
+ *
+ * Mỗi cột thiếu được chèn ngay sau cột đứng trước nó trong HEADERS, nên luôn nằm trước
+ * 6 cột bonus. Dữ liệu cũ không bị dịch lệch vì code đọc/ghi theo TÊN cột.
+ * Cột "Link Google Map" mới chèn được điền sẵn từ kinh độ/vĩ độ của dòng cũ.
+ * Idempotent: chạy lại không làm gì. Tự sao lưu file trước khi chèn.
  */
-function themCotLinkNgamHoa() {
+function capNhatCotSheet() {
+  const ss = getSpreadsheet();
+  const plan = [];
+  Object.keys(SHEET_MAP).forEach(type => {
+    const sheet = ss.getSheetByName(SHEET_MAP[type]);
+    if (!sheet || sheet.getLastColumn() < 1) return;
+    const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    const missing = HEADERS[type].filter(h => header.indexOf(h) < 0);
+    if (missing.length) plan.push({ type: type, missing: missing });
+  });
+  if (plan.length === 0) {
+    Logger.log('✅ Mọi sheet đã đủ cột — không làm gì.');
+    return { ok: true, added: [] };
+  }
+
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const sheet = getSpreadsheet().getSheetByName(SHEET_MAP.ngam_hoa);
-    if (!sheet) throw new Error('Không thấy sheet ' + SHEET_MAP.ngam_hoa);
-    const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-    if (header.indexOf('Link Google Map') >= 0) {
-      Logger.log('Sheet đã có cột Link Google Map — không làm gì.');
-      return { ok: true, added: false };
-    }
-    const idxGhiChu = header.indexOf('Ghi chú');
-    if (idxGhiChu < 0) throw new Error('Không thấy cột "Ghi chú" để chèn sau');
-    sheet.insertColumnAfter(idxGhiChu + 1);
-    const col = idxGhiChu + 2;
-    sheet.getRange(1, col).setValue('Link Google Map');
+    const backup = weeklyBackup();
+    if (!backup || !backup.ok) throw new Error('Sao lưu thất bại, dừng lại không chèn cột: ' + JSON.stringify(backup));
+    Logger.log('Đã sao lưu: ' + backup.file_name);
 
-    let filled = 0;
-    const lastRow = sheet.getLastRow();
-    if (lastRow >= 2) {
-      const iLat = header.indexOf('vĩ độ');
-      const iLng = header.indexOf('kinh độ');
-      const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-      const links = data.map(r => {
-        const lat = Number(String(r[iLat]).replace(',', '.'));
-        const lng = Number(String(r[iLng]).replace(',', '.'));
-        if (iLat < 0 || iLng < 0 || !lat || !lng || !isFinite(lat) || !isFinite(lng)) return [''];
-        filled++;
-        return ['https://www.google.com/maps?q=' + lat + ',' + lng];
+    const added = [];
+    plan.forEach(({ type }) => {
+      const sheet = ss.getSheetByName(SHEET_MAP[type]);
+      const expected = HEADERS[type];
+      let header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+      const inserted = [];
+      expected.forEach((label, i) => {
+        if (header.indexOf(label) >= 0) return;
+        // Chèn sau cột đứng trước trong HEADERS (tìm lùi tới cột có mặt trong sheet)
+        let after = 0;
+        for (let j = i - 1; j >= 0; j--) {
+          const pos = header.indexOf(expected[j]);
+          if (pos >= 0) { after = pos + 1; break; }
+        }
+        if (after === 0) sheet.insertColumnBefore(1); else sheet.insertColumnAfter(after);
+        sheet.getRange(1, after + 1).setValue(label);
+        header.splice(after, 0, label);
+        inserted.push(label);
       });
-      sheet.getRange(2, col, links.length, 1).setValues(links);
-    }
-    appendAuditLog('add_column', 'system', SHEET_MAP.ngam_hoa, '*',
-      'Link Google Map tại cột ' + col + ', điền link cho ' + filled + ' dòng có tọa độ');
-    Logger.log('✅ Đã thêm cột Link Google Map (cột ' + col + '), điền ' + filled + ' dòng.');
-    return { ok: true, added: true, column: col, filled: filled };
+
+      let filled = 0;
+      if (inserted.indexOf('Link Google Map') >= 0 && sheet.getLastRow() >= 2) {
+        const iLat = header.indexOf('vĩ độ'), iLng = header.indexOf('kinh độ'), iLink = header.indexOf('Link Google Map');
+        if (iLat >= 0 && iLng >= 0) {
+          const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, header.length).getValues();
+          const links = data.map(r => {
+            const lat = Number(String(r[iLat]).replace(',', '.'));
+            const lng = Number(String(r[iLng]).replace(',', '.'));
+            if (!lat || !lng || !isFinite(lat) || !isFinite(lng)) return [''];
+            filled++;
+            return ['https://www.google.com/maps?q=' + lat + ',' + lng];
+          });
+          sheet.getRange(2, iLink + 1, links.length, 1).setValues(links);
+        }
+      }
+      appendAuditLog('add_column', 'system', SHEET_MAP[type], '*',
+        'thêm ' + inserted.length + ' cột: ' + inserted.join(', ') + (filled ? '; điền link ' + filled + ' dòng' : ''));
+      Logger.log(`[${SHEET_MAP[type]}] thêm ${inserted.length} cột: ${inserted.join(', ')}` +
+        (filled ? ` — điền link cho ${filled} dòng` : ''));
+      added.push({ sheet: SHEET_MAP[type], columns: inserted, filled_links: filled });
+    });
+    Logger.log('✅ Xong. Chạy validateSheets() để đối chiếu lại header.');
+    return { ok: true, added: added, backup_id: backup.backup_id };
   } finally {
     lock.releaseLock();
   }
@@ -2974,7 +3019,11 @@ function getKpiTargets() {
 function getOptionalFields(type) {
   const skip = ['STT', 'ngày khảo sát', 'Ngày khảo sát', 'Người khảo sát',
                 'kinh độ', 'vĩ độ', 'Link Google Map', 'link', 'Bản vẽ'];
-  return HEADERS[type].filter(h => skip.indexOf(h) < 0);
+  // Cột DIALux thêm 2026-09-27: không tính, nếu không bản ghi cũ (chưa có cột này) tụt điểm
+  // "Đầy đủ" ngược về quá khứ và KPI các tháng đã báo cáo bị thay đổi.
+  // Riêng Thay đèn, 3 cột mặt cắt đường cũng là cột mới nên bỏ luôn.
+  const newCols = DIALUX_COLS.concat(type === 'thay_den' ? DIALUX_ROAD_BASE : []);
+  return HEADERS[type].filter(h => skip.indexOf(h) < 0 && newCols.indexOf(h) < 0);
 }
 
 // =====================================================================

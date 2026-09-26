@@ -116,9 +116,9 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 
 | # | `key` (dùng trong code) | Sheet name (trong Google Sheets) | Số cột | Hàng header trong file gốc |
 |---|---|---|---|---|
-| 1 | `tang_cuong_den` | `Tang cuong den` | 22 | 1 |
-| 2 | `ngam_hoa` | `Ngam Hoa` | 24 (thêm `Link Google Map` 2026-09-27) | 1 |
-| 3 | `thay_den` | `Thay den` | 16 | 1 |
+| 1 | `tang_cuong_den` | `Tang cuong den` | 34 (thêm 12 cột DIALux 2026-09-27) | 1 |
+| 2 | `ngam_hoa` | `Ngam Hoa` | 36 (thêm `Link Google Map` + 12 cột DIALux 2026-09-27) | 1 |
+| 3 | `thay_den` | `Thay den` | 31 (thêm 15 cột DIALux 2026-09-27) | 1 |
 | 4 | `hkn` | `4, HKN` | 12 | 1 |
 | 5 | `tc_noi` | `5. TCNoi` | 12 | 2 |
 | 6 | `cap_luon_can` | `6, Cap luon can` | 13 | 1 |
@@ -222,7 +222,7 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 | **GPS link-only** (chỉ lưu link) | `link` (link_gmap) | `thay_den`, `tc_noi`, `cap_luon_can`, `tc_ngam`, `thay_can`, `thay_tru`, `choa_den`, `nap_tru`, `vo_tu`, `tc_den_kc_xa`, `decal_so_tru`, `nang_mong` |
 | **Không có GPS** | — | `hkn` |
 
-✅ **`ngam_hoa` đã có cột `Link Google Map`** (thêm 2026-09-27, cột cuối phần gốc, ngay sau `Ghi chú`). Sheet đang chạy phải chạy **`themCotLinkNgamHoa()`** 1 lần trong Apps Script: chèn cột + điền link cho dòng cũ từ `kinh độ`/`vĩ độ`.
+✅ **`ngam_hoa` đã có cột `Link Google Map`** (thêm 2026-09-27, cột cuối phần gốc, ngay sau `Ghi chú`). Sheet đang chạy phải chạy **`capNhatCotSheet()`** 1 lần trong Apps Script: chèn mọi cột còn thiếu so với `HEADERS` (tự sao lưu trước) + điền link cho dòng cũ từ `kinh độ`/`vĩ độ`.
 
 > **`NO_GPS_TYPES`** trong Code.gs **chỉ có `['hkn']`** (không phải `['hkn', 'vo_tu']` — `vo_tu` có `link_gmap`). Hằng số này dùng để loại `hkn` ra khỏi mẫu số khi tính `pct_gps`.
 - `Người khảo sát`: **Người khảo sát không nhập tay**. Sau khi đăng nhập, frontend đọc `full_name` của user từ session và tự điền vào trường này (hiển thị readonly). KHÔNG cho phép sửa để tránh giả mạo. Server-side cũng overwrite trường này từ token để chắc chắn (defense in depth).
@@ -255,6 +255,11 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 > - Danh sách + Khác: `thay_den.Công suất đèn hiện hữu`, `tc_noi.Loại cáp hiện hữu`, `tc_ngam.Loại cáp` + `Loại mương cáp`, `thay_can.Loại kiềng` (thêm HTLTL/TTLTN/TTLTL/B4/B6) + `Loại cần`, `thay_tru.Quy cách trụ`, `choa_den.Loại chóa`. Danh mục lấy từ giá trị hay gặp nhất trong dữ liệu thật; sửa trực tiếp trong `js/schemas.js`.
 > - `thay_tru.Loại sự cố` → `multiselect`. `nap_tru.Số lượng` tự đếm từ `Số trụ`.
 > - Bỏ lựa chọn `''` trùng với "-- chọn --" ở `tang_cuong_den.Trạng thái thiết kế`, `tc_den_kc_xa.Kéo thêm cáp nguồn`.
+>
+> **Khối "📐 Thông số DIALux" (2026-09-27)** — cho `thay_den`, `tang_cuong_den`, `ngam_hoa`: 12 cột mới nối **cuối phần cột gốc** (`DIALUX_COLS` trong Code.gs = `dialuxFields()` trong schemas.js): `Bề rộng dải phân cách` · `Bề rộng vỉa hè trái` · `Bề rộng vỉa hè phải` · `Loại mặt đường` (Nhựa/Bê tông/Khác) · `Kiểu bố trí trụ` (1 bên/2 bên đối xứng/2 bên so le/Giữa dải phân cách) · `Khoảng cách trụ` · `Chiều cao trụ` · `Chiều dài vươn cần` · `Góc nghiêng cần` · `Khoảng cách trụ tới mép đường` · `Số đèn trên 1 trụ` · `Loại đèn hiện hữu` (Sodium/LED/Metal halide/Khác). `thay_den` thêm cả `Độ rộng đường`, `Số làn xe`, `Dãy phân cách` (2 form kia đã có).
+> - **Bắt buộc**: `Độ rộng đường`, `Kiểu bố trí trụ`, `Khoảng cách trụ`, `Chiều cao trụ` (cả 3 form). Còn lại không bắt buộc.
+> - Sheet đang chạy: `capNhatCotSheet()`. Cột DIALux **không tính** vào chỉ tiêu KPI "Đầy đủ" (tránh làm tụt điểm các tháng cũ) — xem `getOptionalFields()`.
+> - Số cột sau khi thêm: `tang_cuong_den` 34, `ngam_hoa` 36, `thay_den` 31 (chưa kể 6 cột bonus).
 
 **5.1 `tang_cuong_den` — "Tang cuong den"**
 
@@ -312,7 +317,7 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 | 23 | Ghi chú | ghi_chu | textarea | No |
 | 24 | Link Google Map | link_gmap | link_gmap | — | auto từ GPS (thêm 2026-09-27) |
 
-> **`ngam_hoa` có cột `Link Google Map`** từ 2026-09-27 (xem mục GPS ở trên — sheet cũ chạy `themCotLinkNgamHoa()`).
+> **`ngam_hoa` có cột `Link Google Map`** từ 2026-09-27 (xem mục GPS ở trên — sheet cũ chạy `capNhatCotSheet()`).
 
 **5.3 `thay_den` — "Thay den"**
 
