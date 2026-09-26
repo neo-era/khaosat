@@ -10,7 +10,7 @@
 // - Role demo: disable nút Lưu + banner cảnh báo
 
 import { SCHEMAS } from './schemas.js';
-import { PHUONG_XA, QUAN_LIST, TDK_LIST, TDK_BY_PHUONG } from './lookups.js';
+import { PHUONG_XA, TDK_LIST, TDK_BY_PHUONG } from './lookups.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
 import { apiSubmit, apiUpdate, apiList, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
@@ -172,24 +172,6 @@ async function loadEditRow() {
       if (!el) continue;
       setFieldValue(el, val);
     }
-    // Phường cascade
-    const quanEl = state.container.querySelector('[data-key="quan"]');
-    if (quanEl && quanEl.value) {
-      updatePhuongOptions(quanEl.value);
-      const phuongVal = row['Phường'];
-      if (phuongVal) {
-        const phuongEl = state.container.querySelector('[data-key="phuong"]');
-        if (phuongEl) {
-          if (![...phuongEl.options].some(o => o.value === phuongVal)) {
-            const opt = document.createElement('option');
-            opt.value = phuongVal;
-            opt.textContent = phuongVal + ' (tự nhập)';
-            phuongEl.insertBefore(opt, phuongEl.lastChild);
-          }
-          phuongEl.value = phuongVal;
-        }
-      }
-    }
     // Pre-fill ảnh hiện trường vào state.photos
     const photoUrls = String(row['Ảnh (URLs)'] || '').split('|').filter(u => u);
     state.photos = photoUrls.map(url => ({
@@ -291,6 +273,9 @@ function renderField(field) {
   if (t === 'stt_auto' || t === 'date_auto' || t === 'link_gmap') return null;
   // GPS đã render gộp trong renderGpsBlock
   if (t === 'gps_lat' || t === 'gps_lng') return null;
+  // TP.HCM bỏ cấp quận từ 01/07/2025 → không hỏi Quận nữa; cột Quận trong sheet
+  // vẫn giữ và tự điền "quận cũ" theo phường đã chọn (xem renderPhuong).
+  if (t === 'quan') return makeHiddenValue(field);
 
   const wrap = document.createElement('div');
   wrap.className = 'field-wrap';
@@ -399,27 +384,8 @@ function renderField(field) {
       o.textContent = opt === '' ? '(để trống)' : opt;
       input.appendChild(o);
     }
-  } else if (t === 'quan') {
-    input = document.createElement('select');
-    input.className = baseInputClass;
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '-- chọn quận --';
-    input.appendChild(blank);
-    for (const q of QUAN_LIST) {
-      const o = document.createElement('option');
-      o.value = q;
-      o.textContent = q;
-      input.appendChild(o);
-    }
   } else if (t === 'phuong') {
-    input = document.createElement('select');
-    input.className = baseInputClass;
-    input.disabled = true;
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '-- chọn quận trước --';
-    input.appendChild(blank);
+    return renderPhuong(field, wrap, baseInputClass);
   } else if (t === 'tdk') {
     // Wrap input + nút Scan QR cạnh nhau
     const tdkWrap = document.createElement('div');
@@ -749,14 +715,6 @@ function bindEvents() {
   const geocodeBtn = document.getElementById('btn-gps-geocode');
   if (geocodeBtn) geocodeBtn.onclick = () => applyReverseGeocode(true);  // force = ghi đè dù field đã có giá trị
 
-  // Quận → cập nhật phường
-  const quanEl = state.container.querySelector('[data-key="quan"]');
-  if (quanEl) {
-    quanEl.addEventListener('change', () => updatePhuongOptions(quanEl.value));
-  }
-
-  // Phường → handle "Khác (nhập tay)"
-  // (event handler được attach trong updatePhuongOptions để bám select mới sau khi rebuild)
 }
 
 function goHome() {
@@ -771,49 +729,105 @@ function goHome() {
   location.replace('index.html');
 }
 
-function updatePhuongOptions(quanVal) {
-  const phuongEl = state.container.querySelector('[data-key="phuong"]');
-  if (!phuongEl) return;
-  phuongEl.innerHTML = '';
-  phuongEl.disabled = !quanVal;
-  const blank = document.createElement('option');
-  blank.value = '';
-  blank.textContent = quanVal ? '-- chọn phường --' : '-- chọn quận trước --';
-  phuongEl.appendChild(blank);
-  if (quanVal) {
-    const matches = PHUONG_XA.filter(p => p.quan_cu === quanVal);
-    for (const p of matches) {
-      const o = document.createElement('option');
-      o.value = p.ten;
-      o.textContent = p.ten;
-      phuongEl.appendChild(o);
-    }
-    const customOpt = document.createElement('option');
-    customOpt.value = '__custom';
-    customOpt.textContent = 'Khác (nhập tay)...';
-    phuongEl.appendChild(customOpt);
-  }
+/** Bỏ dấu + thường hoá để tìm "tan dinh" ra "Tân Định". */
+function foldVi(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+}
 
-  // Khi đổi quận → reset TĐK về toàn bộ danh sách
-  updateTdkList('');
+// Tên trùng giữa 2 địa bàn (vd "Đông Thạnh") → hiển thị kèm quận cũ để phân biệt
+const PHUONG_OPTS = (() => {
+  const count = {};
+  PHUONG_XA.forEach(p => { count[p.ten] = (count[p.ten] || 0) + 1; });
+  return PHUONG_XA.map(p => ({
+    ten: p.ten,
+    quan: p.quan_cu,
+    display: count[p.ten] > 1 ? `${p.ten} (${p.quan_cu})` : p.ten,
+    key: foldVi(p.ten + ' ' + p.quan_cu)
+  }));
+})();
 
-  // Handler cho phường change: custom input + filter TĐK
-  phuongEl.onchange = () => {
-    if (phuongEl.value === '__custom') {
-      const custom = (prompt('Nhập tên phường/xã không có trong danh sách:') || '').trim();
-      if (custom) {
-        const opt = document.createElement('option');
-        opt.value = custom;
-        opt.textContent = custom + ' (tự nhập)';
-        phuongEl.insertBefore(opt, phuongEl.lastChild);
-        phuongEl.value = custom;
-      } else {
-        phuongEl.value = '';
-      }
-    }
-    // Lọc TĐK theo phường đã chọn
-    updateTdkList(phuongEl.value !== '__custom' ? phuongEl.value : '');
+/**
+ * Ô Phường/Xã: gõ chữ (có dấu hay không dấu) để lọc, chạm để chọn.
+ * Chọn trong danh sách → input ẩn `phuong` = tên phường, input ẩn `quan` = quận cũ.
+ * Gõ tên ngoài danh sách vẫn được (phường mới/nhập tay) — khi đó Quận để trống.
+ */
+function renderPhuong(field, wrap, cls) {
+  const hidden = makeHiddenValue(field);
+  const box = document.createElement('div');
+  box.className = 'relative';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = 'f-' + field.key;
+  input.className = cls;
+  input.placeholder = 'Gõ tên phường/xã, vd: tan dinh';
+  input.autocomplete = 'off';
+  const list = document.createElement('div');
+  list.className = 'hidden absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-72 overflow-y-auto';
+  box.append(input, list);
+
+  const quanEl = () => state.container.querySelector('[data-key="quan"]');
+  const apply = (opt, text) => {
+    hidden.value = opt ? opt.ten : text.trim();
+    const q = quanEl();
+    if (q) q.value = opt ? opt.quan : '';
+    updateTdkList(opt ? opt.ten : '');
   };
+  const resolve = (text) => {
+    const t = text.trim();
+    if (!t) return null;
+    const exact = PHUONG_OPTS.filter(o => o.display === t || o.ten === t);
+    if (exact.length === 1) return exact[0];
+    const f = foldVi(t);
+    const loose = PHUONG_OPTS.filter(o => foldVi(o.display) === f || foldVi(o.ten) === f);
+    return loose.length === 1 ? loose[0] : null;
+  };
+  const show = () => {
+    const f = foldVi(input.value);
+    const matches = (f ? PHUONG_OPTS.filter(o => o.key.includes(f)) : PHUONG_OPTS).slice(0, 30);
+    list.innerHTML = '';
+    if (!matches.length) {
+      list.innerHTML = '<div class="px-3 py-3 text-sm text-gray-500">Không có trong danh sách — giữ nguyên tên đã gõ</div>';
+    }
+    matches.forEach(o => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'w-full text-left px-3 border-b border-gray-100 hover:bg-blue-50 flex justify-between items-center gap-2';
+      item.style.minHeight = '44px';
+      item.innerHTML = `<span>${escapeHtml(o.ten)}</span><span class="text-xs text-gray-500">${escapeHtml(o.quan)}</span>`;
+      // mousedown: chọn trước khi input mất focus (blur sẽ đóng danh sách)
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        input.value = o.display;
+        apply(o, o.display);
+        list.classList.add('hidden');
+      });
+      list.appendChild(item);
+    });
+    list.classList.remove('hidden');
+  };
+
+  input.addEventListener('focus', show);
+  input.addEventListener('input', () => { show(); apply(resolve(input.value), input.value); });
+  input.addEventListener('blur', () => {
+    list.classList.add('hidden');
+    const opt = resolve(input.value);
+    if (opt) input.value = opt.display;
+    apply(opt, input.value);
+  });
+  // Nạp từ nháp/bản ghi cũ: Quận (đứng trước Phường trong schema) đã có → chọn đúng dòng khi tên trùng
+  hidden.addEventListener('sync', () => {
+    const ten = String(hidden.value || '').trim();
+    const q = quanEl() ? quanEl().value : '';
+    const opt = PHUONG_OPTS.find(o => o.ten === ten && (!q || o.quan === q)) || PHUONG_OPTS.find(o => o.ten === ten);
+    input.value = opt ? opt.display : ten;
+    if (opt && quanEl() && !q) quanEl().value = opt.quan;
+    updateTdkList(opt ? opt.ten : '');
+  });
+
+  wrap.append(box, hidden);
+  appendHint(wrap, field);
+  return wrap;
 }
 
 /** Cập nhật datalist TĐK theo phường. Nếu phường không có mapping → hiện toàn bộ. */
@@ -1132,25 +1146,6 @@ async function maybeRestoreDraft() {
     if (!el) continue;
     setFieldValue(el, val);
   }
-  // Phường dropdown phụ thuộc Quận → trigger lại
-  const quanEl = state.container.querySelector('[data-key="quan"]');
-  if (quanEl && quanEl.value) {
-    updatePhuongOptions(quanEl.value);
-    const phuongVal = draft.data['Phường'];
-    if (phuongVal) {
-      const phuongEl = state.container.querySelector('[data-key="phuong"]');
-      if (phuongEl) {
-        // Nếu phường custom (không trong list), thêm option
-        if (![...phuongEl.options].some(o => o.value === phuongVal)) {
-          const opt = document.createElement('option');
-          opt.value = phuongVal;
-          opt.textContent = phuongVal + ' (tự nhập)';
-          phuongEl.insertBefore(opt, phuongEl.lastChild);
-        }
-        phuongEl.value = phuongVal;
-      }
-    }
-  }
   showToast('Đã khôi phục bản nháp', 'info', 2000);
 }
 
@@ -1210,7 +1205,7 @@ function validateForm() {
   const errors = [];
   for (const f of state.schema.fields) {
     const t = f.type;
-    if (['stt_auto', 'date_auto', 'link_gmap', 'gps_lat', 'gps_lng'].includes(t)) continue;
+    if (['stt_auto', 'date_auto', 'link_gmap', 'gps_lat', 'gps_lng', 'quan'].includes(t)) continue;
     if (f.key === 'nguoi_ks') continue;  // auto-fill
 
     if (t === 'image_url') {

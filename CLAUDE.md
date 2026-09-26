@@ -226,7 +226,7 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 
 > **`NO_GPS_TYPES`** trong Code.gs **chỉ có `['hkn']`** (không phải `['hkn', 'vo_tu']` — `vo_tu` có `link_gmap`). Hằng số này dùng để loại `hkn` ra khỏi mẫu số khi tính `pct_gps`.
 - `Người khảo sát`: **Người khảo sát không nhập tay**. Sau khi đăng nhập, frontend đọc `full_name` của user từ session và tự điền vào trường này (hiển thị readonly). KHÔNG cho phép sửa để tránh giả mạo. Server-side cũng overwrite trường này từ token để chắc chắn (defense in depth).
-- `Quận`, `Phường`: dropdown lấy từ `lookups.js`. Quận chọn trước → lọc danh sách phường thuộc quận đó.
+- `Quận`, `Phường`: **từ 2026-09-27 form không hỏi Quận** (TP.HCM bỏ cấp quận từ 01/07/2025). Người khảo sát gõ chữ để chọn Phường/Xã; cột `Quận` trong sheet vẫn giữ và tự điền "quận cũ" (`quan_cu` trong `lookups.js`) theo phường đã chọn. Xem mục 6.
 - `Tủ điều khiển`: autocomplete (datalist) từ `lookups.js`, cho phép nhập tự do (vì có thể TĐK mới chưa có trong danh mục).
 
 ### Loại trường (`type`) hỗ trợ
@@ -611,8 +611,8 @@ export const TDK_LIST = [
 ```
 
 ### Logic dropdown trong form
-- Field `Quận` (type `quan`): dropdown từ `QUAN_LIST`.
-- Field `Phường` (type `phuong`): khi `Quận` đổi → filter `PHUONG_XA` theo `quan_cu` → render options. Người khảo sát cũng được phép nhập tự do (cho phép gõ vào nếu không có trong danh sách, nhưng dropdown ưu tiên).
+- Field `Quận` (type `quan`): **không hiển thị** (đổi 2026-09-27). Là input ẩn, tự điền `quan_cu` của phường đã chọn; phường gõ tay ngoài danh sách → Quận để trống. Không bắt buộc ở client (label `Quận` vẫn là cột sheet, giữ nguyên để báo cáo/lọc theo quận cũ không vỡ).
+- Field `Phường` (type `phuong`): ô gõ chữ có gợi ý (`renderPhuong()` trong form-renderer.js), **tìm không dấu** ("tan dinh" → Tân Định), mỗi gợi ý kèm quận cũ. Tên trùng giữa 2 địa bàn (vd `Đông Thạnh` — Hóc Môn / Cần Giuộc) hiển thị kèm quận để phân biệt; giá trị lưu vào cột `Phường` luôn là tên trần. Cho phép gõ tự do nếu không có trong danh sách. Chọn phường → lọc datalist TĐK theo `TDK_BY_PHUONG`.
 - Field `Tủ điều khiển` (type `tdk`): dùng `<input list="tdk-list">` + `<datalist id="tdk-list">` với 903 mục. Cho phép gõ tự do.
 
 ---
