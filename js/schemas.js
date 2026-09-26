@@ -2,8 +2,14 @@
 // Đồng bộ NGUYÊN VĂN với CLAUDE.md mục 5 và HEADERS trong apps-script/Code.gs.
 // label = tên cột Google Sheets (PHẢI giữ y nguyên kể cả khoảng trắng, dấu, viết hoa lẻ tẻ).
 // type:  text | number | decimal | textarea | date_auto | stt_auto |
-//        gps_lat | gps_lng | select | quan | phuong | tdk | link_gmap
+//        gps_lat | gps_lng | select | multiselect | quan | phuong | tdk | link_gmap
+// select + allowOther: true → thêm mục "Khác (nhập tay)"; giá trị ngoài danh sách vẫn lưu nguyên văn.
+// multiselect → ô tick nhiều lựa chọn (+ Khác), lưu thành chuỗi "A, B, C".
+// countFrom: '<key>' → ô số tự đếm các con số trong trường <key> (người dùng vẫn sửa được).
 // Trường `nguoi_ks` ở mọi form sẽ được form-renderer auto-fill từ user.full_name (readonly).
+
+/** Danh mục cỡ cáp dùng chung cho Thay cáp nổi / Thay cáp ngầm. */
+const LOAI_CAP = ['4x10', '4x10 + sợi thép', '4x11', '2x11', '5x10', 'Cu/XLPE/PVC/DSTA 4x10'];
 
 export const SCHEMAS = {
   // ===== 5.1 Tăng cường đèn (22 cột) =====
@@ -32,12 +38,12 @@ export const SCHEMAS = {
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
       { label: 'Vị trí',                 key: 'vi_tri',       type: 'text',     required: false },
       { label: 'Tên hẻm',                key: 'ten_hem',      type: 'text',     required: false },
-      { label: 'Trạng thái thiết kế',    key: 'trang_thai',   type: 'select',   required: false, options: ['', 'Đã thiết kế', 'Chưa thiết kế'] },
+      { label: 'Trạng thái thiết kế',    key: 'trang_thai',   type: 'select',   required: false, options: ['Đã thiết kế', 'Chưa thiết kế'] },
       { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' }
     ]
   },
 
-  // ===== 5.2 Ngầm hóa (23 cột) =====
+  // ===== 5.2 Ngầm hóa (24 cột — cột Link Google Map thêm 2026-09-27) =====
   ngam_hoa: {
     name: 'Ngầm hóa',
     sheet: 'Ngam Hoa',
@@ -65,7 +71,8 @@ export const SCHEMAS = {
       { label: 'vĩ độ',                  key: 'lat',          type: 'gps_lat' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
-      { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false }
+      { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
+      { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' }
     ]
   },
 
@@ -83,7 +90,8 @@ export const SCHEMAS = {
       { label: 'Đầu tuyến',              key: 'dau_tuyen',    type: 'text',     required: false },
       { label: 'Cuối tuyến',             key: 'cuoi_tuyen',   type: 'text',     required: false },
       { label: 'Số đèn hiện hữu',        key: 'so_den_hh',    type: 'number',   required: true },
-      { label: 'Công suất đèn hiện hữu', key: 'cong_suat',    type: 'text',     required: false, hint: 'Vd: 150/100W và 150W' },
+      { label: 'Công suất đèn hiện hữu', key: 'cong_suat',    type: 'select',   required: false, allowOther: true,
+        options: ['250W', '250/150W', '150W', '150/100W', '100W', '100/70W', '70W'] },
       { label: 'Dây lên đèn',            key: 'day_len_den',  type: 'text',     required: false },
       { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
       { label: 'ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
@@ -127,7 +135,7 @@ export const SCHEMAS = {
       { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
       { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
-      { label: 'Loại cáp hiện hữu',      key: 'loai_cap',     type: 'text',     required: false, hint: 'Vd: 5x10' },
+      { label: 'Loại cáp hiện hữu',      key: 'loai_cap',     type: 'select',   required: false, allowOther: true, options: LOAI_CAP },
       { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true,  hint: 'mét' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
@@ -150,7 +158,7 @@ export const SCHEMAS = {
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
       { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
       { label: 'Loại cáp',               key: 'loai_cap',     type: 'text',     required: false },
-      { label: 'Số lượng',               key: 'so_luong',     type: 'text',     required: true,  hint: 'Vd: 14 đèn (2TN 3m)' },
+      { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true,  hint: 'mét, vd: 6' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
@@ -170,9 +178,10 @@ export const SCHEMAS = {
       { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
       { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
-      { label: 'Số lượng',               key: 'so_luong',     type: 'text',     required: true,  hint: 'Vd: 30m' },
-      { label: 'Loại cáp',               key: 'loai_cap',     type: 'text',     required: false },
-      { label: 'Loại mương cáp',         key: 'loai_muong',   type: 'text',     required: false },
+      { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true,  hint: 'mét, vd: 30' },
+      { label: 'Loại cáp',               key: 'loai_cap',     type: 'select',   required: false, allowOther: true, options: LOAI_CAP },
+      { label: 'Loại mương cáp',         key: 'loai_muong',   type: 'select',   required: false, allowOther: true,
+        options: ['Gạch terrazzo 400x400', 'Đá chẻ', 'Đá hoa cương', 'Nhựa đường', 'Bê tông', 'Tấm đan bê tông', 'Cỏ'] },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
@@ -194,8 +203,10 @@ export const SCHEMAS = {
       { label: 'Tủ điều khiển',                  key: 'tdk',          type: 'tdk',      required: true },
       { label: 'Năm lắp đặt',                    key: 'nam_ld',       type: 'number',   required: false },
       { label: 'Số lượng',                       key: 'so_luong',     type: 'number',   required: true },
-      { label: 'Loại kiềng (HTLT, TTLT, B2...)', key: 'loai_kieng',   type: 'select',   required: true,  options: ['HTLT', 'TTLT', 'TTLT Đôi dọc', 'B2', 'Khác'] },
-      { label: 'Loại cần (3,8m ; 3m...)',        key: 'loai_can',     type: 'text',     required: false },
+      { label: 'Loại kiềng (HTLT, TTLT, B2...)', key: 'loai_kieng',   type: 'select',   required: true,  allowOther: true,
+        options: ['HTLT', 'HTLTL', 'TTLT', 'TTLT Đôi dọc', 'TTLTN', 'TTLTL', 'B2', 'B4', 'B6'] },
+      { label: 'Loại cần (3,8m ; 3m...)',        key: 'loai_can',     type: 'select',   required: false, allowOther: true,
+        options: ['2m', '2,5m', '3m', '3,8m', 'Cổ cò'] },
       { label: 'Người khảo sát',                 key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Ngày khảo sát',                  key: 'ngay_ks',      type: 'date_auto' },
       { label: 'Ghi chú',                        key: 'ghi_chu',      type: 'textarea', required: false },
@@ -216,8 +227,10 @@ export const SCHEMAS = {
       { label: 'Phường',                                                                                           key: 'phuong',        type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',                                                                                    key: 'tdk',           type: 'tdk',      required: true },
       { label: 'Số lượng',                                                                                         key: 'so_luong',      type: 'number',   required: true },
-      { label: 'Loại sự cố (mục, gỉ sét, hư mặt bích,...)',                                                        key: 'loai_su_co',    type: 'textarea', required: true },
-      { label: 'Quy cách trụ (loại trụ: chiều cao VD: STK 9m; be tông 8,4m; trang trí;...)',                       key: 'quy_cach_tru',  type: 'text',     required: true },
+      { label: 'Loại sự cố (mục, gỉ sét, hư mặt bích,...)',                                                        key: 'loai_su_co',    type: 'multiselect', required: true,
+        options: ['Mục', 'Gỉ sét', 'Hư mặt bích', 'Móp méo/cong', 'Xe đụng', 'Lão hoá'] },
+      { label: 'Quy cách trụ (loại trụ: chiều cao VD: STK 9m; be tông 8,4m; trang trí;...)',                       key: 'quy_cach_tru',  type: 'select',   required: true,  allowOther: true,
+        options: ['STK 5m', 'STK 8m', 'STK 9m', 'Côn tròn 8m', 'Côn tròn 9m', 'Bát giác 7m', 'Trang trí 4m'] },
       { label: 'Quy cách móng',                                                                                    key: 'quy_cach_mong', type: 'text',     required: false, hint: 'Vd: M22 260×260' },
       { label: 'Năm lắp đặt',                                                                                      key: 'nam_ld',        type: 'number',   required: false },
       { label: 'Người khảo sát',                                                                                   key: 'nguoi_ks',      type: 'text',     required: true },
@@ -240,7 +253,8 @@ export const SCHEMAS = {
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
       { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
       { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true },
-      { label: 'Loại chóa',              key: 'loai_choa',    type: 'text',     required: true,  hint: 'Vd: Onyx, Trang trí Bông huệ' },
+      { label: 'Loại chóa',              key: 'loai_choa',    type: 'select',   required: true,  allowOther: true,
+        options: ['Onyx', 'A2', 'Cầu D400', 'GE', 'M3', 'Trang trí bông huệ', 'Đèn LED'] },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
@@ -259,8 +273,8 @@ export const SCHEMAS = {
       { label: 'Quận',                   key: 'quan',         type: 'quan',     required: true },
       { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
-      { label: 'Số trụ',                 key: 'so_tru',       type: 'text',     required: true,  hint: 'Vd: Trụ số 6 và Trụ số 13' },
-      { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true },
+      { label: 'Số trụ',                 key: 'so_tru',       type: 'text',     required: true,  hint: 'Vd: TS 6, 13' },
+      { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true,  countFrom: 'so_tru', hint: 'Tự đếm từ ô Số trụ — sửa được' },
       { label: 'Quy cách',               key: 'quy_cach',     type: 'text',     required: false, hint: 'Vd: 35×25' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
       { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
@@ -305,7 +319,7 @@ export const SCHEMAS = {
       { label: 'Số lượng',               key: 'so_luong',       type: 'number',   required: true },
       { label: 'Chủng loại cần đèn',     key: 'chung_loai_can', type: 'text',     required: false },
       { label: 'Quy cách kiềng cần đèn', key: 'quy_cach_kieng', type: 'text',     required: false },
-      { label: 'Kéo thêm cáp nguồn',     key: 'keo_them_cap',   type: 'select',   required: false, options: ['', 'Có', 'Không'] },
+      { label: 'Kéo thêm cáp nguồn',     key: 'keo_them_cap',   type: 'select',   required: false, options: ['Có', 'Không'] },
       { label: 'Khoảng cách giữa 2 trụ', key: 'kc_2_tru',       type: 'decimal',  required: false, hint: 'mét' },
       { label: 'Người khảo sát',         key: 'nguoi_ks',       type: 'text',     required: true },
       { label: 'Ngày khảo sát',          key: 'ngay_ks',        type: 'date_auto' },
@@ -348,10 +362,10 @@ export const SCHEMAS = {
       { label: 'Phường',                                                         key: 'phuong',        type: 'phuong',   required: true },
       { label: 'Tủ điều khiển',                                                  key: 'tdk',           type: 'tdk',      required: true },
       { label: 'Năm lắp đặt',                                                    key: 'nam_ld',        type: 'number',   required: false },
-      { label: 'Độ cao nâng',                                                    key: 'do_cao_nang',   type: 'text',     required: true,  hint: 'Vd: 200 (mm)' },
+      { label: 'Độ cao nâng',                                                    key: 'do_cao_nang',   type: 'number',   required: true,  hint: 'mm, vd: 200' },
       { label: 'Số lượng',                                                       key: 'so_luong',      type: 'number',   required: true },
       { label: 'Quy cách móng',                                                  key: 'quy_cach_mong', type: 'text',     required: false, hint: 'Vd: M16 × 400' },
-      { label: 'Chiều cao nắp cửa trụ (từ mặt bích đến nắp cửa trụ)',            key: 'chieu_cao_nap', type: 'text',     required: false, hint: 'Vd: 1250' },
+      { label: 'Chiều cao nắp cửa trụ (từ mặt bích đến nắp cửa trụ)',            key: 'chieu_cao_nap', type: 'number',   required: false, hint: 'mm, vd: 1250' },
       { label: 'Người khảo sát',                                                 key: 'nguoi_ks',      type: 'text',     required: true },
       { label: 'Ngày khảo sát',                                                  key: 'ngay_ks',       type: 'date_auto' },
       { label: 'Ghi chú',                                                        key: 'ghi_chu',       type: 'textarea', required: false },

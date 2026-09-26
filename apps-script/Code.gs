@@ -79,7 +79,7 @@ const HEADERS = {
     'Dãy phân cách','Số làn xe','Đầu tuyến','Cuối tuyến','Số đèn dự kiến',
     'Đường nhựa','Vỉa hè các loại','Vỉa hè bê tông','Vỉa hè đá',
     'Số đèn thu hồi','CD cáp thu hồi','ngày khảo sát','kinh độ','vĩ độ',
-    'Người khảo sát','Bản vẽ','Ghi chú'
+    'Người khảo sát','Bản vẽ','Ghi chú','Link Google Map'  // cột cuối thêm 2026-09-27 — sheet cũ chạy themCotLinkNgamHoa()
   ],
   thay_den: [
     'STT','Tuyến đường','Quận','Phường','Tủ điều khiển','Đầu tuyến','Cuối tuyến',
@@ -2662,6 +2662,53 @@ function suaSttTrung() {
     });
     Logger.log(`✅ Đã đổi STT ${plan.length} dòng. Chi tiết trong sheet Audit (action=renumber_stt).`);
     return { ok: true, count: plan.length, backup_id: backup.backup_id };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Chèn cột "Link Google Map" vào sheet Ngầm hóa đang chạy (ngay sau "Ghi chú", trước
+ * các cột bonus) và điền link cho các dòng cũ đã có kinh độ/vĩ độ. Admin chạy tay 1 lần.
+ * Idempotent: cột đã có thì không làm gì. Code đọc cột theo TÊN nên thứ tự các lần gửi
+ * trước/sau khi chèn đều không lệch.
+ */
+function themCotLinkNgamHoa() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getSpreadsheet().getSheetByName(SHEET_MAP.ngam_hoa);
+    if (!sheet) throw new Error('Không thấy sheet ' + SHEET_MAP.ngam_hoa);
+    const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    if (header.indexOf('Link Google Map') >= 0) {
+      Logger.log('Sheet đã có cột Link Google Map — không làm gì.');
+      return { ok: true, added: false };
+    }
+    const idxGhiChu = header.indexOf('Ghi chú');
+    if (idxGhiChu < 0) throw new Error('Không thấy cột "Ghi chú" để chèn sau');
+    sheet.insertColumnAfter(idxGhiChu + 1);
+    const col = idxGhiChu + 2;
+    sheet.getRange(1, col).setValue('Link Google Map');
+
+    let filled = 0;
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const iLat = header.indexOf('vĩ độ');
+      const iLng = header.indexOf('kinh độ');
+      const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+      const links = data.map(r => {
+        const lat = Number(String(r[iLat]).replace(',', '.'));
+        const lng = Number(String(r[iLng]).replace(',', '.'));
+        if (iLat < 0 || iLng < 0 || !lat || !lng || !isFinite(lat) || !isFinite(lng)) return [''];
+        filled++;
+        return ['https://www.google.com/maps?q=' + lat + ',' + lng];
+      });
+      sheet.getRange(2, col, links.length, 1).setValues(links);
+    }
+    appendAuditLog('add_column', 'system', SHEET_MAP.ngam_hoa, '*',
+      'Link Google Map tại cột ' + col + ', điền link cho ' + filled + ' dòng có tọa độ');
+    Logger.log('✅ Đã thêm cột Link Google Map (cột ' + col + '), điền ' + filled + ' dòng.');
+    return { ok: true, added: true, column: col, filled: filled };
   } finally {
     lock.releaseLock();
   }
