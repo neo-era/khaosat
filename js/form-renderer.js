@@ -10,7 +10,7 @@
 // - Role demo: disable nút Lưu + banner cảnh báo
 
 import { SCHEMAS } from './schemas.js';
-import { PHUONG_XA, TDK_LIST, TDK_BY_PHUONG } from './lookups.js';
+import { PHUONG_XA, TDK_LIST, TDK_BY_PHUONG } from './dia-ban.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
 import { apiSubmit, apiUpdate, apiList, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';

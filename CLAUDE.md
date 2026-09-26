@@ -610,6 +610,12 @@ export const TDK_LIST = [
 ];
 ```
 
+### Địa bàn Bình Dương (thêm 2026-09-27)
+- Bình Dương sáp nhập vào TP.HCM từ 01/07/2025. **36 phường/xã** (24 phường, 12 xã) theo **Nghị quyết 1685/NQ-UBTVQH15 ngày 16/6/2025** nằm trong `js/dia-ban.js` (`PHUONG_XA_BINH_DUONG`), **không** nằm trong `lookups.js` — để lần sinh lại `lookups.js` từ Excel không làm mất.
+- `dia-ban.js` ghép `PHUONG_XA` = TP.HCM cũ + Bình Dương và export lại `QUAN_LIST`, `TDK_LIST`, `TDK_BY_PHUONG`. **Mọi nơi cần danh mục phường/quận import từ `dia-ban.js`** (form-renderer, bbht, bangron).
+- `quan_cu` ghi dạng `TP Thuận An` / `Huyện Dầu Tiếng`. Nghị quyết không ghi huyện cũ — suy từ các phường/xã cũ được gộp; 11 đơn vị gộp từ 2 huyện được xếp theo huyện của phường gốc mang tên đơn vị mới (ghi chú `*` trong file). User duyệt 2026-09-27.
+- Chưa có danh mục TĐK Bình Dương → ô Tủ điều khiển gõ tự do. Bà Rịa–Vũng Tàu **chưa** thêm (user chỉ yêu cầu Bình Dương).
+
 ### Logic dropdown trong form
 - Field `Quận` (type `quan`): **không hiển thị** (đổi 2026-09-27). Là input ẩn, tự điền `quan_cu` của phường đã chọn; phường gõ tay ngoài danh sách → Quận để trống. Không bắt buộc ở client (label `Quận` vẫn là cột sheet, giữ nguyên để báo cáo/lọc theo quận cũ không vỡ).
 - Field `Phường` (type `phuong`): ô gõ chữ có gợi ý (`renderPhuong()` trong form-renderer.js), **tìm không dấu** ("tan dinh" → Tân Định), mỗi gợi ý kèm quận cũ. Tên trùng giữa 2 địa bàn (vd `Đông Thạnh` — Hóc Môn / Cần Giuộc) hiển thị kèm quận để phân biệt; giá trị lưu vào cột `Phường` luôn là tên trần. Cho phép gõ tự do nếu không có trong danh sách. Chọn phường → lọc datalist TĐK theo `TDK_BY_PHUONG`.

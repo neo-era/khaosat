@@ -1,6 +1,6 @@
 // js/bangron.js — Báo cáo tháo gỡ băng rôn: lọc dữ liệu → 2 kiểu trình bày → In / PDF / Excel
 import { apiList } from './api.js';
-import { QUAN_LIST, PHUONG_XA } from './lookups.js';
+import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { SCHEMAS } from './schemas.js';
 import { escapeHtml, showToast } from './utils.js';
 import { inlineImages, restoreImages } from './photos.js';
