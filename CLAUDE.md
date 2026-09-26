@@ -59,6 +59,9 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 
 **Thư viện CDN được phép dùng:**
 - Tailwind CSS: `https://cdn.tailwindcss.com`
+- ExcelJS `https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js` — **user duyệt 2026-09-27**, chỉ tải khi bấm xuất Excel (`js/excel-export.js`). Mọi file Excel XUẤT ra đi qua module này (tiêu đề + dòng thời gian, header màu, khung, sọc, cố định tiêu đề, bộ lọc, TỔNG CỘNG, in A4). SheetJS chỉ còn dùng để ĐỌC file ở "Nhập Excel" (report.html).
+  - Báo cáo tổng hợp (Báo cáo A–D, KPI, Băng rôn): dòng 1 tên báo cáo, dòng 2 "Thời gian … · Xuất ngày …" — **không** ghi tên đơn vị, **không** ô ký (user chọn).
+  - Xuất dữ liệu thô: **dòng 1 = tiêu đề cột nguyên văn** (không chèn tiêu đề phía trên) để "Nhập Excel" đọc lại được; tên tab = tên sheet Google Sheets.
 - (Không cần thư viện nào khác. Tất cả viết bằng Vanilla JS.)
 
 ---
@@ -1837,7 +1840,7 @@ Response có `address.road` (tuyến), `address.suburb` (khu), `address.neighbou
 
 **Action Apps Script mới**: `users`, `user_create`, `user_update`, `reset_password`, `update` (edit bản ghi), `docs_list`, `docs_create`, `docs_delete`, `schedule_list`, `schedule_create`, `schedule_update`, `schedule_delete`.
 
-**Thư viện CDN thêm**: SheetJS, jsPDF + autotable, Leaflet + markercluster + heat, jsQR, qrcode-generator.
+**Thư viện CDN thêm**: SheetJS (đọc Excel), ExcelJS (xuất Excel có định dạng), jsPDF + autotable, Leaflet + markercluster + heat, jsQR, qrcode-generator.
 
 **Permission cột mới trong `phan quyen`**: `edit`, `users_manage`, `schedule_write`, `notify_admin`, `map`.
 

@@ -3,6 +3,7 @@
 import { apiReport, apiUsers, apiList, apiExportRaw, apiUpdate, apiBulkImport } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
+import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 
 const state = {
   data: null  // { areaA, areaB, areaC }
@@ -105,6 +106,7 @@ async function loadReport() {
       groupBy
     });
     state.data = res;
+    state.period = { from, to };
     renderAreaA(res.areaA || []);
     renderAreaB(res.areaB || [], types);
     renderAreaC(res.areaC || [], types);
@@ -452,73 +454,65 @@ function csvEscape(v) {
   return s;
 }
 
-/** Export Excel — 3 sheet riêng cho 3 vùng. */
-function exportXlsx() {
+/** Export Excel — mỗi vùng A/B/C/D một sheet, có định dạng. */
+async function exportXlsx() {
   if (!state.data) return;
-  if (typeof XLSX === 'undefined') { showToast('SheetJS chưa load', 'error'); return; }
-  const dateStr = new Date().toISOString().slice(0, 10);
-  const allTypes = Object.keys(SCHEMAS);
-  const wb = XLSX.utils.book_new();
+  const btn = document.getElementById('btn-export-xlsx');
+  btn.disabled = true;
+  try {
+    const wb = await newWorkbook();
+    const types = state.data.areaA.map(r => r.type);   // đúng các loại đã lọc
+    const name = t => (SCHEMAS[t] ? SCHEMAS[t].name : t);
+    const sub = periodLine(state.period?.from, state.period?.to);
+    const sum = (rows, i) => rows.reduce((s, r) => s + (Number(r[i]) || 0), 0);
 
-  // Sheet A: Tổng quan
-  const headerA = ['Loại', 'Tổng bản', 'Có ảnh', 'Có GPS', 'TB ảnh/bản', 'Đã xoá'];
-  const rowsA = state.data.areaA.map(r => {
-    const sc = SCHEMAS[r.type];
-    return [sc ? sc.name : r.type, r.total, r.has_photo, r.has_gps, r.avg_photos_per_record, r.deleted];
-  });
-  const wsA = XLSX.utils.aoa_to_sheet([
-    ['Vùng A — Tổng quan theo loại'],
-    ['Xuất lúc: ' + new Date().toLocaleString('vi-VN')],
-    [],
-    headerA,
-    ...rowsA
-  ]);
-  wsA['!cols'] = [{wch:30},{wch:10},{wch:10},{wch:10},{wch:14},{wch:10}];
-  XLSX.utils.book_append_sheet(wb, wsA, 'A-Tong quan');
+    // A — Tổng quan
+    const rowsA = state.data.areaA.map(r => [name(r.type), r.total, r.has_photo, r.has_gps, r.avg_photos_per_record, r.deleted]);
+    const totA = ['TỔNG CỘNG', sum(rowsA, 1), sum(rowsA, 2), sum(rowsA, 3), '', sum(rowsA, 5)];
+    addReportSheet(wb, 'A-Tổng quan', {
+      title: 'BÁO CÁO TỔNG HỢP KHẢO SÁT THEO LOẠI', subtitle: sub,
+      headers: ['Loại khảo sát', 'Tổng bản', 'Có ảnh', 'Có GPS', 'TB ảnh/bản', 'Đã xoá'],
+      rows: rowsA, total: totA, landscape: false
+    });
 
-  // Sheet B: Timeseries
-  const headerB = ['Bucket', ...allTypes.map(t => SCHEMAS[t].name)];
-  const rowsB = state.data.areaB.map(r => [r.bucket, ...allTypes.map(t => r[t] || 0)]);
-  const wsB = XLSX.utils.aoa_to_sheet([
-    ['Vùng B — Phân bố theo thời gian'],
-    [],
-    headerB,
-    ...rowsB
-  ]);
-  wsB['!cols'] = [{wch:14}, ...allTypes.map(() => ({wch:14}))];
-  XLSX.utils.book_append_sheet(wb, wsB, 'B-Timeseries');
+    // B — Theo thời gian
+    const rowsB = state.data.areaB.map(r => {
+      const vals = types.map(t => r[t] || 0);
+      return [r.bucket, ...vals, vals.reduce((a, b) => a + b, 0)];
+    });
+    addReportSheet(wb, 'B-Theo thời gian', {
+      title: 'PHÂN BỐ SỐ BẢN KHẢO SÁT THEO THỜI GIAN', subtitle: sub,
+      headers: ['Thời gian', ...types.map(name), 'Tổng'],
+      rows: rowsB, total: ['TỔNG CỘNG', ...types.map((_, i) => sum(rowsB, i + 1)), sum(rowsB, types.length + 1)]
+    });
 
-  // Sheet C: Pivot
-  const headerC = ['Username', 'Họ tên', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'];
-  const rowsC = state.data.areaC.map(r => [
-    r.username, r.full_name,
-    ...allTypes.map(t => r[t] || 0),
-    r.total
-  ]);
-  const wsC = XLSX.utils.aoa_to_sheet([
-    ['Vùng C — Pivot Người khảo sát × Loại'],
-    [],
-    headerC,
-    ...rowsC
-  ]);
-  wsC['!cols'] = [{wch:12},{wch:24}, ...allTypes.map(() => ({wch:14})), {wch:10}];
-  XLSX.utils.book_append_sheet(wb, wsC, 'C-Pivot Người khảo sát');
+    // C — Người khảo sát × Loại
+    const rowsC = state.data.areaC.map(r => [r.full_name || r.username, r.username, ...types.map(t => r[t] || 0), r.total]);
+    addReportSheet(wb, 'C-Người khảo sát', {
+      title: 'SỐ BẢN KHẢO SÁT THEO NGƯỜI KHẢO SÁT', subtitle: sub,
+      headers: ['Người khảo sát', 'Tài khoản', ...types.map(name), 'Tổng'],
+      rows: rowsC, total: ['TỔNG CỘNG', '', ...types.map((_, i) => sum(rowsC, i + 2)), sum(rowsC, types.length + 2)]
+    });
 
-  // Sheet D: Heatmap Phường
-  if (state.data.areaD && state.data.areaD.length > 0) {
-    const headerD = ['Phường', ...allTypes.map(t => SCHEMAS[t].name), 'Tổng'];
-    const rowsD = state.data.areaD.map(r => [r.phuong, ...allTypes.map(t => r[t] || 0), r.total]);
-    const wsD = XLSX.utils.aoa_to_sheet([
-      ['Vùng D — Heatmap Phường × Loại'],
-      [],
-      headerD,
-      ...rowsD
-    ]);
-    wsD['!cols'] = [{wch:28}, ...allTypes.map(() => ({wch:14})), {wch:10}];
-    XLSX.utils.book_append_sheet(wb, wsD, 'D-Heatmap');
+    // D — Phường × Loại, tô đậm nhạt theo số lượng (giống heatmap trên web)
+    if (state.data.areaD && state.data.areaD.length) {
+      const rowsD = state.data.areaD.map(r => [r.phuong, ...types.map(t => r[t] || 0), r.total]);
+      const max = Math.max(1, ...rowsD.flatMap(r => r.slice(1, -1)));
+      const heat = ['FFFEF2F2', 'FFFECACA', 'FFFCA5A5', 'FFF87171', 'FFEF4444'];
+      addReportSheet(wb, 'D-Phường', {
+        title: 'SỐ BẢN KHẢO SÁT THEO PHƯỜNG/XÃ', subtitle: sub,
+        headers: ['Phường/Xã', ...types.map(name), 'Tổng'],
+        rows: rowsD, total: ['TỔNG CỘNG', ...types.map((_, i) => sum(rowsD, i + 1)), sum(rowsD, types.length + 1)],
+        cellFill: (v, r, c) => (c > 0 && c <= types.length && v > 0) ? heat[Math.min(4, Math.floor((v / max) * 5))] : null
+      });
+    }
+
+    await downloadWorkbook(wb, 'bao-cao-tong-hop-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+  } catch (e) {
+    showToast('Lỗi xuất Excel: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
-
-  XLSX.writeFile(wb, 'bao-cao-' + dateStr + '.xlsx');
 }
 
 /** Export PDF — A4 landscape, 3 vùng trên 3 trang. */
@@ -677,28 +671,27 @@ async function fetchExportRaw() {
 }
 
 async function exportRawXlsx() {
-  const XLSX = window.XLSX;
-  if (!XLSX) { alert('Thư viện SheetJS chưa tải'); return; }
   let results;
   try { results = await fetchExportRaw(); } catch { return; }
-
-  const wb = XLSX.utils.book_new();
-  let sheetCount = 0;
-  for (const { sheetName, headers, rows } of results) {
-    if (!rows.length) continue;
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    // Freeze row 1
-    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-    // Tên tab tối đa 31 ký tự (giới hạn Excel)
-    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
-    sheetCount++;
+  const btn = document.getElementById('btn-raw-xlsx');
+  btn.disabled = true;
+  try {
+    const wb = await newWorkbook();
+    let sheetCount = 0;
+    for (const { sheetName, headers, rows } of results) {
+      if (!rows.length) continue;
+      // Tên tab = tên sheet Google Sheets nguyên văn; dòng 1 = tiêu đề cột (để Nhập Excel đọc lại)
+      addRawSheet(wb, sheetName, headers, rows);
+      sheetCount++;
+    }
+    if (sheetCount === 0) { alert('Không có dữ liệu để xuất theo bộ lọc đã chọn'); return; }
+    const { from, to } = getRawParams();
+    await downloadWorkbook(wb, 'khaosat-' + (from || 'all') + '_' + (to || 'all') + '.xlsx');
+  } catch (e) {
+    showToast('Lỗi xuất Excel: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
-
-  if (sheetCount === 0) { alert('Không có dữ liệu để xuất theo bộ lọc đã chọn'); return; }
-
-  const { from, to } = getRawParams();
-  const filename = 'khaosat-' + (from || 'all') + '_' + (to || 'all') + '.xlsx';
-  XLSX.writeFile(wb, filename);
 }
 
 async function exportRawCsv() {
