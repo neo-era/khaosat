@@ -36,7 +36,7 @@ Sau đó mở "KS Đèn" như app native.
 2. Cho phép lấy GPS khi trình duyệt hỏi.
 3. Điền các trường (dấu `*` đỏ là bắt buộc).
 4. Chụp ảnh hoặc chọn từ thư viện (nhiều ảnh được).
-5. Bấm **Lưu**. App báo "Đã lưu STT #N".
+5. Bấm **Lưu**. App báo "Đã lưu STT #TD-260926-A3F9" (mã: loại KS – ngày – 4 ký tự).
 
 ### 4. Khi mất sóng
 

@@ -104,7 +104,7 @@ function renderTable() {
     const schema = SCHEMAS[r._type];
     const photos = String(r['Ảnh (URLs)'] || '').split('|').filter(u => u);
     tr.innerHTML = `
-      <td class="px-2 py-2 text-center font-mono">${r['STT']}</td>
+      <td class="px-2 py-2 text-center font-mono text-xs whitespace-nowrap">${escapeHtml(String(r['STT']))}</td>
       <td class="px-2 py-2 text-sm" title="${escapeHtml(schema ? schema.name : r._type)}">${schema ? schema.icon : '📋'}</td>
       <td class="px-2 py-2 text-sm truncate max-w-[180px]" title="${escapeHtml(r['Tuyến đường'] || r['Vị trí'] || '')}">${escapeHtml(r['Tuyến đường'] || r['Vị trí'] || '—')}</td>
       <td class="px-2 py-2 text-xs">${escapeHtml(r['Username'] || '')}</td>

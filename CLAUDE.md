@@ -203,7 +203,9 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
 > Đây là schema bạn phải dùng để dựng `js/schemas.js`. KHÔNG được tự nghĩ ra trường mới hoặc bỏ trường. Nếu thấy có trường nào nghi vấn (vd `STT` — có nên cho người khảo sát nhập không?), HỎI user trước.
 
 ### Quy ước chung
-- `STT` (số thứ tự): **Người khảo sát không nhập**. Apps Script tự đánh = số dòng hiện tại (max row + 1 trừ header). Không gửi từ frontend.
+- `STT`: **Người khảo sát không nhập**. Apps Script tự cấp **mã duy nhất** dạng `<MÃ LOẠI>-<yyMMdd>-<4 ký tự>`, vd `TD-260926-A3F9` (hàm `newSttId()` trong Code.gs, chạy trong `LockService`, kiểm tra không trùng trong sheet). Không gửi từ frontend. *(Đổi 2026-09-26: trước đó STT là số tăng dần và bị trùng ~70 dòng do nhập Excel giữ STT cũ. Bản ghi cũ **giữ số cũ**; chỉ dòng trùng được cấp mã mới qua `kiemTraSttTrung()` → `suaSttTrung()`.)* Code phải coi STT là **chuỗi**: so sánh bằng `String()`, không `Number()`/sort số, luôn đi kèm `type`.
+  - Mã loại (`STT_PREFIX` trong Code.gs): `tang_cuong_den` TCD · `ngam_hoa` NH · `thay_den` TD · `hkn` HKN · `tc_noi` TCN · `cap_luon_can` CLC · `tc_ngam` TCG · `thay_can` TCA · `thay_tru` TT · `choa_den` CD · `nap_tru` NT · `vo_tu` VT · `tc_den_kc_xa` TDX · `decal_so_tru` DST · `nang_mong` NM · `thao_go_bang_ron` BR.
+  - `findRowByStt` báo lỗi nếu gặp STT trùng (không sửa/xoá dòng đầu tiên cho qua).
 - `ngày khảo sát` / `Ngày khảo sát`: **Người khảo sát không nhập tay**. Apps Script tự ghi `new Date()` khi nhận request, theo timezone `Asia/Ho_Chi_Minh`, format `yyyy-MM-dd HH:mm:ss`.
 - `kinh độ`, `vĩ độ`: lấy tự động bằng `navigator.geolocation`, Người khảo sát có nút "Lấy lại GPS" nếu cần.
 - `link` / `Link Google Map`: tự sinh `https://www.google.com/maps?q=<lat>,<lng>` nếu có GPS, để trống nếu không.
@@ -618,7 +620,7 @@ export const TDK_LIST = [
 - Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
-- Server-side gán: `STT` (= STT lớn nhất đang có trong sheet + 1, cấp trong `LockService` — xem `nextStt()`; bulk import cũng cấp STT mới, không giữ STT của file Excel vì từng gây trùng, sửa 2026-09-26 bằng `kiemTraSttTrung()` → `suaSttTrung()`), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`), `Người khảo sát` (= `full_name` từ user của token), `Username` (= username từ token).
+- Server-side gán: `STT` (= mã duy nhất, xem quy ước STT ở mục 5), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`), `Người khảo sát` (= `full_name` từ user của token), `Username` (= username từ token).
 - Append row.
 - Trả về JSON `{ ok: true, stt: <số>, sheet: <tên> }` với `ContentService.createTextOutput().setMimeType(JSON)`.
 - Bắt lỗi → `{ ok: false, error: <msg> }` và `Logger.log`.
@@ -739,7 +741,7 @@ Trong file SETUP.md, hướng dẫn admin set conditional formatting cho 15 shee
    - Set header row 1 = `[...HEADERS[type], 'Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By']`.
    - Freeze row 1 (`sheet.setFrozenRows(1)`).
    - Set conditional format: nếu cột `Deleted At` của row hiện tại không rỗng → tô xám nhạt (#f0f0f0) + strikethrough toàn row.
-   - Tự động set column width vừa phải cho cột STT (40px), Ngày khảo sát (140px), Người khảo sát (120px), Ảnh URLs (200px).
+   - Tự động set column width vừa phải cho cột STT (120px, định dạng chữ `@`), Ngày khảo sát (140px), Người khảo sát (120px), Ảnh URLs (200px).
 3. Tạo sheet `taikhoan` nếu chưa có:
    - Header: `[username, password_hash, full_name, role, active, created_at]`.
    - Freeze row 1.
