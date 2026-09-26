@@ -1,6 +1,6 @@
 // js/bbht.js — Biên bản hiện trường: load dữ liệu + render + xuất Word/PDF
 import { apiList } from './api.js';
-import { QUAN_LIST, PHUONG_XA } from './lookups.js';
+import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { inlineImages, restoreImages } from './photos.js';
 import { escapeHtml } from './utils.js';
 
