@@ -117,7 +117,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 | # | `key` (dùng trong code) | Sheet name (trong Google Sheets) | Số cột | Hàng header trong file gốc |
 |---|---|---|---|---|
 | 1 | `tang_cuong_den` | `Tang cuong den` | 22 | 1 |
-| 2 | `ngam_hoa` | `Ngam Hoa` | 23 | 1 |
+| 2 | `ngam_hoa` | `Ngam Hoa` | 24 (thêm `Link Google Map` 2026-09-27) | 1 |
 | 3 | `thay_den` | `Thay den` | 16 | 1 |
 | 4 | `hkn` | `4, HKN` | 12 | 1 |
 | 5 | `tc_noi` | `5. TCNoi` | 12 | 2 |
@@ -218,12 +218,11 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 
 | Mức | Trường lưu | Loại hình khảo sát |
 |---|---|---|
-| **GPS đầy đủ** (lat+lng+link) | `kinh độ`, `vĩ độ`, `Link Google Map` | `tang_cuong_den`, `thao_go_bang_ron` |
-| **GPS tọa độ** (lat+lng, không có cột link) | `kinh độ`, `vĩ độ` | `ngam_hoa` ⚠️ |
+| **GPS đầy đủ** (lat+lng+link) | `kinh độ`, `vĩ độ`, `Link Google Map` | `tang_cuong_den`, `ngam_hoa`, `thao_go_bang_ron` |
 | **GPS link-only** (chỉ lưu link) | `link` (link_gmap) | `thay_den`, `tc_noi`, `cap_luon_can`, `tc_ngam`, `thay_can`, `thay_tru`, `choa_den`, `nap_tru`, `vo_tu`, `tc_den_kc_xa`, `decal_so_tru`, `nang_mong` |
 | **Không có GPS** | — | `hkn` |
 
-⚠️ **`ngam_hoa` thiếu cột `link`**: Sheet này không có cột `Link Google Map` (đúng theo file Excel gốc — 23 cột). Hệ quả: link Google Map sinh ra trong form nhưng **không lưu vào Google Sheets**. Nếu muốn thêm cột `link`, phải thêm vào sheet Excel gốc + cập nhật HEADERS trong Code.gs + schema.
+✅ **`ngam_hoa` đã có cột `Link Google Map`** (thêm 2026-09-27, cột cuối phần gốc, ngay sau `Ghi chú`). Sheet đang chạy phải chạy **`themCotLinkNgamHoa()`** 1 lần trong Apps Script: chèn cột + điền link cho dòng cũ từ `kinh độ`/`vĩ độ`.
 
 > **`NO_GPS_TYPES`** trong Code.gs **chỉ có `['hkn']`** (không phải `['hkn', 'vo_tu']` — `vo_tu` có `link_gmap`). Hằng số này dùng để loại `hkn` ra khỏi mẫu số khi tính `pct_gps`.
 - `Người khảo sát`: **Người khảo sát không nhập tay**. Sau khi đăng nhập, frontend đọc `full_name` của user từ session và tự điền vào trường này (hiển thị readonly). KHÔNG cho phép sửa để tránh giả mạo. Server-side cũng overwrite trường này từ token để chắc chắn (defense in depth).
@@ -243,10 +242,19 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 - `phuong` — dropdown đặc biệt (Phường, lọc theo Quận đã chọn)
 - `tdk` — autocomplete (datalist) từ lookups
 - `link_gmap` — auto-generated từ gps, ẩn khỏi UI
+- `select` + `allowOther: true` — danh sách cố định + mục "Khác (nhập tay)"; giá trị ngoài danh sách lưu nguyên văn (bản ghi cũ gõ tự do vẫn hiển thị đúng ở ô Khác)
+- `multiselect` — ô tick nhiều lựa chọn + "Khác", lưu chuỗi `"A, B, C"` (dùng cho `Loại sự cố` của `thay_tru`)
+- `countFrom: '<key>'` (thuộc tính của ô `number`) — tự đếm các con số trong trường `<key>`, vẫn sửa tay được (dùng cho `Số lượng` của `nap_tru`, đếm từ `Số trụ`)
 - `image_url` — upload ảnh lên Cloudinary, lưu URL; dùng cho trường `Bản vẽ` (chụp bản vẽ thiết kế)
 - `skip` — không hiển thị, không gửi (dự phòng)
 
 ### Schema chi tiết — sao chép NGUYÊN VĂN tên trường vào `label` (để khớp header Google Sheets)
+
+> **Cập nhật 2026-09-27 (mục B/C/D)** — `js/schemas.js` là nguồn chính xác cho kiểu trường; bảng dưới giữ label/thứ tự cột. Đã đổi (label/header KHÔNG đổi):
+> - Ô số: `tc_ngam.Số lượng` (mét), `cap_luon_can.Số lượng` (mét), `nang_mong.Độ cao nâng` + `Chiều cao nắp cửa trụ` (mm). Bản ghi cũ gõ chữ ("39m", "30CM") khi sửa hiện "Giá trị cũ" và **được giữ nguyên** nếu không nhập lại.
+> - Danh sách + Khác: `thay_den.Công suất đèn hiện hữu`, `tc_noi.Loại cáp hiện hữu`, `tc_ngam.Loại cáp` + `Loại mương cáp`, `thay_can.Loại kiềng` (thêm HTLTL/TTLTN/TTLTL/B4/B6) + `Loại cần`, `thay_tru.Quy cách trụ`, `choa_den.Loại chóa`. Danh mục lấy từ giá trị hay gặp nhất trong dữ liệu thật; sửa trực tiếp trong `js/schemas.js`.
+> - `thay_tru.Loại sự cố` → `multiselect`. `nap_tru.Số lượng` tự đếm từ `Số trụ`.
+> - Bỏ lựa chọn `''` trùng với "-- chọn --" ở `tang_cuong_den.Trạng thái thiết kế`, `tc_den_kc_xa.Kéo thêm cáp nguồn`.
 
 **5.1 `tang_cuong_den` — "Tang cuong den"**
 
@@ -302,8 +310,9 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 | 21 | Người khảo sát | nguoi_ks | text | **Yes** |
 | 22 | Bản vẽ | ban_ve | image_url | No | Chụp ảnh bản vẽ thiết kế |
 | 23 | Ghi chú | ghi_chu | textarea | No |
+| 24 | Link Google Map | link_gmap | link_gmap | — | auto từ GPS (thêm 2026-09-27) |
 
-> ⚠️ **`ngam_hoa` không có cột `link_gmap`** — đúng theo file Excel gốc (23 cột, không có `Link Google Map`). Form vẫn lấy GPS và lưu `kinh độ`/`vĩ độ`, nhưng link Google Maps không được ghi vào sheet. Nếu muốn thêm về sau phải thêm cột vào sheet + cập nhật `HEADERS` trong Code.gs.
+> **`ngam_hoa` có cột `Link Google Map`** từ 2026-09-27 (xem mục GPS ở trên — sheet cũ chạy `themCotLinkNgamHoa()`).
 
 **5.3 `thay_den` — "Thay den"**
 
@@ -761,7 +770,7 @@ const HEADERS = {
                    'Độ rộng đường','Dãy phân cách','Số làn xe','Đầu tuyến','Cuối tuyến',
                    'Số đèn dự kiến','ngày khảo sát','kinh độ','vĩ độ','Người khảo sát',
                    'Bản vẽ','Ghi chú','Vị trí','Tên hẻm','Trạng thái thiết kế','Link Google Map'],
-  ngam_hoa: [...],  // 23 cột
+  ngam_hoa: [...],  // 24 cột (Link Google Map cuối)
   // ... đủ 15 loại, label nguyên văn theo mục 5
 };
 ```
@@ -1062,7 +1071,7 @@ Tính cho từng người khảo sát trong tháng `M`:
 **2. Chất lượng dữ liệu** (`quality`, trọng số 30%)
 - `pct_anh` = % bản có ≥1 URL trong cột `Ảnh (URLs)`.
 - `pct_gps` = % bản **có GPS** tính theo loại:
-  - **tang_cuong_den, ngam_hoa** (lưu tọa độ): bản có cả `kinh độ` và `vĩ độ` khác rỗng.
+  - **tang_cuong_den, ngam_hoa, thao_go_bang_ron** (lưu tọa độ): bản có cả `kinh độ` và `vĩ độ` khác rỗng.
   - **12 loại còn lại có `link`** (thay_den, tc_noi, cap_luon_can, tc_ngam, thay_can, thay_tru, choa_den, nap_tru, vo_tu, tc_den_kc_xa, decal_so_tru, nang_mong): bản có cột `link` không rỗng.
   - **`hkn`**: **loại ra khỏi mẫu số** (không có GPS, không có link) → `NO_GPS_TYPES = ['hkn']`.
 - Công thức: `pct_gps = số bản có GPS / tổng bản (trừ bản từ hkn)`

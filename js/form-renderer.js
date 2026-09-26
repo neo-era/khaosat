@@ -170,7 +170,7 @@ async function loadEditRow() {
       }
       const el = state.container.querySelector(`[data-key="${f.key}"]`);
       if (!el) continue;
-      el.value = val;
+      setFieldValue(el, val);
     }
     // Phường cascade
     const quanEl = state.container.querySelector('[data-key="quan"]');
@@ -255,6 +255,7 @@ function renderShell() {
   }
 
   state.container.appendChild(form);
+  setupAutoCount();
 
   // Image block
   state.container.appendChild(renderImageBlock());
@@ -375,6 +376,10 @@ function renderField(field) {
       wrap.appendChild(small);
     }
     return wrap;
+  } else if (t === 'select' && field.allowOther) {
+    return renderSelectOther(field, wrap, baseInputClass);
+  } else if (t === 'multiselect') {
+    return renderMultiSelect(field, wrap, baseInputClass);
   } else if (t === 'select') {
     input = document.createElement('select');
     input.className = baseInputClass;
@@ -525,6 +530,154 @@ function renderField(field) {
   return wrap;
 }
 
+// Ô chọn "Khác" và ô chọn nhiều ghi kết quả vào 1 input ẩn mang data-key, nên thu thập,
+// kiểm tra bắt buộc, lưu nháp đọc `el.value` như mọi trường khác. Khi nạp giá trị từ
+// nháp/bản ghi cũ, gọi setFieldValue() để phát sự kiện 'sync' cho giao diện cập nhật theo.
+
+const OTHER_VALUE = '__other';
+
+function makeHiddenValue(field) {
+  const hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.name = field.key;
+  hidden.dataset.key = field.key;
+  hidden.dataset.label = field.label;
+  return hidden;
+}
+
+function appendHint(wrap, field) {
+  if (!field.hint) return;
+  const small = document.createElement('div');
+  small.className = 'text-xs text-gray-500 mt-1';
+  small.textContent = field.hint;
+  wrap.appendChild(small);
+}
+
+function renderSelectOther(field, wrap, cls) {
+  const options = field.options || [];
+  const hidden = makeHiddenValue(field);
+  const sel = document.createElement('select');
+  sel.id = 'f-' + field.key;
+  sel.className = cls;
+  sel.innerHTML = '<option value="">-- chọn --</option>' +
+    options.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('') +
+    `<option value="${OTHER_VALUE}">Khác (nhập tay)...</option>`;
+  const other = document.createElement('input');
+  other.type = 'text';
+  other.className = cls + ' mt-2 hidden';
+  other.placeholder = 'Ghi rõ ' + field.label.replace(/\s*\(.*$/, '').toLowerCase() + '...';
+
+  const sync = () => { hidden.value = sel.value === OTHER_VALUE ? other.value.trim() : sel.value; };
+  sel.addEventListener('change', () => {
+    const isOther = sel.value === OTHER_VALUE;
+    other.classList.toggle('hidden', !isOther);
+    if (isOther) other.focus();
+    sync();
+  });
+  other.addEventListener('input', sync);
+  hidden.addEventListener('sync', () => {
+    const v = String(hidden.value || '').trim();
+    const isOther = v !== '' && !options.includes(v);
+    sel.value = v === '' ? '' : (isOther ? OTHER_VALUE : v);
+    other.value = isOther ? v : '';
+    other.classList.toggle('hidden', !isOther);
+  });
+
+  wrap.append(sel, other, hidden);
+  appendHint(wrap, field);
+  return wrap;
+}
+
+function renderMultiSelect(field, wrap, cls) {
+  const options = field.options || [];
+  const hidden = makeHiddenValue(field);
+  const grid = document.createElement('div');
+  grid.className = 'grid grid-cols-2 gap-2';
+  const boxes = [];
+  const addBox = (text) => {
+    const lab = document.createElement('label');
+    lab.className = 'flex items-center gap-2 px-3 border border-gray-300 rounded-lg bg-white cursor-pointer';
+    lab.style.minHeight = '44px';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'w-5 h-5';
+    cb.dataset.opt = text;
+    lab.append(cb, document.createTextNode(text));
+    grid.appendChild(lab);
+    boxes.push(cb);
+    return cb;
+  };
+  options.forEach(addBox);
+  const otherBox = addBox('Khác');
+  const other = document.createElement('input');
+  other.type = 'text';
+  other.className = cls + ' mt-2 hidden';
+  other.placeholder = 'Ghi rõ...';
+
+  const sync = () => {
+    const parts = boxes.filter(b => b !== otherBox && b.checked).map(b => b.dataset.opt);
+    if (otherBox.checked && other.value.trim()) parts.push(other.value.trim());
+    hidden.value = parts.join(', ');
+  };
+  grid.addEventListener('change', () => {
+    other.classList.toggle('hidden', !otherBox.checked);
+    sync();
+  });
+  other.addEventListener('input', sync);
+  // Dữ liệu cũ gõ tự do ("Mục gỉ sét hư mặt bích") không tách được → dồn vào ô Khác, giữ nguyên văn
+  hidden.addEventListener('sync', () => {
+    const tokens = String(hidden.value || '').split(/\s*,\s*/).filter(Boolean);
+    const rest = [];
+    boxes.forEach(b => { b.checked = false; });
+    tokens.forEach(tk => {
+      const b = boxes.find(x => x !== otherBox && x.dataset.opt === tk);
+      if (b) b.checked = true; else rest.push(tk);
+    });
+    otherBox.checked = rest.length > 0;
+    other.value = rest.join(', ');
+    other.classList.toggle('hidden', !otherBox.checked);
+  });
+
+  wrap.append(grid, other, hidden);
+  appendHint(wrap, field);
+  return wrap;
+}
+
+function setFieldValue(el, val) {
+  if (el.type === 'number') {
+    // Bản ghi cũ từng nhập chữ ("39m", "68,5 mét", "30CM") — ô số không nhận chữ.
+    // Số rõ ràng thì điền; còn lại hiện làm placeholder và giữ nguyên nếu không nhập lại.
+    const s = String(val).trim().replace(',', '.');
+    if (s !== '' && isFinite(Number(s))) {
+      el.value = Number(s);
+    } else {
+      el.value = '';
+      el.dataset.orig = String(val);
+      el.placeholder = 'Giá trị cũ: ' + val + ' — nhập lại số';
+    }
+    return;
+  }
+  el.value = val;
+  if (el.type === 'hidden') el.dispatchEvent(new Event('sync'));
+}
+
+/** Ô số có `countFrom`: tự đếm các con số trong trường nguồn ("TS 3, 4, 10" → 3) tới khi người dùng tự sửa. */
+function setupAutoCount() {
+  for (const f of state.schema.fields) {
+    if (!f.countFrom) continue;
+    const target = state.container.querySelector(`[data-key="${f.key}"]`);
+    const src = state.container.querySelector(`[data-key="${f.countFrom}"]`);
+    if (!target || !src) continue;
+    target.addEventListener('input', () => { target.dataset.manual = '1'; });
+    src.addEventListener('input', () => {
+      if (target.dataset.manual === '1' && target.value !== '') return;
+      const n = (src.value.match(/\d+/g) || []).length;
+      target.value = n > 0 ? n : '';
+      target.dataset.manual = '';
+    });
+  }
+}
+
 function renderGpsBlock() {
   const div = document.createElement('div');
   div.id = 'gps-block';
@@ -604,7 +757,8 @@ function goHome() {
   // Confirm nếu có nội dung
   const form = document.getElementById('survey-form');
   if (form) {
-    const hasAny = Array.from(form.elements).some(el => el.value && !el.readOnly && el.type !== 'hidden');
+    const hasAny = Array.from(form.elements).some(el =>
+      el.type === 'checkbox' ? el.checked : (el.value && !el.readOnly && el.type !== 'hidden'));
     if (hasAny && !confirm('Bỏ form chưa lưu?')) return;
   }
   stopAutosave();
@@ -970,7 +1124,7 @@ async function maybeRestoreDraft() {
     }
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
     if (!el) continue;
-    el.value = val;
+    setFieldValue(el, val);
   }
   // Phường dropdown phụ thuộc Quận → trigger lại
   const quanEl = state.container.querySelector('[data-key="quan"]');
@@ -1041,7 +1195,7 @@ function collectFormData() {
       continue;
     }
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
-    data[f.label] = el ? el.value : '';
+    data[f.label] = el ? (el.value === '' && el.dataset.orig ? el.dataset.orig : el.value) : '';
   }
   return data;
 }
@@ -1063,7 +1217,7 @@ function validateForm() {
 
     if (!f.required) continue;
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
-    if (!el || !String(el.value || '').trim()) {
+    if (!el || !String(el.value || el.dataset.orig || '').trim()) {
       errors.push({ field: f, el });
     }
   }
@@ -1089,8 +1243,12 @@ async function handleSubmit() {
   if (errors.length > 0) {
     const first = errors[0];
     if (first.el) {
-      first.el.focus();
-      first.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Ô chọn "Khác"/chọn nhiều: data-key nằm trên input ẩn → trỏ tới ô nhìn thấy được trong cùng field
+      const target = first.el.type === 'hidden'
+        ? (first.el.closest('.field-wrap')?.querySelector('select, input:not([type=hidden])') || first.el)
+        : first.el;
+      target.focus();
+      (target.closest('.field-wrap') || target).scrollIntoView({ behavior: 'smooth', block: 'center' });
       showToast('Thiếu trường bắt buộc: ' + first.field.label, 'error');
     } else {
       showToast(first.message, 'warning');
