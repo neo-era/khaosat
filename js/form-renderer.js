@@ -196,6 +196,13 @@ async function loadEditRow() {
       id: uuid(), file: null, status: 'done', url, thumbnail: url, error: null
     }));
     renderPhotoGrid();
+
+    if (state.gps.status !== 'ok') {
+      const hasOldLoc = state.schema.fields.some(f =>
+        ['link_gmap', 'gps_lat', 'gps_lng'].includes(f.type) && row[f.label]);
+      state.gps = { status: hasOldLoc ? 'kept' : 'idle' };
+    }
+    updateGpsUI();
   } catch (e) {
     showToast('Lỗi tải bản ghi: ' + e.message, 'error', 4000);
   }
@@ -229,8 +236,9 @@ function renderShell() {
   `;
   state.container.appendChild(heading);
 
-  // GPS block (chỉ show nếu schema có gps_lat/gps_lng)
-  const hasGps = s.fields.some(f => f.type === 'gps_lat' || f.type === 'gps_lng');
+  // GPS block: cả form chỉ lưu cột `link` cũng cần — nếu không, Người khảo sát
+  // không biết máy có bắt được GPS hay không và bản ghi mất link lúc nào không hay.
+  const hasGps = s.fields.some(f => ['gps_lat', 'gps_lng', 'link_gmap'].includes(f.type));
   if (hasGps) {
     state.container.appendChild(renderGpsBlock());
   }
@@ -733,7 +741,13 @@ async function applyReverseGeocode(force) {
 function updateGpsUI() {
   const info = document.getElementById('gps-info');
   if (!info) return;
-  if (state.gps.status === 'loading') {
+  if (state.gps.status === 'idle') {
+    info.textContent = 'Chưa có GPS — bấm "🔄 Lấy lại"';
+    info.className = 'text-sm font-mono text-gray-600';
+  } else if (state.gps.status === 'kept') {
+    info.textContent = 'Giữ vị trí đã lưu — bấm "🔄 Lấy lại" nếu cần cập nhật';
+    info.className = 'text-sm font-mono text-gray-700';
+  } else if (state.gps.status === 'loading') {
     info.textContent = 'Đang lấy GPS...';
     info.className = 'text-sm font-mono text-yellow-700';
   } else if (state.gps.status === 'ok') {
@@ -1005,18 +1019,20 @@ function collectFormData() {
     const t = f.type;
     // Auto fields: server gán, không cần gửi
     if (t === 'stt_auto' || t === 'date_auto') continue;
+    // Sửa bản ghi mà không có GPS mới → giữ giá trị cũ; gửi rỗng thì server ghi đè mất vị trí.
+    const kept = state.editMode && state.editOrigData ? (state.editOrigData[f.label] ?? '') : '';
     if (t === 'link_gmap') {
       data[f.label] = (state.gps.status === 'ok')
         ? `https://www.google.com/maps?q=${state.gps.lat},${state.gps.lng}`
-        : '';
+        : kept;
       continue;
     }
     if (t === 'gps_lat') {
-      data[f.label] = state.gps.status === 'ok' ? state.gps.lat : '';
+      data[f.label] = state.gps.status === 'ok' ? state.gps.lat : kept;
       continue;
     }
     if (t === 'gps_lng') {
-      data[f.label] = state.gps.status === 'ok' ? state.gps.lng : '';
+      data[f.label] = state.gps.status === 'ok' ? state.gps.lng : kept;
       continue;
     }
     if (t === 'image_url') {
