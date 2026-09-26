@@ -4,6 +4,7 @@ import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { SCHEMAS } from './schemas.js';
 import { escapeHtml, showToast } from './utils.js';
 import { inlineImages, restoreImages } from './photos.js';
+import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 
 const TYPE = 'thao_go_bang_ron';
 const SCHEMA = SCHEMAS[TYPE];
@@ -498,35 +499,53 @@ async function exportPdf() {
 }
 
 // =====================================================================
-// XUẤT EXCEL (SheetJS)
+// XUẤT EXCEL (ExcelJS — có định dạng, xem js/excel-export.js)
 // =====================================================================
 
-function exportXlsx() {
-  const XLSX = window.XLSX;
-  if (!XLSX) { showToast('Thư viện SheetJS chưa tải xong', 'error'); return; }
+async function exportXlsx() {
   if (!state.rows.length) { showToast('Không có dữ liệu để xuất', 'warning'); return; }
+  const btn = document.getElementById('btn-xlsx');
+  btn.disabled = true;
+  try {
+    const wb = await newWorkbook();
+    const photoCols = Array.from({ length: MAX_PHOTOS }, (_, i) => `Ảnh ${i + 1}`);
+    // TT = số thứ tự dòng trong báo cáo; "Mã bản ghi" = STT trong Google Sheets để tra ngược
+    // Báo cáo gửi cấp trên: bỏ tọa độ thô (đã có link Bản đồ) — muốn đủ cột thì dùng "Xuất dữ liệu thô"
+    const cols = COLS.filter(c => !['STT', 'kinh độ', 'vĩ độ'].includes(c));
+    const iNgay = cols.findIndex(c => /^ngày khảo sát$/i.test(c));
+    const headers = ['TT', 'Mã bản ghi', ...cols, 'Gửi lúc', ...photoCols];
+    const iLink = cols.indexOf('Link Google Map');
+    const rows = state.rows.map((r, i) => {
+      const base = cols.map(c => (r[c] === null || r[c] === undefined) ? '' : r[c]);
+      if (iLink >= 0 && base[iLink]) base[iLink] = { text: 'Bản đồ', hyperlink: String(base[iLink]) };
+      if (iNgay >= 0) base[iNgay] = vnDateTime(base[iNgay]);
+      const photos = Array.from({ length: MAX_PHOTOS }, (_, k) =>
+        r._photos[k] ? { text: 'Xem ảnh ' + (k + 1), hyperlink: r._photos[k] } : '');
+      return [i + 1, r['STT'] ?? '', ...base, vnDateTime(r['Submitted At']), ...photos];
+    });
+    const idxSl = headers.indexOf('Số lượng');
+    const total = headers.map(() => '');
+    total[0] = 'TỔNG CỘNG';
+    if (idxSl >= 0) total[idxSl] = state.rows.reduce((s, r) => s + num(r['Số lượng']), 0);
+    addReportSheet(wb, 'Tháo gỡ băng rôn', {
+      title: 'BÁO CÁO THÁO GỠ BĂNG RÔN, QUẢNG CÁO TRÁI PHÉP',
+      subtitle: periodLine(state.from, state.to),
+      headers, rows, total, freezeCols: 2
+    });
+    await downloadWorkbook(wb, `BaoCao_BangRon_${state.from}_${state.to}.xlsx`);
+  } catch (e) {
+    showToast('Lỗi xuất Excel: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
 
-  const photoCols = Array.from({ length: MAX_PHOTOS }, (_, i) => `Ảnh ${i + 1}`);
-  const headers = [...COLS, 'Username', 'Submitted At', ...photoCols];
-
-  const data = state.rows.map(r => {
-    const base = COLS.map(c => (r[c] === null || r[c] === undefined) ? '' : r[c]);
-    const photos = Array.from({ length: MAX_PHOTOS }, (_, i) => r._photos[i] || '');
-    return [...base, r['Username'] || '', r['Submitted At'] || '', ...photos];
-  });
-
-  // Dòng tổng cộng — cột 'Số lượng' theo đúng vị trí trong COLS
-  const idxSl = COLS.indexOf('Số lượng');
-  const tong = state.rows.reduce((s, r) => s + num(r['Số lượng']), 0);
-  const totalRow = headers.map(() => '');
-  totalRow[0] = 'TỔNG CỘNG';
-  if (idxSl >= 0) totalRow[idxSl] = tong;
-
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...data, [], totalRow]);
-  ws['!freeze'] = { xSplit: 0, ySplit: 1 };
-  ws['!cols'] = headers.map(h => ({ wch: h.startsWith('Ảnh') ? 45 : Math.max(12, Math.min(28, h.length + 4)) }));
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, SCHEMA.sheet.substring(0, 31));
-  XLSX.writeFile(wb, `BaoCao_BangRon_${state.from}_${state.to}.xlsx`);
+/** ISO "2026-09-26T03:00:00Z" → "26/09/2026 10:00" giờ Việt Nam; không đọc được thì giữ nguyên. */
+function vnDateTime(v) {
+  const d = v instanceof Date ? v : new Date(v);
+  if (!v || isNaN(d)) return v || '';
+  // Giờ VN = UTC+7, không đổi giờ theo mùa → cộng thẳng, khỏi phụ thuộc múi giờ máy
+  const t = new Date(d.getTime() + 7 * 3600e3);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(t.getUTCDate())}/${p(t.getUTCMonth() + 1)}/${t.getUTCFullYear()} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
 }

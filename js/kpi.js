@@ -3,6 +3,7 @@
 import { apiKpi, apiList } from './api.js';
 import { SCHEMAS } from './schemas.js';
 import { showToast, escapeHtml, formatVnDate } from './utils.js';
+import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 
 const state = {
   month: null,        // "YYYY-MM"
@@ -253,34 +254,35 @@ function csvEscape(v) {
   return s;
 }
 
-/** Export Excel .xlsx qua SheetJS. */
-function exportXlsx() {
+/** Export Excel có định dạng; cột Xếp loại tô màu A/B/C/D như trên web. */
+async function exportXlsx() {
   if (state.results.length === 0) return;
-  if (typeof XLSX === 'undefined') { showToast('SheetJS chưa load', 'error'); return; }
-  const header = ['Username', 'Họ tên', 'Vai trò', 'Số bản', 'Tần suất', 'Chất lượng', 'Đa dạng', 'Đầy đủ', 'Ổn định', 'Tổng', 'Xếp loại'];
-  const rows = state.results.map(r => [
-    r.username, r.full_name, r.role, r.count,
-    r.frequency, r.quality, r.diversity, r.completeness, r.stability,
-    r.total, r.grade
-  ]);
-  const ws = XLSX.utils.aoa_to_sheet([
-    ['Báo cáo KPI tháng ' + state.month],
-    ['Đơn vị: SAPULICO'],
-    ['Xuất lúc: ' + new Date().toLocaleString('vi-VN')],
-    [],
-    header,
-    ...rows
-  ]);
-  // Auto width
-  ws['!cols'] = [{wch:12},{wch:24},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10}];
-  ws['!merges'] = [
-    {s:{r:0,c:0},e:{r:0,c:10}},
-    {s:{r:1,c:0},e:{r:1,c:10}},
-    {s:{r:2,c:0},e:{r:2,c:10}}
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'KPI ' + state.month);
-  XLSX.writeFile(wb, 'kpi-' + state.month + '.xlsx');
+  const btn = document.getElementById('btn-export-xlsx');
+  btn.disabled = true;
+  try {
+    const wb = await newWorkbook();
+    const [y, m] = state.month.split('-');
+    const lastDay = new Date(+y, +m, 0).getDate();
+    const rows = state.results.map(r => [
+      r.full_name, r.username, r.role, r.count,
+      r.frequency, r.quality, r.diversity, r.completeness, r.stability,
+      r.total, r.grade
+    ]);
+    const GRADE = { A: 'FFBBF7D0', B: 'FFD9F99D', C: 'FFFEF08A', D: 'FFFECACA' };
+    addReportSheet(wb, 'KPI ' + state.month, {
+      title: `BÁO CÁO KPI NGƯỜI KHẢO SÁT THÁNG ${m}/${y}`,
+      subtitle: periodLine(`${y}-${m}-01`, `${y}-${m}-${String(lastDay).padStart(2, '0')}`),
+      headers: ['Người khảo sát', 'Tài khoản', 'Vai trò', 'Số bản', 'Tần suất', 'Chất lượng', 'Đa dạng', 'Đầy đủ', 'Ổn định', 'Tổng điểm', 'Xếp loại'],
+      rows,
+      total: ['TỔNG CỘNG', '', '', rows.reduce((s, r) => s + (r[3] || 0), 0), '', '', '', '', '', '', ''],
+      cellFill: (v, r, c) => (c === 10 ? GRADE[v] || null : null)
+    });
+    await downloadWorkbook(wb, 'kpi-' + state.month + '.xlsx');
+  } catch (e) {
+    showToast('Lỗi xuất Excel: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /** Export PDF qua jsPDF + autoTable. */
