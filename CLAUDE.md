@@ -618,7 +618,7 @@ export const TDK_LIST = [
 - Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
-- Server-side gán: `STT` (= maxRow của sheet trừ header rows + 1), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`), `Người khảo sát` (= `full_name` từ user của token), `Username` (= username từ token).
+- Server-side gán: `STT` (= STT lớn nhất đang có trong sheet + 1, cấp trong `LockService` — xem `nextStt()`; bulk import cũng cấp STT mới, không giữ STT của file Excel vì từng gây trùng, sửa 2026-09-26 bằng `kiemTraSttTrung()` → `suaSttTrung()`), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`), `Người khảo sát` (= `full_name` từ user của token), `Username` (= username từ token).
 - Append row.
 - Trả về JSON `{ ok: true, stt: <số>, sheet: <tên> }` với `ContentService.createTextOutput().setMimeType(JSON)`.
 - Bắt lỗi → `{ ok: false, error: <msg> }` và `Logger.log`.

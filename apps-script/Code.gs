@@ -1813,24 +1813,32 @@ function handleSubmit(body) {
   const ua = String(body.ua || 'unknown');
   const submittedAt = isoNow();
   const ngayKsString = nowVnString();
-  const stt = sheet.getLastRow();  // = số row hiện tại; row mới sẽ là lastRow+1, STT = lastRow (vì header row 1)
+  // Khoá từ lúc cấp STT tới khi ghi xong: 2 người gửi cùng lúc không được nhận cùng STT.
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let stt, newRowNum;
+  try {
+    stt = nextStt(sheet);
 
-  const row = header.map(label => {
-    // Server-managed fields: bỏ qua giá trị từ client
-    if (label === 'STT') return stt;
-    if (label === 'ngày khảo sát' || label === 'Ngày khảo sát') return ngayKsString;
-    if (label === 'Người khảo sát') return auth.full_name;
-    if (label === 'Ảnh (URLs)') return photos.join('|');
-    if (label === 'Submitted At') return submittedAt;
-    if (label === 'User Agent') return ua;
-    if (label === 'Username') return auth.username;
-    if (label === 'Deleted At') return '';
-    if (label === 'Deleted By') return '';
-    return safe(dataIn[label]);
-  });
+    const row = header.map(label => {
+      // Server-managed fields: bỏ qua giá trị từ client
+      if (label === 'STT') return stt;
+      if (label === 'ngày khảo sát' || label === 'Ngày khảo sát') return ngayKsString;
+      if (label === 'Người khảo sát') return auth.full_name;
+      if (label === 'Ảnh (URLs)') return photos.join('|');
+      if (label === 'Submitted At') return submittedAt;
+      if (label === 'User Agent') return ua;
+      if (label === 'Username') return auth.username;
+      if (label === 'Deleted At') return '';
+      if (label === 'Deleted By') return '';
+      return safe(dataIn[label]);
+    });
 
-  sheet.appendRow(row);
-  const newRowNum = sheet.getLastRow();
+    sheet.appendRow(row);
+    newRowNum = sheet.getLastRow();
+  } finally {
+    lock.releaseLock();
+  }
 
   // Notification email cho admin/user có quyền notify_admin (best-effort, không chặn submit)
   try {
@@ -2487,19 +2495,134 @@ function readSheetRows(type, includeDeleted) {
   return out;
 }
 
-/** Tìm row theo STT, trả về {rowIndex(1-based), header, values}. */
+/**
+ * Tìm row theo STT, trả về {rowIndex(1-based), header, values}.
+ * STT trùng → ném lỗi thay vì lấy dòng đầu: sửa/xoá nhầm bản ghi của người khác
+ * (kèm xoá vĩnh viễn ảnh) tệ hơn nhiều so với báo lỗi.
+ */
 function findRowByStt(sheet, stt) {
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return null;
   const header = data[0].map(String);
   const idx = header.indexOf('STT');
   if (idx < 0) return null;
+  let found = null;
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idx]) === String(stt)) {
-      return { rowIndex: i + 1, header: header, values: data[i] };
+      if (found) {
+        throw new Error('STT ' + stt + ' bị trùng trong sheet "' + sheet.getName() +
+          '" — admin cần chạy suaSttTrung() trước khi sửa/xoá bản ghi này');
+      }
+      found = { rowIndex: i + 1, header: header, values: data[i] };
     }
   }
-  return null;
+  return found;
+}
+
+/** STT tiếp theo = STT lớn nhất đang có + 1. Gọi trong LockService. */
+function nextStt(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 1;
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const idx = header.indexOf('STT');
+  if (idx < 0) return lastRow;
+  const col = sheet.getRange(2, idx + 1, lastRow - 1, 1).getValues();
+  let max = 0;
+  col.forEach(r => { const n = Number(r[0]); if (isFinite(n) && n > max) max = n; });
+  return max + 1;
+}
+
+// =====================================================================
+// SỬA STT TRÙNG — chạy tay trong Apps Script editor
+// =====================================================================
+
+/**
+ * Lập danh sách dòng cần đánh lại STT (không ghi gì).
+ * Mỗi nhóm trùng giữ lại 1 dòng: ưu tiên dòng nhập qua app (Username không bắt đầu
+ * bằng "import") vì người khảo sát đã được báo STT đó; còn lại giữ dòng đứng trước.
+ * Các dòng còn lại nhận STT mới = max + 1, +2, ...
+ */
+function planSttTrung_() {
+  const ss = getSpreadsheet();
+  const plan = [];
+  Object.keys(SHEET_MAP).forEach(type => {
+    const sheet = ss.getSheetByName(SHEET_MAP[type]);
+    if (!sheet || sheet.getLastRow() < 3) return;
+    const data = sheet.getDataRange().getValues();
+    const header = data[0].map(String);
+    const iStt = header.indexOf('STT');
+    const iUser = header.indexOf('Username');
+    const iTd = header.indexOf('Tuyến đường');
+    if (iStt < 0) return;
+
+    const groups = {};
+    let max = 0;
+    for (let i = 1; i < data.length; i++) {
+      const v = data[i][iStt];
+      if (v === '' || v === null) continue;
+      const n = Number(v);
+      if (isFinite(n) && n > max) max = n;
+      (groups[String(v)] = groups[String(v)] || []).push(i);
+    }
+
+    Object.keys(groups).forEach(stt => {
+      const idxs = groups[stt];
+      if (idxs.length < 2) return;
+      const isImport = i => iUser >= 0 && String(data[i][iUser]).indexOf('import') === 0;
+      const keep = idxs.find(i => !isImport(i)) !== undefined ? idxs.find(i => !isImport(i)) : idxs[0];
+      idxs.filter(i => i !== keep).forEach(i => {
+        max++;
+        plan.push({
+          type: type, sheet: SHEET_MAP[type], row: i + 1, col: iStt + 1,
+          oldStt: stt, newStt: max,
+          username: iUser >= 0 ? String(data[i][iUser]) : '',
+          tuyen: iTd >= 0 ? String(data[i][iTd]) : '',
+          keepRow: keep + 1
+        });
+      });
+    });
+  });
+  return plan;
+}
+
+/** Bước 1: xem trước. Chạy hàm này, đọc log (Ctrl+Enter) — KHÔNG sửa dữ liệu. */
+function kiemTraSttTrung() {
+  const plan = planSttTrung_();
+  if (plan.length === 0) {
+    Logger.log('✅ Không có STT trùng.');
+    return { ok: true, count: 0 };
+  }
+  plan.forEach(p => Logger.log(
+    `[${p.sheet}] dòng ${p.row}: STT ${p.oldStt} → ${p.newStt}  (${p.username} · ${p.tuyen})  — giữ STT cũ cho dòng ${p.keepRow}`));
+  Logger.log(`Tổng: ${plan.length} dòng sẽ đổi STT. Kiểm tra xong thì chạy suaSttTrung().`);
+  return { ok: true, count: plan.length, plan: plan };
+}
+
+/** Bước 2: sao lưu file rồi đánh lại STT theo đúng danh sách của kiemTraSttTrung(). */
+function suaSttTrung() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const plan = planSttTrung_();
+    if (plan.length === 0) {
+      Logger.log('✅ Không có STT trùng, không cần sửa.');
+      return { ok: true, count: 0 };
+    }
+    const backup = weeklyBackup();
+    if (!backup || !backup.ok) throw new Error('Sao lưu thất bại, dừng lại không sửa: ' + JSON.stringify(backup));
+    Logger.log('Đã sao lưu: ' + backup.file_name + ' (id=' + backup.backup_id + ')');
+
+    const ss = getSpreadsheet();
+    plan.forEach(p => {
+      ss.getSheetByName(p.sheet).getRange(p.row, p.col).setValue(p.newStt);
+      appendAuditLog('renumber_stt', 'system', p.sheet, p.newStt,
+        'STT cũ ' + p.oldStt + ' (trùng với dòng ' + p.keepRow + '), dòng ' + p.row);
+    });
+    Logger.log(`✅ Đã đổi STT ${plan.length} dòng. Chi tiết trong sheet Audit (action=renumber_stt).`);
+    return { ok: true, count: plan.length, backup_id: backup.backup_id };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** Ghi 1 dòng vào sheet Audit (tự tạo nếu chưa có). */
@@ -2946,37 +3069,44 @@ function handleBulkImport(body) {
 
   const batchData = [];
   let skipped = 0;
-  let sttBase = sheet.getLastRow(); // row tiếp theo = lastRow + 1; STT = lastRow (header = row 1)
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    // Luôn cấp STT mới — giữ STT của file Excel từng làm trùng với STT app đã cấp.
+    let sttBase = nextStt(sheet) - 1;
 
-  for (let i = 0; i < rows.length; i++) {
-    const rec = rows[i];
-    // Skip hoàn toàn rỗng
-    if (!rec || Object.keys(rec).length === 0) { skipped++; continue; }
+    for (let i = 0; i < rows.length; i++) {
+      const rec = rows[i];
+      // Skip hoàn toàn rỗng
+      if (!rec || Object.keys(rec).length === 0) { skipped++; continue; }
 
-    sttBase++;
-    const rowArr = header.map(label => {
-      // Các cột bổ sung không có trong Excel: để trống (trừ STT)
-      if (label === 'STT') return rec['STT'] !== undefined && rec['STT'] !== '' ? rec['STT'] : sttBase;
-      if (label === 'Ảnh (URLs)') return '';
-      if (label === 'Submitted At') return rec['ngày khảo sát'] || rec['Ngày khảo sát'] || '';
-      if (label === 'User Agent') return 'bulk_import';
-      if (label === 'Username') return rec['Người khảo sát'] ? 'import_' + String(rec['Người khảo sát']).substring(0, 20).replace(/\s+/g, '_') : 'import';
-      if (label === 'Deleted At') return '';
-      if (label === 'Deleted By') return '';
-      // Tìm giá trị từ record (match tên cột)
-      const val = rec[label];
-      return val !== undefined ? val : '';
-    });
-    batchData.push(rowArr);
+      sttBase++;
+      const rowArr = header.map(label => {
+        // Các cột bổ sung không có trong Excel: để trống (trừ STT)
+        if (label === 'STT') return sttBase;
+        if (label === 'Ảnh (URLs)') return '';
+        if (label === 'Submitted At') return rec['ngày khảo sát'] || rec['Ngày khảo sát'] || '';
+        if (label === 'User Agent') return 'bulk_import';
+        if (label === 'Username') return rec['Người khảo sát'] ? 'import_' + String(rec['Người khảo sát']).substring(0, 20).replace(/\s+/g, '_') : 'import';
+        if (label === 'Deleted At') return '';
+        if (label === 'Deleted By') return '';
+        // Tìm giá trị từ record (match tên cột)
+        const val = rec[label];
+        return val !== undefined ? val : '';
+      });
+      batchData.push(rowArr);
+    }
+
+    if (batchData.length === 0) {
+      return { ok: true, type, inserted: 0, skipped, total: rows.length };
+    }
+
+    // Ghi batch một lần (nhanh hơn appendRow từng dòng)
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, batchData.length, header.length).setValues(batchData);
+  } finally {
+    lock.releaseLock();
   }
-
-  if (batchData.length === 0) {
-    return { ok: true, type, inserted: 0, skipped, total: rows.length };
-  }
-
-  // Ghi batch một lần (nhanh hơn appendRow từng dòng)
-  const startRow = sheet.getLastRow() + 1;
-  sheet.getRange(startRow, 1, batchData.length, header.length).setValues(batchData);
 
   // Log audit
   try {
