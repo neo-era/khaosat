@@ -810,10 +810,11 @@ async function previewImport() {
     .filter(obj => Object.values(obj).some(v => v !== ''));
 
   const inserts = [], updates = [];
+  // STT có thể là số (bản ghi cũ) hoặc mã chữ-số (TD-260926-A3F9) — có STT là cập nhật
   for (const row of objRows) {
-    const sttNum = Number(row['STT']);
-    if (row['STT'] !== '' && !isNaN(sttNum) && sttNum > 0) {
-      updates.push({ stt: sttNum, row });
+    const stt = String(row['STT'] ?? '').trim();
+    if (stt !== '') {
+      updates.push({ stt, row });
     } else {
       inserts.push({ row });
     }
@@ -838,10 +839,9 @@ async function previewImport() {
   html += '</tr></thead><tbody>';
 
   objRows.slice(0, 20).forEach(row => {
-    const sttNum = Number(row['STT']);
-    const isUpdate = row['STT'] !== '' && !isNaN(sttNum) && sttNum > 0;
+    const isUpdate = String(row['STT'] ?? '').trim() !== '';
     const badge = isUpdate
-      ? `<span class="bg-orange-100 text-orange-700 px-1 rounded text-xs whitespace-nowrap">✏️ #${row['STT']}</span>`
+      ? `<span class="bg-orange-100 text-orange-700 px-1 rounded text-xs whitespace-nowrap">✏️ #${escapeHtml(String(row['STT']))}</span>`
       : `<span class="bg-green-100 text-green-700 px-1 rounded text-xs">➕ Mới</span>`;
     html += '<tr class="border-t border-gray-100">';
     html += `<td class="px-2 py-1">${badge}</td>`;

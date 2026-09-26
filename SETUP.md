@@ -229,7 +229,7 @@ Trên điện thoại:
 3. Trang chủ hiện 15 thẻ.
 4. Chọn **Tăng cường đèn** → form mở ra. **Người khảo sát** đã auto-fill "Lê Kỹ Thuật Viên" và readonly.
 5. Cho phép GPS. Điền các trường `*` đỏ. Chụp 1 ảnh.
-6. Bấm **Lưu**. Thấy toast "Đã lưu STT #1".
+6. Bấm **Lưu**. Thấy toast "Đã lưu STT #TCD-yyMMdd-XXXX" (mã tự sinh).
 7. Mở Google Sheets, sheet `Tang cuong den` — phải thấy dòng mới với data đầy đủ + URL ảnh Cloudinary + cột `Username = ktv01`.
 8. Đăng xuất, đăng nhập lại bằng `admin01` → tự vào `kpi.html`. Chọn tháng hiện tại → bảng hiện KPI của `ktv01`.
 9. Thử `manage.html` → tìm bản ghi vừa submit → xoá thử → quay lại Google Sheets thấy `Deleted At` đã có giá trị, ảnh trên Cloudinary đã biến mất.

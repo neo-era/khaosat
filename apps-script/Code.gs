@@ -58,6 +58,14 @@ const SHEET_MAP = {
   thao_go_bang_ron: '16. Thao go bang ron'
 };
 
+/** Mã loại đứng đầu STT (vd TD-260926-A3F9). Đổi mã → bản ghi mới mang mã mới, bản cũ giữ nguyên. */
+const STT_PREFIX = {
+  tang_cuong_den: 'TCD', ngam_hoa: 'NH',   thay_den: 'TD',   hkn: 'HKN',
+  tc_noi: 'TCN',         cap_luon_can: 'CLC', tc_ngam: 'TCG', thay_can: 'TCA',
+  thay_tru: 'TT',        choa_den: 'CD',   nap_tru: 'NT',    vo_tu: 'VT',
+  tc_den_kc_xa: 'TDX',   decal_so_tru: 'DST', nang_mong: 'NM', thao_go_bang_ron: 'BR'
+};
+
 /** Header gốc của 16 loại khảo sát (NGUYÊN VĂN tiếng Việt, đồng bộ schemas.js + CLAUDE.md mục 5). */
 const HEADERS = {
   tang_cuong_den: [
@@ -811,7 +819,9 @@ function initSheets() {
       const idx = fullHeader.indexOf(label);
       if (idx >= 0) sheet.setColumnWidth(idx + 1, width);
     };
-    setW('STT', 50);
+    setW('STT', 120);
+    // STT dạng mã chữ-số: để dạng chữ cho Sheets không tự đổi sang số/ngày
+    sheet.getRange(2, 1, sheet.getMaxRows() - 1, 1).setNumberFormat('@');
     setW('ngày khảo sát', 140);
     setW('Ngày khảo sát', 140);
     setW('Người khảo sát', 140);
@@ -1818,7 +1828,7 @@ function handleSubmit(body) {
   lock.waitLock(20000);
   let stt, newRowNum;
   try {
-    stt = nextStt(sheet);
+    stt = newSttId(type, sheet, new Date());
 
     const row = header.map(label => {
       // Server-managed fields: bỏ qua giá trị từ client
@@ -2519,17 +2529,47 @@ function findRowByStt(sheet, stt) {
   return found;
 }
 
-/** STT tiếp theo = STT lớn nhất đang có + 1. Gọi trong LockService. */
-function nextStt(sheet) {
+/** Tập STT đang có trong sheet (dạng chuỗi) — dùng để tránh sinh mã trùng. */
+function readSttSet_(sheet) {
+  const set = {};
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return 1;
+  if (lastRow < 2) return set;
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
   const idx = header.indexOf('STT');
-  if (idx < 0) return lastRow;
-  const col = sheet.getRange(2, idx + 1, lastRow - 1, 1).getValues();
-  let max = 0;
-  col.forEach(r => { const n = Number(r[0]); if (isFinite(n) && n > max) max = n; });
-  return max + 1;
+  if (idx < 0) return set;
+  sheet.getRange(2, idx + 1, lastRow - 1, 1).getValues()
+    .forEach(r => { if (r[0] !== '' && r[0] !== null) set[String(r[0])] = true; });
+  return set;
+}
+
+/**
+ * Sinh STT duy nhất dạng <MÃ LOẠI>-<yyMMdd>-<4 ký tự>, vd TD-260926-A3F9.
+ * Gọi trong LockService. `used` (tuỳ chọn) là tập STT đã có — truyền vào khi sinh nhiều mã
+ * một lượt (bulk import, sửa trùng) để khỏi đọc lại sheet; mã mới được thêm vào tập.
+ */
+function newSttId(type, sheet, date, used) {
+  used = used || readSttSet_(sheet);
+  const prefix = STT_PREFIX[type] || 'KS';
+  const ymd = Utilities.formatDate(date || new Date(), TZ, 'yyMMdd');
+  for (let i = 0; i < 20; i++) {
+    const id = prefix + '-' + ymd + '-' + Utilities.getUuid().replace(/-/g, '').slice(0, 4).toUpperCase();
+    if (!used[id]) {
+      used[id] = true;
+      return id;
+    }
+  }
+  throw new Error('Không sinh được STT mới cho ' + type);
+}
+
+/** Đọc ngày từ ô Excel/Sheets (Date, "yyyy-MM-dd ...", "dd/MM/yyyy"); không đọc được → null. */
+function parseDateLoose_(v) {
+  if (v instanceof Date && !isNaN(v)) return v;
+  const s = String(v || '').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  return null;
 }
 
 // =====================================================================
@@ -2540,7 +2580,7 @@ function nextStt(sheet) {
  * Lập danh sách dòng cần đánh lại STT (không ghi gì).
  * Mỗi nhóm trùng giữ lại 1 dòng: ưu tiên dòng nhập qua app (Username không bắt đầu
  * bằng "import") vì người khảo sát đã được báo STT đó; còn lại giữ dòng đứng trước.
- * Các dòng còn lại nhận STT mới = max + 1, +2, ...
+ * Các dòng còn lại nhận mã STT mới (newSttId), ngày trong mã = Submitted At của dòng đó.
  */
 function planSttTrung_() {
   const ss = getSpreadsheet();
@@ -2553,15 +2593,15 @@ function planSttTrung_() {
     const iStt = header.indexOf('STT');
     const iUser = header.indexOf('Username');
     const iTd = header.indexOf('Tuyến đường');
+    const iSub = header.indexOf('Submitted At');
     if (iStt < 0) return;
 
     const groups = {};
-    let max = 0;
+    const used = {};
     for (let i = 1; i < data.length; i++) {
       const v = data[i][iStt];
       if (v === '' || v === null) continue;
-      const n = Number(v);
-      if (isFinite(n) && n > max) max = n;
+      used[String(v)] = true;
       (groups[String(v)] = groups[String(v)] || []).push(i);
     }
 
@@ -2571,10 +2611,11 @@ function planSttTrung_() {
       const isImport = i => iUser >= 0 && String(data[i][iUser]).indexOf('import') === 0;
       const keep = idxs.find(i => !isImport(i)) !== undefined ? idxs.find(i => !isImport(i)) : idxs[0];
       idxs.filter(i => i !== keep).forEach(i => {
-        max++;
+        const d = iSub >= 0 ? (parseDateLoose_(data[i][iSub]) || new Date(data[i][iSub])) : null;
+        const newStt = newSttId(type, sheet, d && !isNaN(d) ? d : new Date(), used);
         plan.push({
           type: type, sheet: SHEET_MAP[type], row: i + 1, col: iStt + 1,
-          oldStt: stt, newStt: max,
+          oldStt: stt, newStt: newStt,
           username: iUser >= 0 ? String(data[i][iUser]) : '',
           tuyen: iTd >= 0 ? String(data[i][iTd]) : '',
           keepRow: keep + 1
@@ -2595,6 +2636,7 @@ function kiemTraSttTrung() {
   plan.forEach(p => Logger.log(
     `[${p.sheet}] dòng ${p.row}: STT ${p.oldStt} → ${p.newStt}  (${p.username} · ${p.tuyen})  — giữ STT cũ cho dòng ${p.keepRow}`));
   Logger.log(`Tổng: ${plan.length} dòng sẽ đổi STT. Kiểm tra xong thì chạy suaSttTrung().`);
+  Logger.log('Lưu ý: danh sách DÒNG sẽ đổi là cố định; riêng 4 ký tự cuối của mã mới được sinh lại khi chạy suaSttTrung().');
   return { ok: true, count: plan.length, plan: plan };
 }
 
@@ -2930,7 +2972,7 @@ function getNotificationTargets() {
  * @param {string} type      type-key
  * @param {string} sheetName
  * @param {object} data      dữ liệu đã ghi
- * @param {number} stt
+ * @param {string|number} stt
  * @param {object} user      { username, full_name }
  * @param {number} rowNum    số row vừa append (1-based)
  * @param {number} sheetId   sheet.getSheetId() để tạo link
@@ -2980,7 +3022,7 @@ function notifyAdmins(type, sheetName, data, stt, user, rowNum, sheetId) {
           <h2 style="margin:0; font-size:18px">SAPULICO — Có bản khảo sát mới</h2>
         </div>
         <div style="border:1px solid #e5e7eb; border-top:0; padding:16px; border-radius:0 0 8px 8px">
-          <p style="margin:0 0 12px">Loại: <strong>${escapeHtmlGs(sheetName)}</strong> · STT <strong>#${stt}</strong></p>
+          <p style="margin:0 0 12px">Loại: <strong>${escapeHtmlGs(sheetName)}</strong> · STT <strong>#${escapeHtmlGs(String(stt))}</strong></p>
           <p style="margin:0 0 12px; color:#666; font-size:13px">Người khảo sát: <strong>${escapeHtmlGs(user.full_name)}</strong> (@${escapeHtmlGs(user.username)})</p>
           <table style="border-collapse:collapse; width:100%; font-size:14px; border:1px solid #e5e7eb">${rowsHtml}</table>
           ${photoHtml}
@@ -3073,17 +3115,18 @@ function handleBulkImport(body) {
   lock.waitLock(30000);
   try {
     // Luôn cấp STT mới — giữ STT của file Excel từng làm trùng với STT app đã cấp.
-    let sttBase = nextStt(sheet) - 1;
+    const usedStt = readSttSet_(sheet);
 
     for (let i = 0; i < rows.length; i++) {
       const rec = rows[i];
       // Skip hoàn toàn rỗng
       if (!rec || Object.keys(rec).length === 0) { skipped++; continue; }
 
-      sttBase++;
+      const ngayKs = parseDateLoose_(rec['ngày khảo sát'] || rec['Ngày khảo sát']) || new Date();
+      const sttId = newSttId(type, sheet, ngayKs, usedStt);
       const rowArr = header.map(label => {
         // Các cột bổ sung không có trong Excel: để trống (trừ STT)
-        if (label === 'STT') return sttBase;
+        if (label === 'STT') return sttId;
         if (label === 'Ảnh (URLs)') return '';
         if (label === 'Submitted At') return rec['ngày khảo sát'] || rec['Ngày khảo sát'] || '';
         if (label === 'User Agent') return 'bulk_import';
@@ -3110,7 +3153,7 @@ function handleBulkImport(body) {
 
   // Log audit
   try {
-    logAudit('bulk_import', auth.username, sheetName, 0,
+    appendAuditLog('bulk_import', auth.username, sheetName, '*',
       'inserted=' + batchData.length + ' rows (historical data from Excel)');
   } catch(e) { Logger.log('audit log error: ' + e); }
 
