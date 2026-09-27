@@ -411,6 +411,10 @@ function renderField(field) {
     if (field.required) input.required = true;
     if (field.hint && !input.placeholder) input.placeholder = field.hint;
     wrap.appendChild(tdkWrap);
+    const near = document.createElement('div');
+    near.id = 'tdk-near';
+    near.className = 'hidden mt-2 flex flex-wrap gap-2 items-center';
+    wrap.appendChild(near);
     if (field.hint) {
       const small = document.createElement('div');
       small.className = 'text-xs text-gray-500 mt-1';
@@ -847,6 +851,53 @@ function updateTdkList(phuong) {
 // GPS
 // =====================================================================
 
+const TDK_NEAR_RADIUS_M = 500;
+
+function distanceM(lat1, lng1, lat2, lng2) {
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Gợi ý 3 tủ điều khiển gần vị trí GPS nhất (trong 500 m) dưới ô TĐK — chạm để điền.
+ * Chỉ gợi ý, không tự điền. Danh mục tọa độ (js/tdk-toado.js, ~86KB) chỉ tải khi cần;
+ * hiện mới có 8 quận trong file nguồn nên nơi khác sẽ không có gợi ý.
+ */
+async function showNearestTdk() {
+  const box = document.getElementById('tdk-near');
+  const input = state.container.querySelector('[data-key="tdk"]');
+  if (!box || !input || state.gps.status !== 'ok') return;
+  try {
+    const { TDK_TOA_DO } = await import('./tdk-toado.js');
+    const { lat, lng } = state.gps;
+    const near = TDK_TOA_DO
+      .map(([ten, a, b]) => ({ ten, d: distanceM(lat, lng, a, b) }))
+      .filter(x => x.d <= TDK_NEAR_RADIUS_M)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 3);
+    box.innerHTML = '';
+    if (!near.length) { box.classList.add('hidden'); return; }
+    const label = document.createElement('span');
+    label.className = 'text-xs text-gray-500';
+    label.textContent = '📍 Tủ gần nhất:';
+    box.appendChild(label);
+    near.forEach(x => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'px-3 bg-green-50 border border-green-300 text-green-800 rounded-full text-sm';
+      b.style.minHeight = '44px';
+      b.textContent = `${x.ten} · ${Math.round(x.d)} m`;
+      b.onclick = () => { input.value = x.ten; input.dispatchEvent(new Event('input', { bubbles: true })); };
+      box.appendChild(b);
+    });
+    box.classList.remove('hidden');
+  } catch (e) {
+    console.warn('Không tải được tọa độ TĐK:', e.message);
+  }
+}
+
 async function refreshGps() {
   state.gps = { status: 'loading' };
   updateGpsUI();
@@ -854,6 +905,7 @@ async function refreshGps() {
     const pos = await getCurrentPosition({ timeout: 15000 });
     state.gps = { status: 'ok', ...pos };
     updateGpsUI();
+    showNearestTdk();
     // Tự động gọi reverse geocoding sau khi có GPS (không ghi đè field đã có)
     applyReverseGeocode(false);
   } catch (e) {

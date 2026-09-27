@@ -623,6 +623,7 @@ export const TDK_LIST = [
 - Field `Quận` (type `quan`): **không hiển thị** (đổi 2026-09-27). Là input ẩn, tự điền `quan_cu` của phường đã chọn; phường gõ tay ngoài danh sách → Quận để trống. Không bắt buộc ở client (label `Quận` vẫn là cột sheet, giữ nguyên để báo cáo/lọc theo quận cũ không vỡ).
 - Field `Phường` (type `phuong`): ô gõ chữ có gợi ý (`renderPhuong()` trong form-renderer.js), **tìm không dấu** ("tan dinh" → Tân Định), mỗi gợi ý kèm quận cũ. Tên trùng giữa 2 địa bàn (vd `Đông Thạnh` — Hóc Môn / Cần Giuộc) hiển thị kèm quận để phân biệt; giá trị lưu vào cột `Phường` luôn là tên trần. Cho phép gõ tự do nếu không có trong danh sách. Chọn phường → lọc datalist TĐK theo `TDK_BY_PHUONG`.
 - Field `Tủ điều khiển` (type `tdk`): dùng `<input list="tdk-list">` + `<datalist id="tdk-list">` với 903 mục. Cho phép gõ tự do.
+- **Gợi ý tủ gần nhất (2026-09-27)**: có GPS → dưới ô TĐK hiện tối đa 3 tủ trong 500 m kèm khoảng cách, chạm để điền (không tự điền). Tọa độ ở `js/tdk-toado.js` (1.776 tủ, 8 quận) — **tự sinh** bằng `python tools/gen_tdk_toado.py` từ `TDK_ChieuSang_8Quan_phuongmoi.xlsx` (cột "Tên mới đầy đủ", "Vĩ độ", "Kinh độ"); file Excel cập nhật thì chạy lại script, không sửa tay. Tải động chỉ khi cần.
 
 ---
 
