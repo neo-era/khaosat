@@ -1,7 +1,7 @@
 // js/report.js — Trang báo cáo: vùng A-D aggregate + Vùng E xuất dữ liệu thô.
 
 import { apiReport, apiUsers, apiList, apiExportRaw, apiUpdate, apiBulkImport } from './api.js';
-import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
+import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES } from './schemas.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
 import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 
@@ -111,6 +111,7 @@ async function loadReport() {
     renderAreaB(res.areaB || [], types);
     renderAreaC(res.areaC || [], types);
     renderAreaD(res.areaD || [], types);
+    renderAreaS(res.areaS || []);
     document.getElementById('btn-export').disabled = false;
     const bx = document.getElementById('btn-export-xlsx');
     const bp = document.getElementById('btn-export-pdf');
@@ -277,6 +278,32 @@ function renderAreaC(rows, types) {
 // =====================================================================
 // AREA D — Heatmap Phường × Loại
 // =====================================================================
+const XU_LY_COLS = [...XU_LY_STATUSES, 'Chưa cập nhật'];
+
+/** Bảng tiến độ xử lý: mỗi loại 1 dòng, cột = trạng thái, cuối = % đã nghiệm thu. */
+function xuLyRows(areaS) {
+  return areaS.map(r => {
+    const vals = XU_LY_COLS.map(s => r[s] || 0);
+    const total = vals.reduce((a, b) => a + b, 0);
+    const nt = r['Nghiệm thu'] || 0;
+    return { name: SCHEMAS[r.type] ? SCHEMAS[r.type].name : r.type, vals, total, pct: total ? Math.round(nt * 1000 / total) / 10 : 0 };
+  }).filter(r => r.total > 0);
+}
+
+function renderAreaS(areaS) {
+  const el = document.getElementById('areaS');
+  if (!el) return;
+  const rows = xuLyRows(areaS);
+  if (!rows.length) { el.innerHTML = '<p class="p-3 text-sm text-gray-500">Không có dữ liệu (hoặc máy chủ chưa cập nhật bản có trạng thái xử lý).</p>'; return; }
+  el.innerHTML = '<table class="w-full text-xs"><thead class="bg-gray-100"><tr><th class="px-2 py-2 text-left">Loại</th>' +
+    XU_LY_COLS.map(s => `<th class="px-2 py-2 text-right whitespace-nowrap">${escapeHtml(s)}</th>`).join('') +
+    '<th class="px-2 py-2 text-right">Tổng</th><th class="px-2 py-2 text-right">% nghiệm thu</th></tr></thead><tbody>' +
+    rows.map(r => `<tr class="border-t"><td class="px-2 py-1">${escapeHtml(r.name)}</td>` +
+      r.vals.map(v => `<td class="px-2 py-1 text-right">${v || ''}</td>`).join('') +
+      `<td class="px-2 py-1 text-right font-semibold">${r.total}</td><td class="px-2 py-1 text-right">${r.pct}%</td></tr>`).join('') +
+    '</tbody></table>';
+}
+
 function renderAreaD(rows, types) {
   const div = document.getElementById('areaD');
   if (rows.length === 0) {
@@ -504,6 +531,19 @@ async function exportXlsx() {
         headers: ['Phường/Xã', ...types.map(name), 'Tổng'],
         rows: rowsD, total: ['TỔNG CỘNG', ...types.map((_, i) => sum(rowsD, i + 1)), sum(rowsD, types.length + 1)],
         cellFill: (v, r, c) => (c > 0 && c <= types.length && v > 0) ? heat[Math.min(4, Math.floor((v / max) * 5))] : null
+      });
+    }
+
+    // E — Tiến độ xử lý
+    const rowsS = xuLyRows(state.data.areaS || []).map(r => [r.name, ...r.vals, r.total, r.pct]);
+    if (rowsS.length) {
+      const tot = XU_LY_COLS.map((_, i) => sum(rowsS, i + 1));
+      const all = sum(rowsS, XU_LY_COLS.length + 1);
+      const nt = tot[XU_LY_COLS.indexOf('Nghiệm thu')];
+      addReportSheet(wb, 'E-Tiến độ xử lý', {
+        title: 'TIẾN ĐỘ XỬ LÝ CÁC ĐIỂM KHẢO SÁT', subtitle: sub,
+        headers: ['Loại khảo sát', ...XU_LY_COLS, 'Tổng', '% nghiệm thu'],
+        rows: rowsS, total: ['TỔNG CỘNG', ...tot, all, all ? Math.round(nt * 1000 / all) / 10 : 0]
       });
     }
 

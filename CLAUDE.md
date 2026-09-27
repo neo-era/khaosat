@@ -145,6 +145,8 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 - `Username` — username của người khảo sát submit (server-side gán từ token đã xác thực, không tin client). Cột này dùng cho tính KPI.
 - `Deleted At` — soft-delete flag. Rỗng = bản ghi còn hiệu lực. Có giá trị (timestamp) = đã bị xoá. KPI và `recent.html` lọc bỏ các row có `Deleted At`. Trên Google Sheets row vẫn nhìn thấy nhưng được tô màu xám/strikethrough (conditional format).
 - `Deleted By` — username của admin/user thực hiện xoá. Rỗng nếu chưa xoá.
+- `Trạng thái xử lý` *(thêm 2026-09-27)* — 1 trong `Chờ thiết kế` / `Đã thiết kế` / `Đã thi công` / `Nghiệm thu` / `Không xử lý` (`XU_LY_STATUSES`, đồng bộ Code.gs ↔ `js/schemas.js`). Bản mới tự nhận `Chờ thiết kế`; `thao_go_bang_ron` để trống (không áp dụng). Rỗng ở bản cũ = "Chưa cập nhật".
+- `Cập nhật trạng thái` *(thêm 2026-09-27)* — "dd/MM/yyyy HH:mm · username · ghi chú" của lần đổi gần nhất. Đổi qua `action=set_status` (quyền `edit`) ở cột "Xử lý" trang `manage.html`; mỗi lần đổi ghi 1 dòng `Audit` (action `set_status`) = lịch sử. Form sửa bản ghi KHÔNG ghi đè 2 cột này. Sheet cũ: chạy `capNhatCotSheet()` (giờ chèn cả cột bonus còn thiếu). Báo cáo có bảng/sheet "Tiến độ xử lý" (`areaS`).
 
 ### Sheet phụ trong cùng file Google Sheets
 

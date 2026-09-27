@@ -1,7 +1,7 @@
 // js/manage.js — Logic trang quản lý bản ghi: filter, xoá/khôi phục, lightbox.
 
-import { apiList, apiDelete, apiRestore } from './api.js';
-import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
+import { apiList, apiDelete, apiRestore, apiSetStatus } from './api.js';
+import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES, XU_LY_SKIP_TYPES } from './schemas.js';
 import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDate, formatVnDateOnly } from './utils.js';
 
@@ -21,6 +21,15 @@ export async function initManage(taikhoanUsers = []) {
     opt.textContent = SCHEMAS[k].icon + ' ' + SCHEMAS[k].name;
     typeSel.appendChild(opt);
   }
+
+  const xlSel = document.getElementById('filter-xuly');
+  for (const st of [...XU_LY_STATUSES, 'Chưa cập nhật']) {
+    const opt = document.createElement('option');
+    opt.value = st;
+    opt.textContent = st;
+    xlSel.appendChild(opt);
+  }
+  xlSel.addEventListener('change', () => { state.page = 0; renderTable(); });
 
   const userSel = document.getElementById('filter-user');
   for (const u of taikhoanUsers) {
@@ -91,6 +100,9 @@ function renderTable() {
     });
   }
 
+  const xl = document.getElementById('filter-xuly').value;
+  if (xl) filtered = filtered.filter(r => !XU_LY_SKIP_TYPES.includes(r._type) && xuLyOf(r) === xl);
+
   document.getElementById('result-count').textContent = `${filtered.length} kết quả`;
 
   const start = state.page * state.pageSize;
@@ -112,6 +124,7 @@ function renderTable() {
       <td class="px-2 py-2 text-center">
         ${photos.length > 0 ? `<button class="text-xs bg-gray-100 px-2 py-1 rounded" data-photos='${escapeHtml(JSON.stringify(photos))}'>📷 ${photos.length}</button>` : '—'}
       </td>
+      <td class="px-2 py-2 text-xs text-center td-xuly"></td>
       <td class="px-2 py-2 text-xs text-center">
         ${isDeleted
           ? `<span class="text-red-600">Đã xoá<br>${formatVnDateOnly(r['Deleted At'])}<br>bởi ${escapeHtml(r['Deleted By'] || '')}</span>`
@@ -127,6 +140,7 @@ function renderTable() {
           : `<button class="text-xs px-2 py-1 bg-red-50 text-red-700 rounded btn-delete">Xoá</button>`}
       </td>
     `;
+    renderXuLyCell(tr.querySelector('.td-xuly'), r, isDeleted);
     // Bind events
     tr.querySelector('.btn-view').onclick = () => openDetail(r);
     const photoBtn = tr.querySelector('[data-photos]');
@@ -154,6 +168,64 @@ function renderTable() {
       btn.onclick = () => { state.page = p; renderTable(); };
       pagi.appendChild(btn);
     }
+  }
+}
+
+const XU_LY_COLOR = {
+  'Chờ thiết kế': 'bg-yellow-50 text-yellow-800 border-yellow-300',
+  'Đã thiết kế': 'bg-blue-50 text-blue-800 border-blue-300',
+  'Đã thi công': 'bg-indigo-50 text-indigo-800 border-indigo-300',
+  'Nghiệm thu': 'bg-green-50 text-green-800 border-green-300',
+  'Không xử lý': 'bg-gray-100 text-gray-600 border-gray-300',
+  'Chưa cập nhật': 'bg-white text-gray-400 border-gray-200'
+};
+
+function xuLyOf(r) {
+  return String(r['Trạng thái xử lý'] || '').trim() || 'Chưa cập nhật';
+}
+
+/** Ô "Xử lý": có quyền sửa → chọn đổi ngay; không → nhãn màu. Băng rôn không áp dụng. */
+function renderXuLyCell(td, r, isDeleted) {
+  if (XU_LY_SKIP_TYPES.includes(r._type)) { td.textContent = '—'; return; }
+  const cur = xuLyOf(r);
+  const cls = 'border rounded px-1 text-xs ' + (XU_LY_COLOR[cur] || '');
+  const upd = r['Cập nhật trạng thái'] ? String(r['Cập nhật trạng thái']) : '';
+  if (isDeleted || !hasPermission('edit')) {
+    td.innerHTML = `<span class="${cls} inline-block py-1">${escapeHtml(cur)}</span>` +
+      (upd ? `<div class="text-[10px] text-gray-400 mt-1">${escapeHtml(upd)}</div>` : '');
+    return;
+  }
+  const sel = document.createElement('select');
+  sel.className = cls;
+  sel.style.minHeight = '36px';
+  sel.innerHTML = (cur === 'Chưa cập nhật' ? '<option value="">Chưa cập nhật</option>' : '') +
+    XU_LY_STATUSES.map(s => `<option ${s === cur ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+  sel.title = upd || 'Chưa đổi lần nào';
+  sel.onchange = async () => {
+    const status = sel.value;
+    if (!status) return;
+    const note = prompt(`Đổi "${cur}" → "${status}" cho STT #${r['STT']}.\nGhi chú (không bắt buộc, vd số hồ sơ thiết kế):`, '');
+    if (note === null) { sel.value = cur === 'Chưa cập nhật' ? '' : cur; return; }
+    sel.disabled = true;
+    try {
+      const res = await apiSetStatus(r._type, [r['STT']], status, note);
+      r['Trạng thái xử lý'] = status;
+      r['Cập nhật trạng thái'] = res.stamp || '';
+      showToast(`Đã chuyển STT #${r['STT']} sang "${status}"`, 'success');
+      renderXuLyCell(td, r, isDeleted);
+    } catch (e) {
+      showToast('Lỗi đổi trạng thái: ' + e.message, 'error', 5000);
+      sel.value = cur === 'Chưa cập nhật' ? '' : cur;
+      sel.disabled = false;
+    }
+  };
+  td.innerHTML = '';
+  td.appendChild(sel);
+  if (upd) {
+    const d = document.createElement('div');
+    d.className = 'text-[10px] text-gray-400 mt-1';
+    d.textContent = upd;
+    td.appendChild(d);
   }
 }
 

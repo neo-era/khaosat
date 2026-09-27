@@ -160,8 +160,16 @@ const HEADERS = {
   ]
 };
 
-/** 6 cột bonus thêm vào CUỐI mỗi sheet khảo sát. */
-const BONUS_COLS = ['Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By'];
+/**
+ * Cột hệ thống thêm vào CUỐI mỗi sheet khảo sát (server quản lý, form không gửi).
+ * 2 cột trạng thái xử lý thêm 2026-09-27 — sheet cũ chạy capNhatCotSheet().
+ */
+const BONUS_COLS = ['Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By',
+                    'Trạng thái xử lý', 'Cập nhật trạng thái'];
+
+/** Các bước xử lý 1 điểm khảo sát. Bản mới = bước đầu; Băng rôn không áp dụng (tháo xong là xong). */
+const XU_LY_STATUSES = ['Chờ thiết kế', 'Đã thiết kế', 'Đã thi công', 'Nghiệm thu', 'Không xử lý'];
+const XU_LY_SKIP_TYPES = ['thao_go_bang_ron'];
 
 /** Loại form không có GPS nào cả — loại ra khỏi mẫu số khi tính pct_gps. */
 const NO_GPS_TYPES = ['hkn'];
@@ -1728,6 +1736,7 @@ function doPost(e) {
       case 'change_password': return jsonResponse(handleChangePassword(body));
       case 'reset_own_password': return jsonResponse(handleResetOwnPassword(body));
       case 'check_dup':     return jsonResponse(handleCheckDup(body));
+      case 'set_status':    return jsonResponse(handleSetStatus(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -1854,6 +1863,8 @@ function handleSubmit(body) {
       if (label === 'Username') return auth.username;
       if (label === 'Deleted At') return '';
       if (label === 'Deleted By') return '';
+      if (label === 'Trạng thái xử lý') return XU_LY_SKIP_TYPES.indexOf(type) >= 0 ? '' : XU_LY_STATUSES[0];
+      if (label === 'Cập nhật trạng thái') return '';
       return safe(dataIn[label]);
     });
 
@@ -2056,7 +2067,8 @@ function handleUpdate(body) {
 
   // Protected fields (server-managed) — KHÔNG ghi đè dù client gửi
   const PROTECTED = ['STT', 'Submitted At', 'Username', 'Người khảo sát',
-                     'ngày khảo sát', 'Ngày khảo sát', 'Deleted At', 'Deleted By'];
+                     'ngày khảo sát', 'Ngày khảo sát', 'Deleted At', 'Deleted By',
+                     'Trạng thái xử lý', 'Cập nhật trạng thái'];
 
   const changes = [];
   header.forEach((label, j) => {
@@ -2087,6 +2099,50 @@ function handleUpdate(body) {
     changes.length > 0 ? 'fields: ' + changes.join(', ') : 'no change');
 
   return { ok: true, stt: stt, changes: changes };
+}
+
+/**
+ * action=set_status — đổi trạng thái xử lý 1 hoặc nhiều bản ghi cùng loại.
+ * Body: { token, type, stt | stts: [...], status, note? }. Permission: edit.
+ * Ghi 'Trạng thái xử lý' + 'Cập nhật trạng thái' ("dd/MM/yyyy HH:mm · username · ghi chú"),
+ * và mỗi bản 1 dòng Audit (action=set_status) để tra lịch sử.
+ */
+function handleSetStatus(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'edit')) return { ok: false, error: 'forbidden' };
+  const type = body.type;
+  const sheetName = SHEET_MAP[type];
+  if (!sheetName) return { ok: false, error: 'Loại không hợp lệ' };
+  if (XU_LY_SKIP_TYPES.indexOf(type) >= 0) return { ok: false, error: 'Loại này không theo dõi trạng thái xử lý' };
+  const status = String(body.status || '');
+  if (XU_LY_STATUSES.indexOf(status) < 0) return { ok: false, error: 'Trạng thái không hợp lệ: ' + status };
+  const note = String(body.note || '').trim().slice(0, 200);
+  const stts = Array.isArray(body.stts) ? body.stts : [body.stt];
+  if (!stts.length || stts.some(x => x === undefined || x === null || x === '')) return { ok: false, error: 'Thiếu STT' };
+
+  const sheet = getSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return { ok: false, error: 'Sheet không tồn tại' };
+  const stamp = Utilities.formatDate(new Date(), TZ, 'dd/MM/yyyy HH:mm') + ' · ' + auth.username + (note ? ' · ' + note : '');
+
+  const done = [], failed = [];
+  stts.forEach(stt => {
+    try {
+      const found = findRowByStt(sheet, stt);
+      if (!found) { failed.push({ stt: stt, error: 'Không tìm thấy' }); return; }
+      const iSt = found.header.indexOf('Trạng thái xử lý');
+      const iUp = found.header.indexOf('Cập nhật trạng thái');
+      if (iSt < 0 || iUp < 0) throw new Error('Sheet chưa có cột trạng thái — admin chạy capNhatCotSheet()');
+      const old = String(found.values[iSt] || '');
+      sheet.getRange(found.rowIndex, iSt + 1).setValue(status);
+      sheet.getRange(found.rowIndex, iUp + 1).setValue(stamp);
+      appendAuditLog('set_status', auth.username, sheetName, stt, (old || '(trống)') + ' → ' + status + (note ? ' · ' + note : ''));
+      done.push(String(stt));
+    } catch (e) {
+      failed.push({ stt: stt, error: e.message });
+    }
+  });
+  return { ok: failed.length === 0, done: done, failed: failed, status: status, stamp: stamp,
+           error: failed.length ? failed.map(f => f.stt + ': ' + f.error).join('; ') : undefined };
 }
 
 function handleRestore(body) {
@@ -2478,6 +2534,7 @@ function handleReport(body) {
   const areaB = {};  // bucket -> {type -> count}
   const areaC = {};  // username -> {type -> count, total, full_name}
   const areaD = {};  // phuong -> {type -> count, total} (heatmap)
+  const areaS = {};  // type -> {trạng thái xử lý -> count} (tiến độ xử lý)
 
   types.forEach(t => { areaA[t] = { type: t, total: 0, has_photo: 0, has_gps: 0, photo_count: 0, deleted: 0 }; });
 
@@ -2524,6 +2581,13 @@ function handleReport(body) {
       areaC[username][t]++;
       areaC[username].total++;
 
+      // Area S — tiến độ xử lý (bỏ loại không theo dõi trạng thái)
+      if (XU_LY_SKIP_TYPES.indexOf(t) < 0) {
+        const st = String(row['Trạng thái xử lý'] || '').trim() || 'Chưa cập nhật';
+        areaS[t] = areaS[t] || {};
+        areaS[t][st] = (areaS[t][st] || 0) + 1;
+      }
+
       // Area D — heatmap theo Phường × Loại
       const phuong = String(row['Phường'] || '').trim() || '(không có)';
       if (!areaD[phuong]) {
@@ -2567,7 +2631,9 @@ function handleReport(body) {
     areaA: areaAArr,
     areaB: areaBArr,
     areaC: areaCArr,
-    areaD: areaDArr
+    areaD: areaDArr,
+    areaS: Object.keys(areaS).map(t => Object.assign({ type: t }, areaS[t])),
+    xuLyStatuses: XU_LY_STATUSES
   };
 }
 
@@ -2772,7 +2838,7 @@ function capNhatCotSheet() {
     const sheet = ss.getSheetByName(SHEET_MAP[type]);
     if (!sheet || sheet.getLastColumn() < 1) return;
     const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-    const missing = HEADERS[type].filter(h => header.indexOf(h) < 0);
+    const missing = HEADERS[type].concat(BONUS_COLS).filter(h => header.indexOf(h) < 0);
     if (missing.length) plan.push({ type: type, missing: missing });
   });
   if (plan.length === 0) {
@@ -2790,7 +2856,7 @@ function capNhatCotSheet() {
     const added = [];
     plan.forEach(({ type }) => {
       const sheet = ss.getSheetByName(SHEET_MAP[type]);
-      const expected = HEADERS[type];
+      const expected = HEADERS[type].concat(BONUS_COLS);
       let header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
       const inserted = [];
       expected.forEach((label, i) => {
