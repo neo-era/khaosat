@@ -1237,6 +1237,9 @@ Khác với KPI (chấm điểm Người khảo sát), trang này tổng hợp *
     - Cột `Ảnh (URLs)`: giữ nguyên dạng chuỗi URL phân tách bằng `|`.
     - Cột ngày giờ (`ngày khảo sát`, `Submitted At`, `Deleted At`): giữ nguyên format `yyyy-MM-dd HH:mm:ss`.
 
+### Xuất thông số DIALux (thêm 2026-09-27)
+- Nút **📐 Xuất thông số DIALux** trên `report.html` (dùng khoảng ngày của phần "Xuất dữ liệu thô"). Gọi `export_raw` cho `thay_den`, `tang_cuong_den`, `ngam_hoa`, gộp theo **phường + tuyến** (so khớp bỏ dấu), mỗi thông số lấy giá trị **mới nhất có điền**. 1 dòng/tuyến, cột "Thiếu thông số" = trường cốt lõi còn thiếu (xanh = Đủ, vàng = thiếu). Danh sách cột trong `DIALUX_FIELDS` (report.js).
+
 ### Logic server-side `action=report`
 1. Verify role có quyền `report`.
 2. Scan các sheet trong `types` (mặc định 15 sheet), filter rows:
