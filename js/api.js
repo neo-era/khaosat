@@ -55,6 +55,17 @@ export async function apiCheckDup(type, { tuyen, phuong, lat, lng }) {
   return postJson({ action: 'check_dup', token: requireToken(), type, tuyen, phuong, lat, lng });
 }
 
+/** Sổ biên bản hiện trường (quyền report). */
+export async function apiSobbhtList(from, to) {
+  return postJson({ action: 'sobbht_list', token: requireToken(), from, to });
+}
+export async function apiSobbhtSave(items) {
+  return postJson({ action: 'sobbht_save', token: requireToken(), items });
+}
+export async function apiSobbhtDelete(id) {
+  return postJson({ action: 'sobbht_delete', token: requireToken(), id });
+}
+
 /** Đổi trạng thái xử lý cho 1 hoặc nhiều bản ghi cùng loại (quyền edit). */
 export async function apiSetStatus(type, stts, status, note = '') {
   return postJson({ action: 'set_status', token: requireToken(), type, stts, status, note });
