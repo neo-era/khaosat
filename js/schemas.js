@@ -435,6 +435,10 @@ export const SCHEMAS = {
   }
 };
 
+/** Trạng thái xử lý — ĐỒNG BỘ XU_LY_STATUSES / XU_LY_SKIP_TYPES trong Code.gs. */
+export const XU_LY_STATUSES = ['Chờ thiết kế', 'Đã thiết kế', 'Đã thi công', 'Nghiệm thu', 'Không xử lý'];
+export const XU_LY_SKIP_TYPES = ['thao_go_bang_ron'];
+
 /** Trả mảng các key (= 16 loại). Dùng cho trang chủ render grid. */
 export const SCHEMA_KEYS = Object.keys(SCHEMAS);
 

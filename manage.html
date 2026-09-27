@@ -34,6 +34,9 @@
           <option value="deleted">🗑️ Đã xoá</option>
           <option value="all">📦 Tất cả</option>
         </select>
+        <select id="filter-xuly" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+          <option value="">🛠️ Mọi trạng thái xử lý</option>
+        </select>
         <input id="filter-from" type="date" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
         <input id="filter-to" type="date" class="px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
       </div>
@@ -53,7 +56,7 @@
     </div>
 
     <div class="bg-white rounded-lg shadow-sm overflow-x-auto">
-      <table class="w-full text-sm min-w-[800px]">
+      <table class="w-full text-sm min-w-[920px]">
         <thead class="bg-gray-100 border-b">
           <tr>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">STT</th>
@@ -62,6 +65,7 @@
             <th class="px-2 py-2 text-left text-xs font-semibold text-gray-700">Người khảo sát</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Ngày</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Ảnh</th>
+            <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Xử lý</th>
             <th class="px-2 py-2 text-center text-xs font-semibold text-gray-700">Trạng thái</th>
             <th class="px-2 py-2 text-right text-xs font-semibold text-gray-700">Thao tác</th>
           </tr>

@@ -55,6 +55,11 @@ export async function apiCheckDup(type, { tuyen, phuong, lat, lng }) {
   return postJson({ action: 'check_dup', token: requireToken(), type, tuyen, phuong, lat, lng });
 }
 
+/** Đổi trạng thái xử lý cho 1 hoặc nhiều bản ghi cùng loại (quyền edit). */
+export async function apiSetStatus(type, stts, status, note = '') {
+  return postJson({ action: 'set_status', token: requireToken(), type, stts, status, note });
+}
+
 export async function apiList({ type, username, stt, from, to, includeDeleted, status } = {}) {
   return postJson({
     action: 'list',
