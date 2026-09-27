@@ -642,6 +642,8 @@ export function initRawExport() {
   }
   document.getElementById('btn-raw-xlsx').onclick = exportRawXlsx;
   document.getElementById('btn-raw-csv').onclick  = exportRawCsv;
+  const bd = document.getElementById('btn-dialux-xlsx');
+  if (bd) bd.onclick = exportDialuxXlsx;
 }
 
 function getRawParams() {
@@ -691,6 +693,102 @@ async function exportRawXlsx() {
     showToast('Lỗi xuất Excel: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
+  }
+}
+
+// =====================================================================
+// XUẤT THÔNG SỐ DIALUX — 1 dòng / tuyến (gộp 3 loại khảo sát tuyến)
+// =====================================================================
+
+const DIALUX_TYPES = ['thay_den', 'tang_cuong_den', 'ngam_hoa'];
+// [tiêu đề cột xuất, tên cột trong sheet, cốt lõi?] — thứ tự = thứ tự nhập vào DIALux
+const DIALUX_FIELDS = [
+  ['Độ rộng đường (m)', 'Độ rộng đường', true],
+  ['Số làn xe', 'Số làn xe', false],
+  ['Dãy phân cách', 'Dãy phân cách', false],
+  ['Bề rộng dải phân cách (m)', 'Bề rộng dải phân cách', false],
+  ['Vỉa hè trái (m)', 'Bề rộng vỉa hè trái', false],
+  ['Vỉa hè phải (m)', 'Bề rộng vỉa hè phải', false],
+  ['Loại mặt đường', 'Loại mặt đường', false],
+  ['Kiểu bố trí trụ', 'Kiểu bố trí trụ', true],
+  ['Khoảng cách trụ (m)', 'Khoảng cách trụ', true],
+  ['Chiều cao trụ (m)', 'Chiều cao trụ', true],
+  ['Vươn cần (m)', 'Chiều dài vươn cần', false],
+  ['Góc nghiêng cần (°)', 'Góc nghiêng cần', false],
+  ['Cách mép đường (m)', 'Khoảng cách trụ tới mép đường', false],
+  ['Số đèn / trụ', 'Số đèn trên 1 trụ', false],
+  ['Loại đèn hiện hữu', 'Loại đèn hiện hữu', false],
+  ['Công suất đèn hiện hữu', 'Công suất đèn hiện hữu', false]
+];
+
+function foldKey(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase().replace(/^\s*duong\s+/, '').replace(/\s+/g, ' ').trim();
+}
+
+async function exportDialuxXlsx() {
+  const btn = document.getElementById('btn-dialux-xlsx');
+  const { from, to } = getRawParams();
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Đang tải dữ liệu...';
+  try {
+    const res = await apiExportRaw({ types: DIALUX_TYPES, from, to, status: 'active' });
+    const groups = new Map();
+    for (const { type, headers, rows } of res.results || []) {
+      const idx = h => headers.indexOf(h);
+      const iSub = idx('Submitted At'), iTd = idx('Tuyến đường'), iPh = idx('Phường');
+      for (const r of rows) {
+        const tuyen = String(r[iTd] || '').trim();
+        if (!tuyen) continue;
+        const key = foldKey(r[iPh]) + '|' + foldKey(tuyen);
+        const t = new Date(r[iSub]).getTime() || 0;
+        let g = groups.get(key);
+        if (!g) groups.set(key, g = { phuong: r[iPh] || '', tuyen, types: new Set(), count: 0, latest: null, vals: {} });
+        g.count++;
+        g.types.add(SCHEMAS[type].name);
+        if (!g.latest || t > g.latest.t) g.latest = { t, stt: r[idx('STT')] };
+        // Mỗi thông số: giữ giá trị của lần khảo sát MỚI NHẤT có điền
+        for (const [, col] of DIALUX_FIELDS) {
+          const i = idx(col);
+          const v = i >= 0 ? r[i] : '';
+          if (v === '' || v === null || v === undefined) continue;
+          if (!g.vals[col] || t > g.vals[col].t) g.vals[col] = { v, t };
+        }
+      }
+    }
+    if (!groups.size) { showToast('Không có bản khảo sát tuyến nào trong khoảng thời gian này', 'warning'); return; }
+
+    const list = [...groups.values()].sort((a, b) =>
+      String(a.phuong).localeCompare(String(b.phuong), 'vi') || a.tuyen.localeCompare(b.tuyen, 'vi'));
+    const rows = list.map((g, i) => {
+      const missing = DIALUX_FIELDS.filter(([, col, core]) => core && !g.vals[col]).map(([h]) => h.replace(/ \(.*\)$/, ''));
+      const d = g.latest && g.latest.t ? new Date(g.latest.t) : null;
+      return [
+        i + 1, g.phuong, g.tuyen, g.count, [...g.types].join(', '), g.latest ? String(g.latest.stt) : '',
+        d ? d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
+        ...DIALUX_FIELDS.map(([, col]) => (g.vals[col] ? g.vals[col].v : '')),
+        missing.length ? missing.join(', ') : 'Đủ'
+      ];
+    });
+    const headers = ['TT', 'Phường/Xã', 'Tuyến đường', 'Số lần KS', 'Loại KS', 'Mã bản ghi mới nhất', 'Ngày KS mới nhất',
+      ...DIALUX_FIELDS.map(([h]) => h), 'Thiếu thông số'];
+    const iMiss = headers.length - 1;
+    const du = rows.filter(r => r[iMiss] === 'Đủ').length;
+
+    const wb = await newWorkbook();
+    addReportSheet(wb, 'Thông số DIALux', {
+      title: 'THÔNG SỐ TUYẾN ĐƯỜNG PHỤC VỤ TÍNH TOÁN DIALUX',
+      subtitle: periodLine(from, to) + ` · ${rows.length} tuyến, ${du} tuyến đủ thông số cốt lõi`,
+      headers, rows, freezeCols: 3,
+      cellFill: (v, r, c) => (c === iMiss ? (v === 'Đủ' ? 'FFBBF7D0' : 'FFFEF08A') : null)
+    });
+    await downloadWorkbook(wb, 'thong-so-dialux-' + (from || 'all') + '_' + (to || 'all') + '.xlsx');
+  } catch (e) {
+    showToast('Lỗi xuất DIALux: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
   }
 }
 
