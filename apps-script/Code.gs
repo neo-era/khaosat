@@ -1727,6 +1727,7 @@ function doPost(e) {
       case 'photo_base64':  return jsonResponse(handlePhotoBase64(body));
       case 'change_password': return jsonResponse(handleChangePassword(body));
       case 'reset_own_password': return jsonResponse(handleResetOwnPassword(body));
+      case 'check_dup':     return jsonResponse(handleCheckDup(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -1878,6 +1879,81 @@ function handleSubmit(body) {
   }
 
   return { ok: true, stt: stt, sheet: sheetName, timestamp: submittedAt };
+}
+
+// =====================================================================
+// CẢNH BÁO TRÙNG — form hỏi trước khi lưu bản mới (chỉ cảnh báo, không chặn)
+// =====================================================================
+
+const DUP_DAYS = 90;     // user chốt 2026-09-27
+const DUP_METERS = 30;
+
+/** Chuẩn hoá tên để so khớp: bỏ dấu, thường hoá, bỏ chữ "Đường" đứng đầu, gộp khoảng trắng. */
+function foldViGs_(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase()
+    .replace(/^\s*duong\s+/, '').replace(/\s+/g, ' ').trim();
+}
+
+/** Tọa độ của 1 bản ghi: cột vĩ độ/kinh độ, không có thì tách từ link Google Map. */
+function rowLatLng_(row) {
+  const lat = Number(row['vĩ độ']), lng = Number(row['kinh độ']);
+  if (lat && lng) return [lat, lng];
+  const m = String(row['link'] || row['Link Google Map'] || '').match(/q=(-?[\d.]+),(-?[\d.]+)/);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+function distanceM_(a, b) {
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(b[0] - a[0]), dLng = rad(b[1] - a[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * action=check_dup — body { token, type, tuyen, phuong, lat?, lng? }
+ * Trùng = cùng loại, trong DUP_DAYS ngày, (cùng tuyến + cùng phường) HOẶC cách < DUP_METERS m.
+ * Quét cả bản của người khác (user1 bình thường chỉ xem được của mình) nhưng chỉ trả vài
+ * trường tóm tắt, không trả toàn bộ bản ghi.
+ */
+function handleCheckDup(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'submit')) return { ok: false, error: 'forbidden' };
+  const type = body.type;
+  if (!SHEET_MAP[type]) return { ok: false, error: 'Loại không hợp lệ' };
+
+  const tuyen = foldViGs_(body.tuyen), phuong = foldViGs_(body.phuong);
+  const lat = Number(body.lat), lng = Number(body.lng);
+  const pt = lat && lng && isFinite(lat) && isFinite(lng) ? [lat, lng] : null;
+  const cutoff = Date.now() - DUP_DAYS * 86400000;
+
+  const matches = [];
+  readSheetRows(type, false).forEach(row => {
+    let d = row['Submitted At'] ? new Date(row['Submitted At']) : null;
+    if (!d || isNaN(d)) d = parseDateLoose_(row['Ngày khảo sát'] || row['ngày khảo sát']);
+    if (!d || isNaN(d) || d.getTime() < cutoff) return;
+
+    let reason = null, dist = null;
+    if (tuyen && phuong && foldViGs_(row['Tuyến đường']) === tuyen && foldViGs_(row['Phường']) === phuong) {
+      reason = 'tuyen';
+    }
+    const p2 = pt && rowLatLng_(row);
+    if (p2) {
+      dist = Math.round(distanceM_(pt, p2));
+      if (!reason && dist <= DUP_METERS) reason = 'gps';
+    }
+    if (!reason) return;
+    matches.push({
+      stt: String(row['STT']), tuyen: String(row['Tuyến đường'] || ''), phuong: String(row['Phường'] || ''),
+      nguoi_ks: String(row['Người khảo sát'] || row['Username'] || ''),
+      ngay: Utilities.formatDate(d, TZ, 'dd/MM/yyyy'), reason: reason, dist: dist, t: d.getTime()
+    });
+  });
+  matches.sort((a, b) => b.t - a.t);
+  return {
+    ok: true, days: DUP_DAYS, total: matches.length,
+    matches: matches.slice(0, 5).map(m => { delete m.t; return m; })
+  };
 }
 
 function handleList(body) {

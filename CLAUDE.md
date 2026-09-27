@@ -976,6 +976,11 @@ async function compressImage(file, maxDim = 1600, quality = 0.8) {
 
 ---
 
+### 9b. Cảnh báo trùng khi lưu (thêm 2026-09-27)
+- Bấm Lưu bản MỚI → form gọi `action=check_dup` `{type, tuyen, phuong, lat, lng}`. Server (`handleCheckDup`) quét bản còn hiệu lực cùng loại trong **90 ngày** (`DUP_DAYS`): trùng nếu **cùng tuyến + cùng phường** (so khớp bỏ dấu, bỏ chữ "Đường" đầu) HOẶC **cách < 30 m** (`DUP_METERS`; tọa độ lấy từ cột vĩ độ/kinh độ hoặc tách từ link).
+- Quét cả bản của người khác nhưng chỉ trả tóm tắt (mã, tuyến, phường, ngày, người KS), tối đa 5 bản.
+- **Chỉ cảnh báo** (confirm "Vẫn lưu bản mới?"), không chặn. Mất mạng / server lỗi / quá 8 giây → bỏ qua kiểm tra. Sửa bản ghi không kiểm tra.
+
 ## 10. Trang chủ `index.html`
 
 Lưới 15 thẻ, mỗi thẻ:

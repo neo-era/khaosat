@@ -50,6 +50,11 @@ export async function apiSubmit(type, data, photos = []) {
   });
 }
 
+/** Hỏi server bản mới có thể trùng bản đã khảo sát trong 90 ngày không (chỉ cảnh báo). */
+export async function apiCheckDup(type, { tuyen, phuong, lat, lng }) {
+  return postJson({ action: 'check_dup', token: requireToken(), type, tuyen, phuong, lat, lng });
+}
+
 export async function apiList({ type, username, stt, from, to, includeDeleted, status } = {}) {
   return postJson({
     action: 'list',
