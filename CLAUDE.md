@@ -1309,6 +1309,15 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 
 ---
 
+## 15c. Sổ biên bản hiện trường `sobbht.html` (admin / user) — bổ sung 2026-09-27
+
+- Sheet riêng **`sobbht`** (tự tạo, định dạng chữ `@` để số/ngày không bị Sheets tự đổi): `id · Số BBHT · Ngày (yyyy-MM-dd) · Thời gian · Phường · Quận · Người làm · Giám sát · Ghi chú · Số điểm KS · Mã bản ghi · Người nhập · Ngày nhập · Nguồn` (`app` / `excel-cu`). Không đụng 16 sheet khảo sát.
+- **Số BBHT do người lập tự ghi** — app KHÔNG cấp số (user chốt).
+- Endpoint (quyền `report`): `sobbht_list {from?,to?}` · `sobbht_save {items:[...]}` (có `id` → sửa, không → thêm; dùng chung cho thêm tay / "Lưu vào sổ" / nhập sổ cũ) · `sobbht_delete {id}` (xoá hẳn, ghi Audit kèm nội dung).
+- Trang `bbht.html` có nút **📒 Lưu vào sổ BBHT** → mở `sobbht.html` với form điền sẵn (số BB đã gõ, ngày/giờ trên biên bản, phường, người làm = người KS, **Giám sát = "Đại diện Trung tâm" (ed-dd1-ten)**, số điểm, mã bản ghi). Chuyển qua `localStorage['sobbht_prefill']`, dùng 1 lần, hết hạn 10 phút.
+- **Nhập sổ Excel cũ** (sheet "16. BBHT Ký App" trong `khao sat tang cuong den.xlsx`): xem trước rồi mới ghi. Ô ngày kiểu Date trong sổ cũ bị Excel **đảo tháng/ngày** → đối chiếu tháng trong Số BBHT ("01/07/Q5" = tháng 7) để sửa (tô vàng). Quận ghi đầy đủ ("8" → "Quận 8", "PN" → "Quận Phú Nhuận"); Giám sát lấy từ bảng phụ cột I:L (Quận → Giám sát). Bỏ qua dòng đã có (cùng Số BBHT + Ngày).
+- Xuất Excel có định dạng (`excel-export.js`).
+
 ## 16. PWA
 
 `manifest.json`:

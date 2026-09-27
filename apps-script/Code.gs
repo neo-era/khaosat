@@ -1737,6 +1737,9 @@ function doPost(e) {
       case 'reset_own_password': return jsonResponse(handleResetOwnPassword(body));
       case 'check_dup':     return jsonResponse(handleCheckDup(body));
       case 'set_status':    return jsonResponse(handleSetStatus(body));
+      case 'sobbht_list':   return jsonResponse(handleSobbhtList(body));
+      case 'sobbht_save':   return jsonResponse(handleSobbhtSave(body));
+      case 'sobbht_delete': return jsonResponse(handleSobbhtDelete(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -2143,6 +2146,134 @@ function handleSetStatus(body) {
   });
   return { ok: failed.length === 0, done: done, failed: failed, status: status, stamp: stamp,
            error: failed.length ? failed.map(f => f.stt + ': ' + f.error).join('; ') : undefined };
+}
+
+// =====================================================================
+// SỔ BIÊN BẢN HIỆN TRƯỜNG — sheet `sobbht` (thêm 2026-09-27)
+// Số BBHT do người lập tự ghi (app không cấp số). Quyền: report (admin/user).
+// =====================================================================
+
+const SOBBHT_SHEET = 'sobbht';
+const SOBBHT_HEADER = ['id', 'Số BBHT', 'Ngày', 'Thời gian', 'Phường', 'Quận', 'Người làm', 'Giám sát',
+                       'Ghi chú', 'Số điểm KS', 'Mã bản ghi', 'Người nhập', 'Ngày nhập', 'Nguồn'];
+const SOBBHT_EDITABLE = ['Số BBHT', 'Ngày', 'Thời gian', 'Phường', 'Quận', 'Người làm', 'Giám sát',
+                         'Ghi chú', 'Số điểm KS', 'Mã bản ghi'];
+
+function getSobbhtSheet_() {
+  const ss = getSpreadsheet();
+  let sh = ss.getSheetByName(SOBBHT_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(SOBBHT_SHEET);
+    sh.getRange(1, 1, 1, SOBBHT_HEADER.length).setValues([SOBBHT_HEADER]);
+    sh.setFrozenRows(1);
+    // Để dạng chữ: "2025-07-10", "01/07/Q5" không bị Sheets tự đổi thành ngày
+    sh.getRange(2, 1, sh.getMaxRows() - 1, SOBBHT_HEADER.length).setNumberFormat('@');
+  }
+  return sh;
+}
+
+function sobbhtRows_(sh) {
+  const data = sh.getDataRange().getValues();
+  const header = data[0].map(String);
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i].some(v => v !== '' && v !== null)) continue;
+    const o = { _row: i + 1 };
+    header.forEach((h, j) => {
+      const v = data[i][j];
+      o[h] = v instanceof Date ? Utilities.formatDate(v, TZ, h === 'Ngày' ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm') : v;
+    });
+    rows.push(o);
+  }
+  return { header: header, rows: rows };
+}
+
+/** action=sobbht_list — body { token, from?, to? } (yyyy-MM-dd). Mới nhất trước. */
+function handleSobbhtList(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'report')) return { ok: false, error: 'forbidden' };
+  const { rows } = sobbhtRows_(getSobbhtSheet_());
+  const from = String(body.from || ''), to = String(body.to || '');
+  const items = rows
+    .filter(r => (!from || String(r['Ngày']) >= from) && (!to || String(r['Ngày']) <= to))
+    .map(r => { const o = Object.assign({}, r); delete o._row; return o; })
+    .sort((a, b) => String(b['Ngày']).localeCompare(String(a['Ngày'])) || String(b['Ngày nhập']).localeCompare(String(a['Ngày nhập'])));
+  return { ok: true, items: items };
+}
+
+/**
+ * action=sobbht_save — body { token, items: [{ id?, 'Số BBHT', 'Ngày', ... , nguon? }] }
+ * Có id đã tồn tại → sửa các cột SOBBHT_EDITABLE; không → thêm dòng mới.
+ * Dùng chung cho: thêm tay, "Lưu vào sổ" từ trang Biên bản, nhập sổ Excel cũ (nhiều dòng).
+ */
+function handleSobbhtSave(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'report')) return { ok: false, error: 'forbidden' };
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!items.length) return { ok: false, error: 'Không có dòng nào để lưu' };
+  for (const it of items) {
+    // Bắt buộc khi thêm mới; khi sửa chỉ kiểm nếu có gửi Ngày
+    if ((!it.id || it['Ngày'] !== undefined) && !/^\d{4}-\d{2}-\d{2}$/.test(String(it['Ngày'] || ''))) {
+      return { ok: false, error: 'Ngày phải dạng yyyy-MM-dd: ' + it['Ngày'] };
+    }
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = getSobbhtSheet_();
+    const { header, rows } = sobbhtRows_(sh);
+    const byId = {};
+    rows.forEach(r => { byId[String(r.id)] = r; });
+    const now = nowVnString();
+    const created = [], updated = [], newRows = [];
+    items.forEach(it => {
+      const old = it.id && byId[String(it.id)];
+      if (old) {
+        SOBBHT_EDITABLE.forEach(h => {
+          if (it[h] === undefined) return;
+          const j = header.indexOf(h);
+          if (j >= 0) sh.getRange(old._row, j + 1).setValue(it[h] === null ? '' : String(it[h]));
+        });
+        updated.push(String(it.id));
+      } else {
+        const id = Utilities.getUuid().slice(0, 8);
+        const rec = { id: id, 'Người nhập': auth.username, 'Ngày nhập': now, 'Nguồn': String(it.nguon || 'app') };
+        SOBBHT_EDITABLE.forEach(h => { rec[h] = it[h] === undefined || it[h] === null ? '' : String(it[h]); });
+        newRows.push(header.map(h => rec[h] !== undefined ? rec[h] : ''));
+        created.push(id);
+      }
+    });
+    if (newRows.length) {
+      const start = sh.getLastRow() + 1;
+      sh.getRange(start, 1, newRows.length, header.length).setNumberFormat('@').setValues(newRows);
+    }
+    appendAuditLog('sobbht_save', auth.username, SOBBHT_SHEET, String(created.length + updated.length),
+      'thêm ' + created.length + ', sửa ' + updated.length + (items[0].nguon ? ' · nguồn ' + items[0].nguon : ''));
+    return { ok: true, created: created, updated: updated };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** action=sobbht_delete — body { token, id }. Xoá hẳn dòng, ghi Audit kèm nội dung để tra lại. */
+function handleSobbhtDelete(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'report')) return { ok: false, error: 'forbidden' };
+  const id = String(body.id || '');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = getSobbhtSheet_();
+    const { rows } = sobbhtRows_(sh);
+    const r = rows.find(x => String(x.id) === id);
+    if (!r) return { ok: false, error: 'Không tìm thấy dòng ' + id };
+    sh.deleteRow(r._row);
+    appendAuditLog('sobbht_delete', auth.username, SOBBHT_SHEET, id,
+      [r['Số BBHT'], r['Ngày'], r['Phường'], r['Người làm']].join(' · '));
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function handleRestore(body) {

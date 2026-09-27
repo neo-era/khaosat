@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <link rel="manifest" href="manifest.json">
+  <title>Sổ biên bản hiện trường — SAPULICO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS chỉ để ĐỌC file sổ Excel cũ khi nhập; xuất Excel dùng ExcelJS (js/excel-export.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <header class="sticky top-0 bg-white shadow-sm z-40">
+    <div class="max-w-7xl mx-auto px-3 py-2 flex items-center gap-2">
+      <a href="index.html" class="text-xl flex items-center justify-center rounded hover:bg-gray-100 text-gray-600"
+         style="min-height:44px; min-width:44px;">←</a>
+      <span class="text-sm font-bold text-blue-900 flex-1">📒 Sổ biên bản hiện trường</span>
+      <span id="header-user" class="text-xs text-gray-500 hidden sm:block truncate max-w-[180px]"></span>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-3 py-4 pb-24">
+
+    <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Từ ngày</label>
+          <input id="f-from" type="date" class="w-full px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+        </div>
+        <div>
+          <label class="block text-xs text-gray-600 mb-1">Đến ngày</label>
+          <input id="f-to" type="date" class="w-full px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+        </div>
+        <div class="col-span-2">
+          <label class="block text-xs text-gray-600 mb-1">Tìm (số BBHT, phường, người làm, giám sát, ghi chú)</label>
+          <input id="f-search" type="text" placeholder="🔍 Gõ để lọc..." class="w-full px-3 py-2 border rounded-lg text-sm" style="min-height:44px">
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button id="btn-load" class="bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm" style="min-height:44px">🔄 Tải sổ</button>
+        <button id="btn-add" class="bg-green-600 text-white px-4 py-2 rounded-lg font-medium text-sm" style="min-height:44px">＋ Thêm biên bản</button>
+        <button id="btn-xlsx" class="bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm" style="min-height:44px">📊 Xuất Excel</button>
+        <label class="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium text-sm cursor-pointer flex items-center" style="min-height:44px">
+          📥 Nhập sổ Excel cũ
+          <input id="f-import" type="file" accept=".xlsx,.xls" class="hidden">
+        </label>
+      </div>
+      <p class="text-xs text-gray-400 mt-2">Số BBHT do người lập tự ghi. Lập biên bản ở trang "Biên bản hiện trường" rồi bấm "Lưu vào sổ" để điền sẵn.</p>
+    </div>
+
+    <!-- Xem trước khi nhập sổ cũ -->
+    <div id="import-box" class="hidden bg-yellow-50 border border-yellow-300 rounded-xl p-3 mb-3">
+      <div id="import-summary" class="text-sm text-gray-800 mb-2"></div>
+      <div class="overflow-x-auto max-h-96 overflow-y-auto bg-white rounded border">
+        <table class="w-full text-xs min-w-[900px]" id="import-table"></table>
+      </div>
+      <div class="flex gap-2 mt-2">
+        <button id="btn-import-run" class="bg-green-700 text-white px-4 py-2 rounded-lg font-medium text-sm" style="min-height:44px">✅ Nhập vào sổ</button>
+        <button id="btn-import-cancel" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm" style="min-height:44px">Huỷ</button>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between mb-2">
+      <span id="count" class="text-xs text-gray-600"></span>
+      <span id="loading" class="hidden text-xs text-gray-500">⏳ Đang tải...</span>
+    </div>
+    <div class="bg-white rounded-lg shadow-sm overflow-x-auto">
+      <table class="w-full text-sm min-w-[900px]">
+        <thead class="bg-gray-100 border-b">
+          <tr class="text-xs text-gray-700">
+            <th class="px-2 py-2 text-left">Số BBHT</th>
+            <th class="px-2 py-2 text-left">Ngày</th>
+            <th class="px-2 py-2 text-left">Thời gian</th>
+            <th class="px-2 py-2 text-left">Phường</th>
+            <th class="px-2 py-2 text-left">Quận</th>
+            <th class="px-2 py-2 text-left">Người làm</th>
+            <th class="px-2 py-2 text-left">Giám sát</th>
+            <th class="px-2 py-2 text-right">Số điểm</th>
+            <th class="px-2 py-2 text-left">Ghi chú</th>
+            <th class="px-2 py-2 text-right">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Form thêm / sửa -->
+  <div id="modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center">
+    <form id="form" class="bg-white w-full sm:max-w-xl rounded-t-2xl sm:rounded-2xl p-4 max-h-[92vh] overflow-y-auto">
+      <h3 id="form-title" class="font-semibold text-blue-900 mb-3">Thêm biên bản</h3>
+      <input type="hidden" name="id">
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <label class="col-span-1">Số BBHT<input name="Số BBHT" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px" placeholder="vd 01/09/Q5"></label>
+        <label class="col-span-1">Ngày *<input name="Ngày" type="date" required class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px"></label>
+        <label class="col-span-2">Thời gian<input name="Thời gian" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px" placeholder="vd 8h00-11h30"></label>
+        <label class="col-span-2">Phường<input name="Phường" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px" placeholder="vd Tân Định, Bến Thành"></label>
+        <label class="col-span-2">Quận (cũ)<input name="Quận" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px" placeholder="tự điền theo phường, sửa được"></label>
+        <label class="col-span-1">Người làm<input name="Người làm" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px"></label>
+        <label class="col-span-1">Giám sát<input name="Giám sát" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px"></label>
+        <label class="col-span-1">Số điểm KS<input name="Số điểm KS" type="number" min="0" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px"></label>
+        <label class="col-span-1">Mã bản ghi<input name="Mã bản ghi" class="w-full mt-1 px-3 border rounded-lg" style="min-height:44px" placeholder="TD-..., TCD-..."></label>
+        <label class="col-span-2">Ghi chú<textarea name="Ghi chú" rows="2" class="w-full mt-1 px-3 py-2 border rounded-lg"></textarea></label>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button type="submit" class="flex-1 bg-blue-700 text-white rounded-lg font-medium" style="min-height:44px">💾 Lưu vào sổ</button>
+        <button type="button" id="btn-cancel" class="flex-1 bg-gray-200 text-gray-800 rounded-lg font-medium" style="min-height:44px">Huỷ</button>
+      </div>
+    </form>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from './js/auth.js';
+    import { initSobbht } from './js/sobbht.js';
+    import { initHelp } from './js/help.js';
+
+    const user = requireAuth('report');
+    document.getElementById('header-user').textContent = user.full_name + ' · ' + user.role;
+    initSobbht(user);
+    initHelp('admin');
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

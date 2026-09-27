@@ -105,6 +105,7 @@ export function initBbht(user) {
   document.getElementById('btn-load').onclick = loadData;
   document.getElementById('btn-export-pdf').onclick = exportPdf;
   document.getElementById('btn-export-word').onclick = exportWord;
+  document.getElementById('btn-to-so').onclick = luuVaoSo;
 
   // Tick/bỏ tick phụ lục ảnh → vẽ lại ngay để xem trước đúng cái sắp xuất ra
   document.getElementById('chk-photos').onchange = () => {
@@ -121,6 +122,35 @@ export function initBbht(user) {
   };
   syncSign('ed-dd1-ten', 'ed-sign-1');
   syncSign('ed-dd2-ten', 'ed-sign-2');
+}
+
+/**
+ * Mở trang Sổ BBHT với form điền sẵn từ biên bản đang lập (số, ngày, giờ, phường,
+ * người làm, giám sát = đại diện Trung tâm, số điểm KS, mã bản ghi). Người lập kiểm tra rồi bấm Lưu.
+ */
+function luuVaoSo() {
+  const ed = id => (document.getElementById(id)?.textContent || '').trim();
+  const pad = x => String(x).padStart(2, '0');
+  const d = ed('ed-ngay-ks'), m = ed('ed-thang-ks'), y = ed('ed-nam-ks');
+  const ngay = /^\d{1,2}$/.test(d) && /^\d{1,2}$/.test(m) && /^\d{4}$/.test(y) ? `${y}-${pad(m)}-${pad(d)}` : state.from;
+  const gio = [ed('ed-gio-start'), ed('ed-gio-end')].filter(Boolean).join(' - ');
+  const uniq = arr => [...new Set(arr.map(x => String(x || '').trim()).filter(Boolean))];
+  const phuongs = state.phuong ? [state.phuong] : uniq(state.rows.map(r => r['Phường']));
+  const prefill = {
+    'Số BBHT': ed('ed-so-bb'),
+    'Ngày': ngay,
+    'Thời gian': gio,
+    'Phường': phuongs.join(', '),
+    'Quận': state.phuong ? '' : (state.quan || uniq(state.rows.map(r => r['Quận'])).join(', ')),
+    'Người làm': uniq(state.rows.map(r => r['Người khảo sát'])).join(', '),
+    'Giám sát': ed('ed-dd1-ten'),
+    'Số điểm KS': state.rows.length,
+    'Mã bản ghi': state.rows.map(r => r['STT']).join(', '),
+    'Ghi chú': ed('ed-dia-diem')
+  };
+  // localStorage (không phải sessionStorage): app cài dạng PWA mở tab mới không mang theo sessionStorage
+  try { localStorage.setItem('sobbht_prefill', JSON.stringify({ at: Date.now(), data: prefill })); } catch (e) { /* bỏ qua */ }
+  window.open('sobbht.html', '_blank');
 }
 
 async function loadData() {
@@ -170,6 +200,7 @@ async function loadData() {
     document.getElementById('preview-wrap').classList.remove('hidden');
     document.getElementById('btn-export-pdf').classList.remove('hidden');
     document.getElementById('btn-export-word').classList.remove('hidden');
+    document.getElementById('btn-to-so').classList.remove('hidden');
     const soAnh = allRows.reduce((s, r) => s + r._photos.length, 0);
     document.getElementById('data-summary').textContent =
       `${allRows.length} bản ghi · ${soAnh} ảnh — ${from} → ${to}` +
