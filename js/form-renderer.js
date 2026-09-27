@@ -13,7 +13,7 @@ import { SCHEMAS } from './schemas.js';
 import { PHUONG_XA, TDK_LIST, TDK_BY_PHUONG } from './dia-ban.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
-import { apiSubmit, apiUpdate, apiList, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
+import { apiSubmit, apiUpdate, apiList, apiCheckDup, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
 import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
 import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
@@ -1235,6 +1235,43 @@ function validateForm() {
   return errors;
 }
 
+/**
+ * Hỏi server có bản nào cùng tuyến/phường hoặc cách < 30 m trong 90 ngày không.
+ * Chỉ cảnh báo: người khảo sát vẫn chọn lưu được. Mất mạng / server chưa triển khai
+ * action check_dup / quá 8 giây → bỏ qua kiểm tra, KHÔNG chặn việc lưu.
+ */
+async function confirmNotDuplicate() {
+  if (!navigator.onLine) return true;
+  const data = collectFormData();
+  const btn = document.getElementById('btn-submit');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Kiểm tra trùng...';
+  try {
+    const q = {
+      tuyen: data['Tuyến đường'] || '', phuong: data['Phường'] || '',
+      lat: state.gps.status === 'ok' ? state.gps.lat : '', lng: state.gps.status === 'ok' ? state.gps.lng : ''
+    };
+    const res = await Promise.race([
+      apiCheckDup(state.schemaKey, q),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+    ]);
+    const list = res.matches || [];
+    if (!list.length) return true;
+    const lines = list.map(m => `• #${m.stt} — ${m.tuyen}${m.phuong ? ', ' + m.phuong : ''} — ${m.ngay} — ${m.nguoi_ks}` +
+      (m.reason === 'gps' ? ` (cách ${m.dist} m)` : ''));
+    const more = res.total > list.length ? `\n… và ${res.total - list.length} bản khác` : '';
+    return confirm(`⚠️ Có thể đã khảo sát rồi (${state.schema.name}, trong ${res.days} ngày qua):\n\n` +
+      lines.join('\n') + more + '\n\nVẫn lưu bản mới?');
+  } catch (e) {
+    console.warn('Bỏ qua kiểm tra trùng:', e.message);
+    return true;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 async function handleSubmit() {
   if (state.user.role === 'demo') {
     showToast('Tài khoản XEM THỬ không submit được', 'warning');
@@ -1256,6 +1293,8 @@ async function handleSubmit() {
     }
     return;
   }
+
+  if (!state.editMode && !(await confirmNotDuplicate())) return;
 
   const btn = document.getElementById('btn-submit');
   btn.disabled = true;
