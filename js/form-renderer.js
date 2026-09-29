@@ -19,6 +19,7 @@ import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
 import { showToast, escapeHtml, uuid, formatVnDate, debounce } from './utils.js';
 import { loadJsQR } from './lazy-lib.js';
+import { driveViewUrl } from './drive-url.js';
 
 // State module-scoped (1 form 1 lúc trên page)
 const state = {
@@ -174,7 +175,7 @@ async function loadEditRow() {
       if (f.type === 'image_url') {
         const url = String(val);
         if (url) {
-          state.imageUrls[f.key] = { status: 'done', url, fileName: '(ảnh cũ)', thumbnail: url };
+          state.imageUrls[f.key] = { status: 'done', url, fileName: '(ảnh cũ)', thumbnail: driveViewUrl(url) };
           renderImageFieldPreview(f.key);
         }
         continue;
@@ -186,7 +187,7 @@ async function loadEditRow() {
     // Pre-fill ảnh hiện trường vào state.photos
     const photoUrls = String(row['Ảnh (URLs)'] || '').split('|').filter(u => u);
     state.photos = photoUrls.map(url => ({
-      id: uuid(), file: null, status: 'done', url, thumbnail: url, error: null
+      id: uuid(), file: null, status: 'done', url, thumbnail: driveViewUrl(url), error: null
     }));
     renderPhotoGrid();
 
@@ -1146,6 +1147,7 @@ function renderImageFieldPreview(fieldKey) {
   thumb.className = 'w-20 h-20 rounded bg-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden';
   if (item.thumbnail) {
     const img = document.createElement('img');
+    img.referrerPolicy = 'no-referrer';
     img.src = item.thumbnail;
     img.className = 'w-full h-full object-cover';
     thumb.appendChild(img);
@@ -1199,6 +1201,7 @@ function renderPhotoGrid() {
     const cell = document.createElement('div');
     cell.className = 'relative aspect-square rounded-lg overflow-hidden bg-gray-100 border';
     const img = document.createElement('img');
+    img.referrerPolicy = 'no-referrer';
     img.src = p.thumbnail || '';
     img.className = 'w-full h-full object-cover';
     cell.appendChild(img);
@@ -1247,7 +1250,7 @@ async function maybeRestoreDraft() {
     if (f.key === 'nguoi_ks') continue;  // readonly
     if (f.type === 'image_url') {
       // Restore URL nếu đã có (vd draft auto-save sau khi upload xong)
-      state.imageUrls[f.key] = { status: 'done', url: val, fileName: '(ảnh từ draft)', thumbnail: val };
+      state.imageUrls[f.key] = { status: 'done', url: val, fileName: '(ảnh từ draft)', thumbnail: driveViewUrl(val) };
       renderImageFieldPreview(f.key);
       continue;
     }

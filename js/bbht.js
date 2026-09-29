@@ -1,7 +1,8 @@
 // js/bbht.js — Biên bản hiện trường: load dữ liệu + render + xuất Word/PDF
 import { apiList } from './api.js';
 import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
-import { inlineImages, restoreImages } from './photos.js';
+import { inlineImages, restoreImages, sizeImagesForWord } from './photos.js';
+import { driveViewUrl } from './drive-url.js';
 import { escapeHtml } from './utils.js';
 import { loadJsPDF, loadHtml2canvas } from './lazy-lib.js';
 
@@ -352,7 +353,7 @@ function renderPhotoAppendix(allRows, selTypes) {
       html += '<table class="bb-photo-table"><tr>';
       row._photos.forEach((u, i) => {
         if (i > 0 && i % 3 === 0) html += '</tr><tr>';
-        html += `<td><img data-src="${escapeHtml(u)}" src="${escapeHtml(u)}" alt="Ảnh ${i + 1}">`
+        html += `<td><img data-src="${escapeHtml(u)}" src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" alt="Ảnh ${i + 1}">`
               + `<div class="bb-photo-cap">Ảnh ${i + 1}</div></td>`;
       });
       // Chèn ô trống cho đủ 3 cột, tránh Word kéo giãn ô cuối
@@ -398,6 +399,7 @@ async function exportWord() {
       el.style.borderBottom = 'none';
       el.style.background = 'transparent';
     });
+    sizeImagesForWord(preview, clone, 175, 233);   // 3 cột, khớp max-width 175px của bản Word
     clone.querySelectorAll('img').forEach(img => img.removeAttribute('data-src'));
 
     const html = buildWordHtml(clone.innerHTML);

@@ -4,6 +4,7 @@ import { apiList, apiDelete, apiRestore, apiSetStatus } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES, XU_LY_SKIP_TYPES } from './schemas.js';
 import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDate, formatVnDateOnly } from './utils.js';
+import { driveViewUrl } from './drive-url.js';
 
 const state = {
   rows: [],
@@ -261,7 +262,8 @@ function openLightbox(urls) {
   grid.innerHTML = '';
   for (const u of urls) {
     const img = document.createElement('img');
-    img.src = u;
+    img.referrerPolicy = 'no-referrer';
+    img.src = driveViewUrl(u);
     img.className = 'w-full rounded-lg shadow';
     img.onclick = () => window.open(u, '_blank');
     grid.appendChild(img);

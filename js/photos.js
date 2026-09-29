@@ -10,6 +10,7 @@
 //   2. đi vòng qua Apps Script (action=photo_base64) — chậm hơn nhưng chắc chắn.
 
 import { apiPhotoBase64 } from './api.js';
+import { driveViewUrl } from './drive-url.js';
 
 /** Cache theo URL, dùng chung cả phiên — xuất file nhiều lần không tải lại. */
 const cache = new Map();
@@ -20,7 +21,9 @@ export function fetchAsDataUrl(url) {
   if (cache.has(url)) return cache.get(url);
   const p = (async () => {
     try {
-      const res = await fetch(url, { mode: 'cors' });
+      // Link Drive gốc bị Google chặn CORS → tải qua link lh3 (xem drive-url.js)
+      // no-referrer: lh3 hay trả 429 cho yêu cầu kèm Referer khi tải nhiều ảnh liền (đo 30/09/2026)
+      const res = await fetch(driveViewUrl(url), { mode: 'cors', referrerPolicy: 'no-referrer' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
       if (!blob.type.startsWith('image/')) throw new Error('không phải ảnh');
@@ -82,5 +85,24 @@ export function restoreImages(list) {
   (list || []).forEach(({ el, orig }) => {
     if (orig) el.src = orig;
     el.style.background = '';
+  });
+}
+
+/**
+ * Word bỏ qua CSS width/max-width của <img> → ảnh chụp điện thoại hiện đúng cỡ gốc (1200+ px),
+ * tràn khổ giấy, biên bản 2 trang thành 6 trang. Ghi width/height (px) thẳng lên thẻ ảnh của
+ * bản sao, theo tỉ lệ thật của ảnh gốc cùng vị trí, không vượt maxW × maxH.
+ */
+export function sizeImagesForWord(srcRoot, cloneRoot, maxW, maxH) {
+  // Ghép theo data-src (link gốc), không theo thứ tự: bản sao có thể đã bị xoá bớt phần tử
+  const bySrc = new Map();
+  srcRoot.querySelectorAll('img[data-src]').forEach(o => { if (o.naturalWidth) bySrc.set(o.dataset.src, o); });
+  cloneRoot.querySelectorAll('img[data-src]').forEach(img => {
+    const o = bySrc.get(img.getAttribute('data-src'));
+    const w = o && o.naturalWidth, h = o && o.naturalHeight;
+    if (!w || !h) { img.setAttribute('width', String(maxW)); return; }
+    const k = Math.min(maxW / w, maxH / h, 1);
+    img.setAttribute('width', String(Math.round(w * k)));
+    img.setAttribute('height', String(Math.round(h * k)));
   });
 }
