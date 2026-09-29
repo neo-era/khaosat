@@ -447,8 +447,8 @@ SCHEMAS.bao_cao_su_co = {
   maxPhotos: 5,
   fields: [
     { label: 'STT',                  key: 'stt',          type: 'stt_auto' },
-    { label: 'Số BCSC',              key: 'so_bcsc',      type: 'text',     required: false, hint: 'Người lập tự ghi, vd 03321225180/BCSC-CSKVB — để trống nếu chưa có' },
-    { label: 'Đơn vị báo cáo',       key: 'don_vi',       type: 'select',   required: true,  allowOther: true, options: ['CSKV Bắc'], default: 'CSKV Bắc' },
+    { label: 'Số BCSC',              key: 'so_bcsc',      type: 'text',     required: false, hint: 'Người lập tự ghi, vd 03321225180/BCSC-CSKVTT — để trống nếu chưa có' },
+    { label: 'Đơn vị báo cáo',       key: 'don_vi',       type: 'select',   required: true,  allowOther: true, options: ['Chiếu sáng khu vực Trung tâm', 'CSKVTT'], default: 'Chiếu sáng khu vực Trung tâm' },
     { label: 'Tủ điều khiển',        key: 'tdk',          type: 'tdk',      required: true },
     { label: 'Mã tủ',                key: 'ma_tu',        type: 'text',     required: false, hint: 'vd TM118.03' },
     { label: 'Tuyến đường',          key: 'tuyen_duong',  type: 'text',     required: true },

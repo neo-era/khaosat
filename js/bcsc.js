@@ -133,7 +133,7 @@ function openDoc(r) {
   state.current = r;
   const mau = readMau();
   const ng = parseNgay(r['Ngày giờ phát hiện']);
-  const donVi = `${r['Đơn vị báo cáo'] || 'CSKV Bắc'}- ${mau['ed-cty']}`;
+  const donVi = `${r['Đơn vị báo cáo'] || 'Chiếu sáng khu vực Trung tâm'} - ${mau['ed-cty']}`;
   const diaDiem = `Tủ ${r['Tủ điều khiển'] || ''}${r['Mã tủ'] ? ' (mã tủ ' + r['Mã tủ'] + ')' : ''}` +
     (r['Tuyến đường'] ? ', ' + r['Tuyến đường'] : '') + (r['Phường'] ? ', phường ' + r['Phường'] : '') +
     (r['Quận'] ? ', ' + r['Quận'] : '');
@@ -146,7 +146,7 @@ function openDoc(r) {
     <table class="bc-head"><tr>
       <td style="width:45%"><b>CÔNG TY CỔ PHẦN<br>CHIẾU SÁNG CÔNG CỘNG TP. HCM</b><br>
         <span style="display:inline-block;width:45%;border-top:1px solid #000;margin:2px 0 6px"></span><br>
-        Số: ${ed('ed-so', r['Số BCSC'] || '', '............/BCSC-.......')}</td>
+        Số: ${ed('ed-so', r['Số BCSC'] || '', '............/BCSC-CSKVTT')}</td>
       <td style="width:55%"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><br>
         <span style="display:inline-block;width:40%;border-top:1px solid #000;margin-top:2px"></span></td>
     </tr></table>
