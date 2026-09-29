@@ -4,6 +4,7 @@ import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { SCHEMAS } from './schemas.js';
 import { escapeHtml, showToast } from './utils.js';
 import { inlineImages, restoreImages } from './photos.js';
+import { loadJsPDF, loadHtml2canvas } from './lazy-lib.js';
 import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 
 const TYPE = 'thao_go_bang_ron';
@@ -446,6 +447,9 @@ async function exportPdf() {
 
   let restore = [];
   try {
+    btn.textContent = '⏳ Đang tải thư viện PDF...';
+    // Tải thư viện trước khi đụng vào giao diện: mất mạng thì báo lỗi, biên bản không bị để dở
+    const [html2canvas, jsPDF] = await Promise.all([loadHtml2canvas(), loadJsPDF()]);
     restore = await inlineImages(preview, (done, total) => {
       btn.textContent = `⏳ Đang nhúng ảnh ${done}/${total}...`;
     });
@@ -471,7 +475,6 @@ async function exportPdf() {
     document.getElementById('br-capture-style')?.remove();
 
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
-    const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     const pW = doc.internal.pageSize.getWidth();
     const pH = doc.internal.pageSize.getHeight();

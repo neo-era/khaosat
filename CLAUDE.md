@@ -62,6 +62,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 - ExcelJS `https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js` — **user duyệt 2026-09-27**, chỉ tải khi bấm xuất Excel (`js/excel-export.js`). Mọi file Excel XUẤT ra đi qua module này (tiêu đề + dòng thời gian, header màu, khung, sọc, cố định tiêu đề, bộ lọc, TỔNG CỘNG, in A4). SheetJS chỉ còn dùng để ĐỌC file ở "Nhập Excel" (report.html).
   - Báo cáo tổng hợp (Báo cáo A–D, KPI, Băng rôn): dòng 1 tên báo cáo, dòng 2 "Thời gian … · Xuất ngày …" — **không** ghi tên đơn vị, **không** ô ký (user chọn).
   - Xuất dữ liệu thô: **dòng 1 = tiêu đề cột nguyên văn** (không chèn tiêu đề phía trên) để "Nhập Excel" đọc lại được; tên tab = tên sheet Google Sheets.
+- **Tải thư viện khi cần (2026-09-29)**: SheetJS, jsPDF (+autotable), html2canvas, jsQR KHÔNG đặt `<script>` trong `<head>` — gọi qua `js/lazy-lib.js` (`loadXLSX`, `loadJsPDF({autoTable})`, `loadHtml2canvas`, `loadJsQR`) lúc bấm nút. Lý do: đo 29/09 trang Báo cáo tải ~400 KB thư viện trước khi hiện, form mở lần đầu mất 7,4 s vì chờ CDN jsQR. Form tải ngầm jsQR 4 s sau khi hiện để máy giữ sẵn khi mất mạng. Chỉ Tailwind và Leaflet (map.html) còn nằm trong `<head>`.
 - (Không cần thư viện nào khác. Tất cả viết bằng Vanilla JS.)
 
 ---
@@ -104,6 +105,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 │   ├── gps.js                 ← lấy tọa độ GPS
 │   ├── camera.js              ← xử lý ảnh (compress trước khi upload)
 │   ├── storage.js             ← localStorage: lưu nháp form, queue khi offline
+│   ├── lazy-lib.js            ← tải thư viện CDN (Excel đọc/PDF/html2canvas/jsQR) khi bấm nút
 │   └── utils.js               ← helper chung
 ├── css/
 │   └── style.css              ← override Tailwind nếu cần
@@ -111,7 +113,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 │   └── Code.gs                ← file Google Apps Script (copy paste vào script.google.com)
 ├── tests/                     ← test tự động (thêm 2026-09-29) — `node --test "tests/*.test.mjs"`, không cần npm
 │   ├── _harness.mjs           ← giả lập Apps Script + sheet để chạy Code.gs trong Node (KHÔNG gọi mạng)
-│   └── *.test.mjs             ← schema↔HEADERS, STT, submit/update, check_dup, capNhatCotSheet, set_status, sổ BBHT
+│   └── *.test.mjs             ← schema↔HEADERS, STT, submit/update, check_dup, capNhatCotSheet, set_status, sổ BBHT, perf (mở file 1 lần)
 └── .claude/skills/dev-loop/   ← quy trình 7 bước: kế hoạch → test → code → review góc nhìn mới → kiểm chứng → ghi nhớ → cải thiện
 ```
 
@@ -674,7 +676,7 @@ export const TDK_LIST = [
   - `action: "export_raw"` — body `{ token, types: [...], from?, to?, usernames?: [], status? }` → trả raw rows theo đúng thứ tự cột của từng sheet (array of arrays) để xuất Excel/CSV. Không aggregate. Chỉ `admin`/`user`. Chi tiết ở mục 15.
   - `action: "photo_base64"` — body `{ token, url }` → đọc 1 ảnh Drive trả `{ ok, mimeType, base64 }`. Chỉ cần token hợp lệ. **Lý do tồn tại**: `drive.google.com/uc?export=view` không trả header CORS nên `html2canvas` vẽ ra ô trắng; trang báo cáo phải nội tuyến ảnh thành `data:` URL trước khi capture. Xem mục 15b.
   - `action: "change_password"` — body `{ token, current_password, new_password }` → user tự đổi mật khẩu **của chính mình**. **Mọi role đăng nhập đều gọi được**, không cần `users_manage`. Kiểm: đúng mật khẩu hiện tại · ≥8 ký tự · khác username · khác mật khẩu cũ. Xem mục 7.1.
-- Mở Google Sheets theo ID (set qua Script Properties, không hardcode).
+- Mở Google Sheets theo ID (set qua Script Properties, không hardcode). `getSpreadsheet()` nhớ file đã mở trong **1 lần chạy** (biến `_spreadsheet`) — trước 2026-09-29 mỗi lần gọi đều `openById`, 1 request mở lại file 17+ lần.
 - Tìm sheet theo bảng mapping `type → sheet name` (ở mục 4).
 - Đọc header row của sheet đó → tạo row mới với giá trị theo đúng thứ tự cột.
 - Server-side gán: `STT` (= mã duy nhất, xem quy ước STT ở mục 5), `ngày khảo sát` (= `Utilities.formatDate(new Date(), "Asia/Ho_Chi_Minh", "yyyy-MM-dd HH:mm:ss")`), `Người khảo sát` (= `full_name` từ user của token), `Username` (= username từ token).
@@ -1014,6 +1016,7 @@ async function compressImage(file, maxDim = 1600, quality = 0.8) {
 - Bấm Lưu bản MỚI → form gọi `action=check_dup` `{type, tuyen, phuong, lat, lng}`. Server (`handleCheckDup`) quét bản còn hiệu lực cùng loại trong **90 ngày** (`DUP_DAYS`): trùng nếu **cùng tuyến + cùng phường** (so khớp bỏ dấu, bỏ chữ "Đường" đầu) HOẶC **cách < 30 m** (`DUP_METERS`; tọa độ lấy từ cột vĩ độ/kinh độ hoặc tách từ link).
 - Quét cả bản của người khác nhưng chỉ trả tóm tắt (mã, tuyến, phường, ngày, người KS), tối đa 5 bản.
 - **Chỉ cảnh báo** (confirm "Vẫn lưu bản mới?"), không chặn. Mất mạng / server lỗi / quá 8 giây → bỏ qua kiểm tra. Sửa bản ghi không kiểm tra.
+- **Hỏi ngầm trước (2026-09-29)**: mỗi lần hỏi ~3-4 s → form hỏi `check_dup` ngay khi đã có tuyến + phường, lúc rời ô/chọn phường/có GPS (`prefetchDup`, chờ 1 s không đổi mới gửi), lúc bấm Lưu dùng lại kết quả nếu tuyến/phường/tọa độ (làm tròn 4 số lẻ ≈ 11 m) không đổi và chưa quá 5 phút. Lưu xong xoá kết quả cũ (bản vừa lưu phải được tính cho lần nhập tiếp).
 
 ## 10. Trang chủ `index.html`
 

@@ -17,7 +17,8 @@ import { apiSubmit, apiUpdate, apiList, apiCheckDup, uploadImageToDrive, uploadB
 import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
 import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
-import { showToast, escapeHtml, uuid, formatVnDate } from './utils.js';
+import { showToast, escapeHtml, uuid, formatVnDate, debounce } from './utils.js';
+import { loadJsQR } from './lazy-lib.js';
 
 // State module-scoped (1 form 1 lúc trên page)
 const state = {
@@ -76,6 +77,15 @@ export async function renderForm(containerEl, schemaKey) {
     await maybeRestoreDraft();
     startAutosave();
     showScheduleBadge();       // v2.0.5: hiện badge nếu có việc hôm nay
+    // Rời 1 ô / đổi lựa chọn → hỏi trùng ngầm, để lúc bấm Lưu đã có sẵn kết quả
+    const formEl = document.getElementById('survey-form');
+    formEl.addEventListener('focusout', prefetchDup);
+    formEl.addEventListener('change', prefetchDup);
+  }
+  // Thư viện quét QR không còn chặn lúc mở trang; tải ngầm sau khi form hiện
+  // để trình duyệt giữ sẵn trong bộ nhớ đệm, mất mạng ngoài hiện trường vẫn quét được.
+  if (state.schema.fields.some(f => f.type === 'tdk')) {
+    setTimeout(() => loadJsQR().catch(() => {}), 4000);
   }
 }
 
@@ -850,6 +860,7 @@ function renderPhuong(field, wrap, cls) {
         input.value = o.display;
         apply(o, o.display);
         list.classList.add('hidden');
+        prefetchDup();   // chọn gợi ý không phát sự kiện change
       });
       list.appendChild(item);
     });
@@ -951,6 +962,7 @@ async function refreshGps() {
     state.gps = { status: 'ok', ...pos };
     updateGpsUI();
     showNearestTdk();
+    prefetchDup();
     // Tự động gọi reverse geocoding sau khi có GPS (không ghi đè field đã có)
     applyReverseGeocode(false);
   } catch (e) {
@@ -1337,22 +1349,63 @@ function validateForm() {
  * Hỏi server có bản nào cùng tuyến/phường hoặc cách < 30 m trong 90 ngày không.
  * Chỉ cảnh báo: người khảo sát vẫn chọn lưu được. Mất mạng / server chưa triển khai
  * action check_dup / quá 8 giây → bỏ qua kiểm tra, KHÔNG chặn việc lưu.
+ *
+ * Mỗi lần hỏi máy chủ mất ~3-4 s (đo 29/09/2026) → hỏi NGẦM ngay khi đã điền tuyến + phường
+ * hoặc có GPS (prefetchDup), bấm Lưu thì dùng lại kết quả nếu nội dung hỏi không đổi.
  */
+const DUP_REUSE_MS = 5 * 60 * 1000;   // quá 5 phút thì hỏi lại: có thể người khác vừa lưu
+
+function dupQuery() {
+  const data = collectFormData();
+  const ok = state.gps.status === 'ok';
+  return {
+    tuyen: data['Tuyến đường'] || '', phuong: data['Phường'] || '',
+    lat: ok ? state.gps.lat : '', lng: ok ? state.gps.lng : ''
+  };
+}
+
+function dupKey(q) {
+  const t = v => String(v).trim().toLowerCase();
+  // 4 chữ số thập phân ≈ 11 m, nhỏ hơn ngưỡng 30 m của server
+  const c = v => (v === '' || v === undefined || v === null) ? '' : Number(v).toFixed(4);
+  return [state.schemaKey, t(q.tuyen), t(q.phuong), c(q.lat), c(q.lng)].join('|');
+}
+
+function startDupCheck(q) {
+  const key = dupKey(q);
+  const d = state.dup;
+  if (d && d.key === key && Date.now() - d.at < DUP_REUSE_MS) return d.promise;
+  const promise = apiCheckDup(state.schemaKey, q);
+  const entry = { key, at: Date.now(), promise };
+  // Lỗi (mất mạng...) thì không giữ lại, lần sau hỏi lại
+  promise.catch(() => { if (state.dup === entry) state.dup = null; });
+  state.dup = entry;
+  return promise;
+}
+
+const prefetchDup = debounce(() => {
+  if (state.editMode || !navigator.onLine || !state.user || state.user.role === 'demo') return;
+  const q = dupQuery();
+  // Tuyến + Phường là bắt buộc nên lúc Lưu luôn có; hỏi khi chưa đủ thì kết quả không bao giờ dùng lại được
+  if (!q.tuyen.trim() || !q.phuong.trim()) return;
+  startDupCheck(q).catch(() => {});
+}, 1000);
+
 async function confirmNotDuplicate() {
   if (!navigator.onLine) return true;
-  const data = collectFormData();
   const btn = document.getElementById('btn-submit');
   const orig = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Kiểm tra trùng...';
   try {
-    const q = {
-      tuyen: data['Tuyến đường'] || '', phuong: data['Phường'] || '',
-      lat: state.gps.status === 'ok' ? state.gps.lat : '', lng: state.gps.status === 'ok' ? state.gps.lng : ''
-    };
+    const pending = startDupCheck(dupQuery());
     const res = await Promise.race([
-      apiCheckDup(state.schemaKey, q),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))
+      pending,
+      new Promise((_, rej) => setTimeout(() => {
+        // Sóng yếu làm lần hỏi treo: bỏ nó đi để lần bấm Lưu sau hỏi mới thay vì chờ lại đúng nó
+        if (state.dup && state.dup.promise === pending) state.dup = null;
+        rej(new Error('timeout'));
+      }, 8000))
     ]);
     const list = res.matches || [];
     if (!list.length) return true;
@@ -1413,6 +1466,7 @@ async function handleSubmit() {
     }
     // CREATE MODE
     res = await apiSubmit(state.schemaKey, data, photoUrls);
+    state.dup = null;   // kết quả cũ chưa tính bản vừa lưu → nhập tiếp cùng tuyến phải hỏi lại
     clearDraft(state.schemaKey);
     stopAutosave();
     saveSubmittedToday({
@@ -1554,10 +1608,8 @@ function attachVoiceRecognition(textareaEl, btnEl, statusEl) {
  * @param {HTMLInputElement} targetInput — input cần điền giá trị QR
  */
 async function openQrScanner(targetInput) {
-  if (typeof jsQR !== 'function') {
-    showToast('jsQR chưa load (kiểm tra mạng)', 'error');
-    return;
-  }
+  let jsQR;
+  try { jsQR = await loadJsQR(); } catch (e) { showToast(e.message, 'error'); return; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     showToast('Trình duyệt không hỗ trợ camera', 'error');
     return;

@@ -4,6 +4,7 @@ import { apiReport, apiUsers, apiList, apiExportRaw, apiUpdate, apiBulkImport } 
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES } from './schemas.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
 import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
+import { loadJsPDF, loadXLSX } from './lazy-lib.js';
 
 const state = {
   data: null  // { areaA, areaB, areaC }
@@ -556,10 +557,10 @@ async function exportXlsx() {
 }
 
 /** Export PDF — A4 landscape, 3 vùng trên 3 trang. */
-function exportPdf() {
+async function exportPdf() {
   if (!state.data) return;
-  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('jsPDF chưa load', 'error'); return; }
-  const { jsPDF } = window.jspdf;
+  let jsPDF;
+  try { jsPDF = await loadJsPDF({ autoTable: true }); } catch (e) { showToast(e.message, 'error'); return; }
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const allTypes = Object.keys(SCHEMAS);
   const dateStr = new Date().toLocaleString('vi-VN');
@@ -904,8 +905,8 @@ function serializeCell(v) {
 }
 
 async function previewImport() {
-  const XLSX = window.XLSX;
-  if (!XLSX) { showToast('SheetJS chưa tải', 'error'); return; }
+  let XLSX;
+  try { XLSX = await loadXLSX(); } catch (e) { showToast(e.message, 'error'); return; }
 
   const fileEl = document.getElementById('import-file');
   const file = fileEl.files[0];
