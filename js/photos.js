@@ -15,23 +15,24 @@ import { apiPhotoBase64 } from './api.js';
 const cache = new Map();
 
 /** Chuyển 1 URL ảnh thành chuỗi data: URL. */
-export async function fetchAsDataUrl(url) {
+export function fetchAsDataUrl(url) {
+  // Cache cả lời gọi đang chạy: 2 nơi cùng xin 1 ảnh (ảnh lỗi tự lấy lại + bấm In) chỉ gọi máy chủ 1 lần
   if (cache.has(url)) return cache.get(url);
-
-  let dataUrl = null;
-  try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const blob = await res.blob();
-    if (!blob.type.startsWith('image/')) throw new Error('không phải ảnh');
-    dataUrl = await blobToDataUrl(blob);
-  } catch (e) {
-    const res = await apiPhotoBase64(url);
-    dataUrl = `data:${res.mimeType || 'image/jpeg'};base64,${res.base64}`;
-  }
-
-  cache.set(url, dataUrl);
-  return dataUrl;
+  const p = (async () => {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('không phải ảnh');
+      return await blobToDataUrl(blob);
+    } catch (e) {
+      const res = await apiPhotoBase64(url);
+      return `data:${res.mimeType || 'image/jpeg'};base64,${res.base64}`;
+    }
+  })();
+  cache.set(url, p);
+  p.catch(() => cache.delete(url));   // lỗi thì lần sau thử lại
+  return p;
 }
 
 function blobToDataUrl(blob) {

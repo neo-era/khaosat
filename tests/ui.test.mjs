@@ -22,3 +22,12 @@ test('menu: mọi trang trong app có mục menu tương ứng trên trang chủ
     assert.ok(html.includes(`href="${page}"`), 'menu thiếu ' + page);
   }
 });
+
+// 30/09/2026: ảnh biên bản sự cố thiếu data-src → inlineImages() bỏ qua → file Word/PDF mất ảnh.
+test('biên bản xuất file: mọi <img> ảnh hiện trường có data-src để nhúng vào file', () => {
+  for (const f of ['js/bcsc.js', 'js/bbht.js', 'js/bangron.js']) {
+    const imgs = read(f).match(/<img\s[^>]*>/g) || [];
+    assert.ok(imgs.length > 0, f + ' không có thẻ img?');
+    imgs.forEach(tag => assert.match(tag, /data-src=/, f + ': ' + tag));
+  }
+});

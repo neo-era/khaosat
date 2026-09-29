@@ -668,7 +668,7 @@ export const TDK_LIST = [
 - 1 hàm `doPost(e)` duy nhất nhận JSON body có trường `action`:
   - `action: "login"` — body `{ username, password }` → trả `{ ok, token, full_name, role }`
   - `action: "submit"` — body `{ token, type, data, photos: [urls] }` → ghi row vào sheet tương ứng. Reject nếu role là `demo`.
-  - `action: "list"` — body `{ token, type?, username?, from?, to?, includeDeleted? }` → trả danh sách bản ghi (cho `recent.html` và `manage.html`). Role `user1`/`demo` chỉ thấy của mình; `admin`/`user` thấy tất cả.
+  - `action: "list"` — body `{ token, type?, username?, from?, to?, includeDeleted? }` → trả danh sách bản ghi (cho `recent.html` và `manage.html`). Role `user1`/`demo` chỉ thấy của mình; `admin`/`user` thấy tất cả. Ngoại lệ: `type = bao_cao_su_co` thì mọi role có `submit` thấy tất cả (mục 15d).
   - `action: "delete"` — body `{ token, type, stt }` → soft-delete (set `Deleted At` + `Deleted By`) + xoá ảnh Cloudinary kèm. Chỉ `admin`/`user` được gọi.
   - `action: "restore"` — body `{ token, type, stt }` → undo soft-delete (clear `Deleted At` + `Deleted By`). Không restore được ảnh (đã xoá Cloudinary). Chỉ `admin`/`user`.
   - `action: "kpi"` — body `{ token, month: "2026-05" }` → trả KPI tất cả người khảo sát trong tháng. Chỉ `admin`/`user`.
@@ -1355,7 +1355,10 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 - **Nhập sổ Excel cũ** (sheet "16. BBHT Ký App" trong `khao sat tang cuong den.xlsx`): xem trước rồi mới ghi. Ô ngày kiểu Date trong sổ cũ bị Excel **đảo tháng/ngày** → đối chiếu tháng trong Số BBHT ("01/07/Q5" = tháng 7) để sửa (tô vàng). Quận ghi đầy đủ ("8" → "Quận 8", "PN" → "Quận Phú Nhuận"); Giám sát lấy từ bảng phụ cột I:L (Quận → Giám sát). Bỏ qua dòng đã có (cùng Số BBHT + Ngày).
 - Xuất Excel có định dạng (`excel-export.js`).
 
-## 15d. Biên bản báo cáo sự cố `bcsc.html` (admin / user) — bổ sung 2026-09-29
+## 15d. Biên bản báo cáo sự cố `bcsc.html` (mọi tài khoản trừ demo) — bổ sung 2026-09-29
+
+- **Quyền (đổi 2026-09-30, user chốt)**: ai có quyền `submit` (admin/user/user1) mở được trang và xem/xuất biên bản của **TẤT CẢ** bản `bao_cao_su_co` — `handleList` mở riêng khi `type === 'bao_cao_su_co'` (biến `openBcsc`); hỏi "tất cả loại" hay loại khác user1 vẫn chỉ thấy của mình. Demo không vào được. Hộp "Đã lưu" của form sự cố có nút **📄 Lập biên bản sự cố** → `bcsc.html?stt=…`.
+- **Ảnh + lề (2026-09-30)**: `<img>` phải có `data-src` (không có thì `inlineImages()` bỏ qua → Word mất ảnh; test `ui.test.mjs`). Ảnh Drive không hiện → tự lấy qua `photo_base64`; nút In nhúng ảnh xong mới in. In: lề đặt ở `@page` 15/15/15/20 mm (không đặt ở khung, nếu không trang 2 dính mép trên). Word: ngắt trang bằng `page-break-before:always` trên đoạn "10-" (không dùng `<br>` — tạo dòng trống đầu trang 2), ghi bằng `setAttribute` vì gán `el.style` bị đổi thành `break-before` Word không hiểu.
 
 - Danh sách bản `bao_cao_su_co` (lọc ngày + tìm) → **📄 Lập biên bản** → biên bản A4 Times bám **đúng mẫu PDF**: quốc hiệu, `Số: …/BCSC-CSKVTT`, "Tp. Hồ Chí Minh, ngày … tháng … năm …" (= ngày phát hiện), tiêu đề, dòng "Công tác", mục 1–7, ô `☐ Có ☐ Không` + dòng chấm (mục 7 **để trống cho ký tay**), 3 chữ ký, rồi sang trang: mục 10 (kết quả xử lý — **để trống**) + "GIÁM ĐỐC ĐƠN VỊ", mục 11 ảnh hiện trường (2 cột).
 - Mở thẳng 1 bản: `bcsc.html?stt=SC-…` (nút **Biên bản** ở trang Quản lý cho loại này). Menu trang chủ: "🚨 Biên bản báo cáo sự cố".

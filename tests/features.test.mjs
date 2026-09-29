@@ -61,3 +61,29 @@ test('sổ BBHT: thêm / sửa một phần / lọc ngày / xoá; ngày sai dạ
   assert.equal(gs.handleSobbhtDelete({ id: a.created[1] }).ok, true);
   assert.equal(gs.handleSobbhtList({}).items.length, 1);
 });
+
+// 30/09/2026 user chốt: mọi tài khoản (trừ demo) xuất được biên bản của TẤT CẢ báo cáo sự cố.
+test('list báo cáo sự cố: user1 thấy của mọi người; loại khác vẫn chỉ thấy của mình; demo không thấy', () => {
+  const mk = role => {
+    const gs = loadGs({ user: { username: 'ktv01', role, full_name: 'KTV' } });
+    gs.can = (r, a) => ({ admin: true, user: true }[r] === true) || (a === 'submit' && r === 'user1');
+    addSurveySheet(gs, 'bao_cao_su_co', [{ STT: 'SC-1', Username: 'ktv01' }, { STT: 'SC-2', Username: 'ktv02' }]);
+    addSurveySheet(gs, 'thay_den', [{ STT: 'TD-1', Username: 'ktv01' }, { STT: 'TD-2', Username: 'ktv02' }]);
+    return gs;
+  };
+  const u1 = mk('user1');
+  assert.deepEqual(plain(u1.handleList({ type: 'bao_cao_su_co' }).rows).map(r => r.STT), ['SC-1', 'SC-2']);
+  assert.deepEqual(plain(u1.handleList({ type: 'bao_cao_su_co', stt: 'SC-2' }).rows).map(r => r.STT), ['SC-2']);
+  assert.deepEqual(plain(u1.handleList({ type: 'thay_den' }).rows).map(r => r.STT), ['TD-1']);
+  assert.deepEqual(plain(u1.handleList({}).rows).map(r => r.STT), ['TD-1', 'SC-1']);   // không lộ qua "tất cả loại"
+  assert.deepEqual(plain(mk('demo').handleList({ type: 'bao_cao_su_co' }).rows).map(r => r.STT), ['SC-1']);
+  // Mở cho xem chứ không mở bản đã xoá / cột hệ thống của người khác
+  const u2 = mk('user1');
+  u2.sheets[u2.SHEET_MAP.bao_cao_su_co]._d[2][u2.HEADERS.bao_cao_su_co.length + 4] = '2026-09-30 10:00:00';  // SC-2 bị xoá
+  assert.deepEqual(plain(u2.handleList({ type: 'bao_cao_su_co', status: 'deleted' }).rows).map(r => r.STT), []);
+  assert.deepEqual(plain(u2.handleList({ type: 'bao_cao_su_co', includeDeleted: true }).rows).map(r => r.STT), ['SC-1']);
+  const row = plain(u1.handleList({ type: 'bao_cao_su_co' }).rows)[1];
+  assert.equal(row['User Agent'], undefined);
+  assert.equal(row['Deleted By'], undefined);
+  assert.equal(mk('admin').handleList({ type: 'bao_cao_su_co' }).rows[0]['User Agent'], '');   // quản lý vẫn đủ cột
+});
