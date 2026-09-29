@@ -13,8 +13,8 @@ const MAU_KEY = 'bcsc_mau';   // localStorage: dòng Công tác + tên người 
 const MAU_MAC_DINH = {
   'ed-cong-tac': 'Duy trì trạm đèn; Gói thầu Cung cấp dịch vụ sự nghiệp công sử dụng kinh phí ngân sách nhà nước công tác duy trì hệ thống chiếu sáng đô thị trên địa bàn các quận 12, Gò Vấp, Tân Bình, Tân Phú (từ ngày 01/4/2023 đến hết ngày 31/3/2026).',
   'ed-cty': 'Công ty Cổ phần Chiếu sáng công cộng TP.HCM',
-  'ed-ky-cv': 'Phạm Xuân Sơn',
-  'ed-ky-kt': 'Phạm Duy Thông',
+  'ed-ky-cv': 'Võ Thanh Quang',     // đổi 2026-09-29 (trước: Phạm Xuân Sơn)
+  'ed-ky-kt': 'Trần Hữu Lưu',       // đổi 2026-09-29 (trước: Phạm Duy Thông)
   'ed-ky-pkt': 'Nguyễn Huy Khương'
 };
 

@@ -1349,7 +1349,7 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 
 - Danh sách bản `bao_cao_su_co` (lọc ngày + tìm) → **📄 Lập biên bản** → biên bản A4 Times bám **đúng mẫu PDF**: quốc hiệu, `Số: …/BCSC-CSKVTT`, "Tp. Hồ Chí Minh, ngày … tháng … năm …" (= ngày phát hiện), tiêu đề, dòng "Công tác", mục 1–7, ô `☐ Có ☐ Không` + dòng chấm (mục 7 **để trống cho ký tay**), 3 chữ ký, rồi sang trang: mục 10 (kết quả xử lý — **để trống**) + "GIÁM ĐỐC ĐƠN VỊ", mục 11 ảnh hiện trường (2 cột).
 - Mở thẳng 1 bản: `bcsc.html?stt=SC-…` (nút **Biên bản** ở trang Quản lý cho loại này). Menu trang chủ: "🚨 Biên bản báo cáo sự cố".
-- Mọi chữ sửa trực tiếp (`contenteditable`). **Số BCSC người lập tự ghi** (form có ô không bắt buộc). Dòng "Công tác", tên công ty ở mục 1 và **3 người ký** (mặc định theo mẫu: Phạm Xuân Sơn / Phạm Duy Thông / Nguyễn Huy Khương) sửa được và **app nhớ** (`localStorage['bcsc_mau']`, theo từng máy).
+- Mọi chữ sửa trực tiếp (`contenteditable`). **Số BCSC người lập tự ghi** (form có ô không bắt buộc). Dòng "Công tác", tên công ty ở mục 1 và **3 người ký** (mặc định: Chuyên viên QLĐB **Võ Thanh Quang** / Phụ trách KT thi công **Trần Hữu Lưu** / Phòng KT Nguyễn Huy Khương — đổi 2026-09-29) sửa được và **app nhớ** (`localStorage['bcsc_mau']`, theo từng máy).
 - Xuất: 🖨️ In / Lưu PDF (`window.print`, `@media print` A4) · 📝 Xuất Word (HTML-Word như `bbht.js`, nhúng ảnh qua `inlineImages`).
 
 ## 16. PWA
