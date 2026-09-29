@@ -72,6 +72,7 @@ export async function renderForm(containerEl, schemaKey) {
     // Edit mode: không cần GPS auto-refresh hay autosave draft
   } else {
     refreshGps();              // async, không await
+    applyDefaults();           // trước khôi phục nháp: nháp (nếu có) ghi đè mặc định
     await maybeRestoreDraft();
     startAutosave();
     showScheduleBadge();       // v2.0.5: hiện badge nếu có việc hôm nay
@@ -323,6 +324,10 @@ function renderField(field) {
     input.type = 'number';
     input.step = '0.1';
     input.inputMode = 'decimal';
+    input.className = baseInputClass;
+  } else if (t === 'datetime') {
+    input = document.createElement('input');
+    input.type = 'datetime-local';
     input.className = baseInputClass;
   } else if (t === 'textarea') {
     // Wrap textarea + nút mic Web Speech API (chỉ thêm nếu trình duyệt hỗ trợ)
@@ -619,7 +624,49 @@ function renderMultiSelect(field, wrap, cls) {
   return wrap;
 }
 
+/** "yyyy-MM-dd HH:mm[:ss]", ISO có Z (ô ngày Sheets trả về) hoặc Date → "yyyy-MM-ddTHH:mm" cho ô datetime-local (giờ máy). */
+function toDatetimeLocal(v) {
+  const s = String(v ?? '').trim();
+  const d = v instanceof Date ? v : (/[zZ]$|[+-]\d\d:\d\d$/.test(s) ? new Date(s) : null);
+  if (d && !isNaN(d)) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return m ? `${m[1]}T${m[2]}` : '';
+}
+
+/** Giá trị mặc định khai trong schema (`default`; 'now' = lúc mở form) — chỉ cho bản mới. */
+function applyDefaults() {
+  state.defaults = {};
+  for (const f of state.schema.fields) {
+    if (f.default === undefined) continue;
+    const el = state.container.querySelector(`[data-key="${f.key}"]`);
+    if (!el || el.value) continue;
+    setFieldValue(el, f.default === 'now' ? new Date() : f.default);
+    state.defaults[f.label] = collectFormData()[f.label];
+  }
+}
+
+/**
+ * Người dùng đã nhập gì chưa (để tự lưu nháp / hỏi "Bỏ form chưa lưu?").
+ * Không tính: tên người khảo sát tự điền, GPS/link tự sinh, giá trị mặc định chưa bị sửa.
+ */
+function hasUserInput(data) {
+  const auto = new Set(state.schema.fields
+    .filter(f => ['link_gmap', 'gps_lat', 'gps_lng'].includes(f.type)).map(f => f.label));
+  return Object.entries(data).some(([label, v]) => {
+    const t = String(v ?? '').trim();
+    if (!t || auto.has(label) || t === state.user.full_name) return false;
+    return !(state.defaults && state.defaults[label] === v);
+  }) || state.photos.length > 0;
+}
+
 function setFieldValue(el, val) {
+  if (el.type === 'datetime-local') {
+    el.value = toDatetimeLocal(val);
+    return;
+  }
   if (el.type === 'number') {
     // Bản ghi cũ từng nhập chữ ("39m", "68,5 mét", "30CM") — ô số không nhận chữ.
     // Số rõ ràng thì điền; còn lại hiện làm placeholder và giữ nguyên nếu không nhập lại.
@@ -725,9 +772,7 @@ function goHome() {
   // Confirm nếu có nội dung
   const form = document.getElementById('survey-form');
   if (form) {
-    const hasAny = Array.from(form.elements).some(el =>
-      el.type === 'checkbox' ? el.checked : (el.value && !el.readOnly && el.type !== 'hidden'));
-    if (hasAny && !confirm('Bỏ form chưa lưu?')) return;
+    if (hasUserInput(collectFormData()) && !confirm('Bỏ form chưa lưu?')) return;
   }
   stopAutosave();
   location.replace('index.html');
@@ -1204,7 +1249,7 @@ async function maybeRestoreDraft() {
 function startAutosave() {
   state.autosaveTimer = setInterval(() => {
     const data = collectFormData();
-    const hasAny = Object.values(data).some(v => v && String(v).trim() && String(v).trim() !== state.user.full_name);
+    const hasAny = hasUserInput(data);
     if (hasAny) saveDraft(state.schemaKey, data);
   }, CONFIG.autosaveIntervalMs);
 }
@@ -1248,6 +1293,7 @@ function collectFormData() {
       continue;
     }
     const el = state.container.querySelector(`[data-key="${f.key}"]`);
+    if (el && el.type === 'datetime-local') { data[f.label] = el.value.replace('T', ' '); continue; }
     data[f.label] = el ? (el.value === '' && el.dataset.orig ? el.dataset.orig : el.value) : '';
   }
   return data;

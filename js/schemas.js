@@ -435,6 +435,39 @@ export const SCHEMAS = {
   }
 };
 
+/**
+ * 5.17 Báo cáo sự cố (thêm 2026-09-29) — theo mẫu "BÁO CÁO SỰ CỐ công tác quản lý, bảo dưỡng
+ * hệ thống" (BCSC). Người khảo sát nhập ngoài hiện trường; admin/user xuất biên bản ở bcsc.html.
+ * Số BCSC do người lập tự ghi. Mục 7 (ý kiến chuyên viên) và 10 (kết quả xử lý) để trống cho ký tay.
+ */
+SCHEMAS.bao_cao_su_co = {
+  name: 'Báo cáo sự cố',
+  sheet: '17. Bao cao su co',
+  icon: '🚨',
+  maxPhotos: 5,
+  fields: [
+    { label: 'STT',                  key: 'stt',          type: 'stt_auto' },
+    { label: 'Số BCSC',              key: 'so_bcsc',      type: 'text',     required: false, hint: 'Người lập tự ghi, vd 03321225180/BCSC-CSKVB — để trống nếu chưa có' },
+    { label: 'Đơn vị báo cáo',       key: 'don_vi',       type: 'select',   required: true,  allowOther: true, options: ['CSKV Bắc'], default: 'CSKV Bắc' },
+    { label: 'Tủ điều khiển',        key: 'tdk',          type: 'tdk',      required: true },
+    { label: 'Mã tủ',                key: 'ma_tu',        type: 'text',     required: false, hint: 'vd TM118.03' },
+    { label: 'Tuyến đường',          key: 'tuyen_duong',  type: 'text',     required: true },
+    { label: 'Quận',                 key: 'quan',         type: 'quan',     required: true },
+    { label: 'Phường',               key: 'phuong',       type: 'phuong',   required: true },
+    { label: 'Ngày giờ phát hiện',   key: 'ngay_gio_pd',  type: 'datetime', required: true,  default: 'now' },
+    { label: 'Hiện trạng sự cố',     key: 'hien_trang',   type: 'textarea', required: true,  hint: 'vd: Bộ điều khiển trung tâm không truyền tín hiệu về trung tâm điều khiển' },
+    { label: 'Nguyên nhân sơ bộ',    key: 'nguyen_nhan',  type: 'textarea', required: false, hint: 'vd: Hư bộ Logo tại tủ điều khiển (không hiển thị màn hình)' },
+    { label: 'Năm lắp đặt',          key: 'nam_ld',       type: 'number',   required: false },
+    { label: 'Đề xuất khắc phục',    key: 'de_xuat',      type: 'textarea', required: true,  hint: 'Biện pháp, quy mô, khối lượng dự kiến — vd: Thay bộ điều khiển logo' },
+    { label: 'Người khảo sát',       key: 'nguoi_ks',     type: 'text',     required: true },
+    { label: 'Ngày khảo sát',        key: 'ngay_ks',      type: 'date_auto' },
+    { label: 'kinh độ',              key: 'lng',          type: 'gps_lng' },
+    { label: 'vĩ độ',                key: 'lat',          type: 'gps_lat' },
+    { label: 'Ghi chú',              key: 'ghi_chu',      type: 'textarea', required: false },
+    { label: 'Link Google Map',      key: 'link_gmap',    type: 'link_gmap' }
+  ]
+};
+
 /** Trạng thái xử lý — ĐỒNG BỘ XU_LY_STATUSES / XU_LY_SKIP_TYPES trong Code.gs. */
 export const XU_LY_STATUSES = ['Chờ thiết kế', 'Đã thiết kế', 'Đã thi công', 'Nghiệm thu', 'Không xử lý'];
 export const XU_LY_SKIP_TYPES = ['thao_go_bang_ron'];

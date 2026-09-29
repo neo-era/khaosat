@@ -132,6 +132,9 @@ function renderTable() {
       </td>
       <td class="px-2 py-2 text-right whitespace-nowrap">
         <button class="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded mr-1 btn-view">Xem</button>
+        ${r._type === 'bao_cao_su_co' && !isDeleted
+          ? `<a class="text-xs px-2 py-1 bg-red-50 text-red-700 rounded mr-1" href="bcsc.html?stt=${encodeURIComponent(r['STT'])}">Biên bản</a>`
+          : ''}
         ${!isDeleted && hasPermission('edit')
           ? `<button class="text-xs px-2 py-1 bg-yellow-50 text-yellow-700 rounded mr-1 btn-edit">Sửa</button>`
           : ''}
