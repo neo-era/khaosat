@@ -97,3 +97,5 @@ Sau mỗi vòng, tự hỏi: lỗi nào lọt tới bước 4–5 mà lẽ ra te
 - Frontend lên web ngay khi push; **Apps Script KHÔNG** — mọi thay đổi Code.gs phải nhắc user dán + "Quản lý triển khai → sửa bản đang chạy → Phiên bản mới" (không "Triển khai mới": đổi URL).
 - Form có giá trị mặc định (`default`) → không được tính là "đã nhập" (tự lưu nháp / hỏi "Bỏ form chưa lưu?").
 - Ô số nhận dữ liệu cũ dạng chữ ("39m") → sửa bản ghi phải giữ nguyên giá trị cũ nếu không nhập lại.
+- Đo tốc độ: `evaluate_script` chạy lâu (gọi Apps Script nhiều lần) bị timeout → chạy ngầm trong trang, ghi vào `window.__perf`, hỏi lại sau. Trang tự chuyển (hết phiên → login/index) làm mất biến → đo trên tab riêng không bị chuyển hướng.
+- Đo "lần mở đầu" phải dùng `new_page` với `isolatedContext` MỚI (bộ nhớ đệm trống) + `emulate` Fast 4G/CPU 4x; iframe trong trang cũ chỉ cho số "mở lại" (đã có cache). Máy dev có lúc tra DNS CDN mất ~6 s → đo 2 lần trước khi kết luận.
