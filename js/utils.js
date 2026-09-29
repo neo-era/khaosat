@@ -11,7 +11,7 @@ export function showToast(message, type = 'success', duration = CONFIG.toastDefa
     info:    'bg-blue-600'
   };
   const div = document.createElement('div');
-  div.className = `fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium z-50 ${colors[type] || colors.info}`;
+  div.className = `fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium z-[1200] ${colors[type] || colors.info}`;
   div.style.maxWidth = '90vw';
   div.textContent = message;
   document.body.appendChild(div);

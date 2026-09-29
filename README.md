@@ -32,7 +32,7 @@ Sau đó mở "KS Đèn" như app native.
 
 ### 3. Nhập khảo sát
 
-1. Trang chủ — chọn 1 trong 15 loại khảo sát.
+1. Trang chủ — chọn 1 trong 17 loại khảo sát (chia 5 nhóm).
 2. Cho phép lấy GPS khi trình duyệt hỏi.
 3. Điền các trường (dấu `*` đỏ là bắt buộc).
 4. Chụp ảnh hoặc chọn từ thư viện (nhiều ảnh được).
@@ -75,7 +75,7 @@ Sửa data trực tiếp trên **Google Sheets** (file `khao-sat-ke-hoach`) nế
 
 Danh bạ tài khoản nằm trong sheet `taikhoan` (tên, họ tên, vai trò, trạng thái). **Mật khẩu KHÔNG nằm trong Google Sheets** — lưu riêng trong Script Properties dạng băm, mở file Sheets cũng không thấy.
 
-Admin tạo/khoá user và đặt mật khẩu tạm qua trang **👥 Quản lý user** (`users.html`), không sửa sheet bằng tay. Xem `SETUP.md` Bước D.
+Admin tạo/khoá user và đặt mật khẩu tạm qua trang **👥 Quản lý người dùng** (menu → nhóm Quản trị) (`users.html`), không sửa sheet bằng tay. Xem `SETUP.md` Bước D.
 
 ---
 

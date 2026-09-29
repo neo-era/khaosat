@@ -475,6 +475,18 @@ export const XU_LY_SKIP_TYPES = ['thao_go_bang_ron'];
 /** Trả mảng các key (= 16 loại). Dùng cho trang chủ render grid. */
 export const SCHEMA_KEYS = Object.keys(SCHEMAS);
 
+/**
+ * Nhóm loại khảo sát trên trang chủ (user duyệt 2026-09-29). Thêm loại mới → PHẢI xếp vào 1 nhóm,
+ * không thì loại đó không hiện ở trang chủ (test tests/ui.test.mjs canh).
+ */
+export const SURVEY_GROUPS = [
+  { title: 'Đèn & cần đèn', keys: ['tang_cuong_den', 'tc_den_kc_xa', 'thay_den', 'choa_den', 'thay_can'] },
+  { title: 'Cáp & hộp nối', keys: ['ngam_hoa', 'tc_noi', 'tc_ngam', 'cap_luon_can', 'hkn'] },
+  { title: 'Trụ & móng', keys: ['thay_tru', 'nap_tru', 'nang_mong', 'decal_so_tru'] },
+  { title: 'Tủ điều khiển', keys: ['vo_tu'] },
+  { title: 'Sự việc khác', keys: ['thao_go_bang_ron', 'bao_cao_su_co'] }
+];
+
 /** Lookup nhanh tên hiển thị + icon theo key. */
 export function getSchemaInfo(key) {
   const s = SCHEMAS[key];
