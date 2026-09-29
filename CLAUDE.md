@@ -107,8 +107,12 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 │   └── utils.js               ← helper chung
 ├── css/
 │   └── style.css              ← override Tailwind nếu cần
-└── apps-script/
-    └── Code.gs                ← file Google Apps Script (copy paste vào script.google.com)
+├── apps-script/
+│   └── Code.gs                ← file Google Apps Script (copy paste vào script.google.com)
+├── tests/                     ← test tự động (thêm 2026-09-29) — `node --test "tests/*.test.mjs"`, không cần npm
+│   ├── _harness.mjs           ← giả lập Apps Script + sheet để chạy Code.gs trong Node (KHÔNG gọi mạng)
+│   └── *.test.mjs             ← schema↔HEADERS, STT, submit/update, check_dup, capNhatCotSheet, set_status, sổ BBHT
+└── .claude/skills/dev-loop/   ← quy trình 7 bước: kế hoạch → test → code → review góc nhìn mới → kiểm chứng → ghi nhớ → cải thiện
 ```
 
 ---
@@ -1448,6 +1452,8 @@ Khi nhận lệnh "bắt đầu code dự án này", thực hiện theo đúng t
 ---
 
 ## 19. Checklist chất lượng (Claude tự review trước khi báo "xong")
+
+> **Từ 2026-09-29: mọi thay đổi đi theo skill `dev-loop`** (`.claude/skills/dev-loop/SKILL.md`) và phải qua `node --test "tests/*.test.mjs"` (toàn bộ xanh) trước khi commit. Lỗi mới phát hiện → thêm test vào `tests/`.
 
 - [ ] Không có hardcode URL Apps Script / Cloudinary / salt / API secret trong file ngoài `config.js` và Apps Script Properties.
 - [ ] `CLOUDINARY_API_SECRET` không lộ ra bất kỳ file frontend nào.
