@@ -1,7 +1,7 @@
 // sw.js — Service Worker đơn giản: precache shell + stale-while-revalidate cho assets.
 // Network only cho Apps Script + Cloudinary (đừng cache API response).
 
-const CACHE_NAME = 'khaosat-v19';
+const CACHE_NAME = 'khaosat-v20';
 
 const SHELL = [
   './',
@@ -52,7 +52,8 @@ const SHELL = [
   './sobbht.html',
   './js/sobbht.js',
   './bcsc.html',
-  './js/bcsc.js'
+  './js/bcsc.js',
+  './js/lazy-lib.js'
 ];
 
 self.addEventListener('install', (event) => {

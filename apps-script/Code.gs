@@ -245,10 +245,16 @@ function getProp(key) {
   return PropertiesService.getScriptProperties().getProperty(key);
 }
 
+// Mỗi lần mở file tốn vài trăm ms; 1 request (vd list tất cả loại, KPI) gọi getSpreadsheet()
+// hàng chục lần. Biến toàn cục Apps Script chỉ sống trong 1 lần chạy nên nhớ lại là an toàn.
+let _spreadsheet = null;
+
 function getSpreadsheet() {
+  if (_spreadsheet) return _spreadsheet;
   const id = getProp('SPREADSHEET_ID');
   if (!id) throw new Error('Chưa set SPREADSHEET_ID trong Script Properties');
-  return SpreadsheetApp.openById(id);
+  _spreadsheet = SpreadsheetApp.openById(id);
+  return _spreadsheet;
 }
 
 function getSalt() {

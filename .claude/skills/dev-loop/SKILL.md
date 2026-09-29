@@ -98,4 +98,6 @@ Sau mỗi vòng, tự hỏi: lỗi nào lọt tới bước 4–5 mà lẽ ra te
 - Form có giá trị mặc định (`default`) → không được tính là "đã nhập" (tự lưu nháp / hỏi "Bỏ form chưa lưu?").
 - Ô số nhận dữ liệu cũ dạng chữ ("39m") → sửa bản ghi phải giữ nguyên giá trị cũ nếu không nhập lại.
 - Đo tốc độ: `evaluate_script` chạy lâu (gọi Apps Script nhiều lần) bị timeout → chạy ngầm trong trang, ghi vào `window.__perf`, hỏi lại sau. Trang tự chuyển (hết phiên → login/index) làm mất biến → đo trên tab riêng không bị chuyển hướng.
+- Sửa file bằng Python trong heredoc: chuỗi JS có `\n` (vd trong `confirm(...)`) bị biến thành xuống dòng thật → vỡ cú pháp. Đoạn có ký tự thoát thì dùng Edit tool; sau khi sửa luôn xem `git diff` + `node --check`.
+- Tăng tốc bằng "hỏi trước, dùng lại kết quả": kiểm xem lúc dùng thật khoá hỏi có trùng được với lúc hỏi trước không (vd trường bắt buộc lúc Lưu luôn có → hỏi khi chưa có là phí). Kết quả hỏi phải bị xoá khi hết giờ chờ và sau khi lưu.
 - Đo "lần mở đầu" phải dùng `new_page` với `isolatedContext` MỚI (bộ nhớ đệm trống) + `emulate` Fast 4G/CPU 4x; iframe trong trang cũ chỉ cho số "mở lại" (đã có cache). Máy dev có lúc tra DNS CDN mất ~6 s → đo 2 lần trước khi kết luận.

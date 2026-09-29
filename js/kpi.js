@@ -4,6 +4,7 @@ import { apiKpi, apiList } from './api.js';
 import { SCHEMAS } from './schemas.js';
 import { showToast, escapeHtml, formatVnDate } from './utils.js';
 import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
+import { loadJsPDF } from './lazy-lib.js';
 
 const state = {
   month: null,        // "YYYY-MM"
@@ -286,10 +287,10 @@ async function exportXlsx() {
 }
 
 /** Export PDF qua jsPDF + autoTable. */
-function exportPdf() {
+async function exportPdf() {
   if (state.results.length === 0) return;
-  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('jsPDF chưa load', 'error'); return; }
-  const { jsPDF } = window.jspdf;
+  let jsPDF;
+  try { jsPDF = await loadJsPDF({ autoTable: true }); } catch (e) { showToast(e.message, 'error'); return; }
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   // Header

@@ -5,6 +5,7 @@ import { apiSobbhtList, apiSobbhtSave, apiSobbhtDelete } from './api.js';
 import { PHUONG_XA } from './dia-ban.js';
 import { showToast, escapeHtml } from './utils.js';
 import { newWorkbook, addReportSheet, downloadWorkbook, periodLine } from './excel-export.js';
+import { loadXLSX } from './lazy-lib.js';
 
 const FIELDS = ['Số BBHT', 'Ngày', 'Thời gian', 'Phường', 'Quận', 'Người làm', 'Giám sát', 'Ghi chú', 'Số điểm KS', 'Mã bản ghi'];
 /** Trang "Biên bản hiện trường" gửi dữ liệu điền sẵn qua đây khi bấm "Lưu vào sổ". */
@@ -213,8 +214,8 @@ function ngayChuan(v, soBbht) {
 async function previewImport(e) {
   const file = e.target.files[0];
   if (!file) return;
-  if (!window.XLSX) { showToast('Thư viện đọc Excel chưa tải xong, thử lại', 'error'); return; }
   try {
+    const XLSX = await loadXLSX();
     const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
     const name = wb.SheetNames.find(n => /BBHT/i.test(n));
     if (!name) { showToast('Không thấy sheet sổ BBHT (tên có chữ "BBHT") trong file', 'error', 5000); return; }

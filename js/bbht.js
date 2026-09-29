@@ -3,6 +3,7 @@ import { apiList } from './api.js';
 import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { inlineImages, restoreImages } from './photos.js';
 import { escapeHtml } from './utils.js';
+import { loadJsPDF, loadHtml2canvas } from './lazy-lib.js';
 
 const BBHT_MAP = {
   tang_cuong_den: { label: 'Tăng cường đèn',        dvt: 'Cái', field: 'Số đèn dự kiến'  },
@@ -467,6 +468,8 @@ async function exportPdf() {
 
   let restore = [];
   try {
+    // Tải thư viện trước khi đụng vào giao diện: mất mạng thì báo lỗi, biên bản không bị để dở
+    const [html2canvas, jsPDF] = await Promise.all([loadHtml2canvas(), loadJsPDF()]);
     // Nhúng ảnh trước khi chụp — để URL thì html2canvas vẽ ra ô trắng
     restore = await inlineImages(preview, (done, total) => {
       btn.textContent = `⏳ Đang nhúng ảnh ${done}/${total}...`;
@@ -507,7 +510,6 @@ async function exportPdf() {
 
     // Tạo PDF A4
     const imgData = canvas.toDataURL('image/jpeg', 0.93);
-    const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
     const pW = doc.internal.pageSize.getWidth();   // 210mm
