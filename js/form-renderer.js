@@ -1428,6 +1428,7 @@ async function handleSubmit() {
     showToast('Tài khoản XEM THỬ không submit được', 'warning');
     return;
   }
+  await stopAllVoice();   // đang ghi âm → chữ phải vào ô trước khi kiểm trường bắt buộc
   const errors = validateForm();
   if (errors.length > 0) {
     const first = errors[0];
@@ -1533,11 +1534,36 @@ function getSpeechRecognition() {
  * Gắn voice recognition vào textarea + button toggle.
  * Click → bắt đầu listen. Click lại → stop. Result append vào textarea.
  */
+// Các ô đang ghi âm: bấm Lưu phải dừng hết và chờ chữ vào ô trước khi kiểm trường bắt buộc
+const activeVoice = new Set();
+
+/** Dừng mọi ghi âm đang chạy, chờ tối đa 2 s cho chữ tạm được ghi vào ô. */
+function stopAllVoice() {
+  if (!activeVoice.size) return Promise.resolve();
+  const waits = [...activeVoice].map(v => new Promise(r => {
+    v.onDone = r;
+    try { v.recognition.stop(); } catch (e) { r(); }
+    setTimeout(r, 2000);
+  }));
+  return Promise.all(waits);
+}
+
 function attachVoiceRecognition(textareaEl, btnEl, statusEl) {
   const SR = getSpeechRecognition();
   if (!SR) return;
   let recognition = null;
   let listening = false;
+  // Chữ nhận dạng tạm (chưa isFinal). Nhiều điện thoại chỉ chốt câu khi dừng hẳn, hoặc không chốt
+  // → nếu bỏ đi thì người dùng thấy chữ hiện ra nhưng ô vẫn trống, Lưu báo "Thiếu trường bắt buộc".
+  let pendingInterim = '';
+  const entry = { recognition: null, onDone: null };
+  const append = (text) => {
+    const t = String(text || '').trim();
+    if (!t) return;
+    const sep = textareaEl.value && !/[\s.,;!?]$/.test(textareaEl.value) ? ' ' : '';
+    textareaEl.value = textareaEl.value + sep + t;
+    textareaEl.dispatchEvent(new Event('input', { bubbles: true }));
+  };
 
   btnEl.onclick = () => {
     if (listening) {
@@ -1545,12 +1571,15 @@ function attachVoiceRecognition(textareaEl, btnEl, statusEl) {
       return;
     }
     recognition = new SR();
+    entry.recognition = recognition;
+    pendingInterim = '';
     recognition.lang = 'vi-VN';
     recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onstart = () => {
       listening = true;
+      activeVoice.add(entry);
       btnEl.textContent = '🔴 Đang nghe... (bấm để dừng)';
       btnEl.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
       btnEl.classList.remove('bg-blue-50', 'text-blue-700', 'border-blue-300');
@@ -1568,12 +1597,8 @@ function attachVoiceRecognition(textareaEl, btnEl, statusEl) {
           interim += r[0].transcript;
         }
       }
-      if (final) {
-        // Append vào textarea, ngăn cách bằng space nếu textarea đã có nội dung
-        const sep = textareaEl.value && !/[\s.,;!?]$/.test(textareaEl.value) ? ' ' : '';
-        textareaEl.value = textareaEl.value + sep + final.trim();
-        textareaEl.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+      if (final) append(final);
+      pendingInterim = interim;
       statusEl.textContent = interim ? '"' + interim + '"' : 'Nói tiếp...';
     };
 
@@ -1583,7 +1608,12 @@ function attachVoiceRecognition(textareaEl, btnEl, statusEl) {
     };
 
     recognition.onend = () => {
+      // Câu đang nói dở chưa được chốt → vẫn ghi vào ô
+      append(pendingInterim);
+      pendingInterim = '';
       listening = false;
+      activeVoice.delete(entry);
+      if (entry.onDone) { entry.onDone(); entry.onDone = null; }
       btnEl.textContent = '🎤 Ghi âm';
       btnEl.classList.remove('bg-red-100', 'text-red-700', 'border-red-300');
       btnEl.classList.add('bg-blue-50', 'text-blue-700', 'border-blue-300');
