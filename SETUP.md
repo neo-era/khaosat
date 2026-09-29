@@ -123,7 +123,7 @@ Nếu muốn chắc hơn: nâng `PWD_ITERS` lên 500–1000 ở đầu section C
 
 Làm trên giao diện, **không** sửa sheet bằng tay:
 
-1. Đăng nhập bằng tài khoản `admin` → menu → **👥 Quản lý user**.
+1. Đăng nhập bằng tài khoản `admin` → menu → **👥 Quản lý người dùng**.
 2. Bấm **+ Thêm user** → điền username, mật khẩu tạm (≥8 ký tự), họ tên, vai trò.
 3. Đưa mật khẩu tạm cho người đó — họ sẽ bị bắt đổi ngay lần đăng nhập đầu.
 
@@ -226,7 +226,7 @@ Trên điện thoại:
 
 1. Mở `https://<user>.github.io/khaosat/login.html`.
 2. Đăng nhập với `ktv01` + mật khẩu bạn đã đặt ở Bước D.
-3. Trang chủ hiện 15 thẻ.
+3. Trang chủ hiện 17 loại khảo sát, chia 5 nhóm.
 4. Chọn **Tăng cường đèn** → form mở ra. **Người khảo sát** đã auto-fill "Lê Kỹ Thuật Viên" và readonly.
 5. Cho phép GPS. Điền các trường `*` đỏ. Chụp 1 ảnh.
 6. Bấm **Lưu**. Thấy toast "Đã lưu STT #TCD-yyMMdd-XXXX" (mã tự sinh).
@@ -293,10 +293,10 @@ Ba lỗi cùng lúc khiến hệ thống bị lộ thật:
 A: Không. Script chỉ tạo sheet còn thiếu, skip sheet đã có.
 
 **Q: Muốn thêm 1 người khảo sát mới?**
-A: Đăng nhập `admin` → menu → **👥 Quản lý user** → **+ Thêm user**. Không sửa sheet bằng tay nữa.
+A: Đăng nhập `admin` → menu → **👥 Quản lý người dùng** → **+ Thêm user**. Không sửa sheet bằng tay nữa.
 
 **Q: Người khảo sát quên mật khẩu?**
-A: **👥 Quản lý user** → nút **🔑 PWD** → đặt mật khẩu tạm → nhắn riêng cho người đó. Họ đăng nhập xong sẽ bị bắt đổi sang mật khẩu riêng ngay.
+A: **👥 Quản lý người dùng** → nút **🔑 PWD** → đặt mật khẩu tạm → nhắn riêng cho người đó. Họ đăng nhập xong sẽ bị bắt đổi sang mật khẩu riêng ngay.
 
 **Q: Mật khẩu lưu ở đâu? Mở Google Sheets có xem được không?**
 A: Không. Sheet `taikhoan` chỉ còn danh bạ (tên, họ tên, vai trò, trạng thái). Mật khẩu nằm trong Script Properties dưới khoá `CRED_<username>`, và **chỉ lưu dạng băm** — kể cả admin cũng không đọc ngược ra mật khẩu thật được.

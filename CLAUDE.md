@@ -1025,6 +1025,9 @@ Lưới 15 thẻ, mỗi thẻ:
 - Tên loại khảo sát (đặt tên dễ hiểu cho người khảo sát, ví dụ "Tăng cường đèn" thay vì "tang_cuong_den")
 - Click → mở `form.html?type=<key>`
 
+> **Cập nhật 2026-09-29 (user duyệt):** 17 loại chia 5 nhóm theo `SURVEY_GROUPS` trong `js/schemas.js` (Đèn & cần đèn / Cáp & hộp nối / Trụ & móng / Tủ điều khiển / Sự việc khác), ô 3 cột trên điện thoại. Thêm loại mới PHẢI xếp vào 1 nhóm (test `tests/ui.test.mjs`).
+> **Menu** (chỉ có ở `index.html`) chia 4 nhóm: Công việc hiện trường · Báo cáo & biên bản · Quản trị · Cá nhân & hỗ trợ; đầu menu có tên + vai trò; nhóm không còn mục nào được phép thì ẩn. Menu `z-[1000]` (trên nút tròn Hướng dẫn 900), modal cài iOS `z-[1100]`. Mục **Hồ sơ hoàn công** (chỉ quản lý) mở trang ngoài `https://neo-era.github.io/cskvtt/hoancong/` (repo `cskvtt`, sửa bên đó — không chép vào repo này).
+
 Header trang chủ có:
 - Logo SAPULICO (placeholder text "SAPULICO" nếu chưa có logo)
 - Link "Xem khảo sát hôm nay" → `recent.html`
