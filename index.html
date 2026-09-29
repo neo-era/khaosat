@@ -70,7 +70,7 @@
         <li class="menu-admin hidden"><a href="kpi.html" class="mi"><span class="ic">📊</span>KPI tổng</a></li>
         <li class="menu-admin hidden"><a href="bbht.html" class="mi"><span class="ic">📝</span>Biên bản hiện trường</a></li>
         <li class="menu-admin hidden"><a href="sobbht.html" class="mi"><span class="ic">📒</span>Sổ biên bản hiện trường</a></li>
-        <li class="menu-admin hidden"><a href="bcsc.html" class="mi"><span class="ic">🚨</span>Biên bản báo cáo sự cố</a></li>
+        <li class="menu-bcsc hidden"><a href="bcsc.html" class="mi"><span class="ic">🚨</span>Biên bản báo cáo sự cố</a></li>
         <li class="menu-admin hidden"><a href="bangron.html" class="mi"><span class="ic">🚩</span>Báo cáo băng rôn</a></li>
         <li class="menu-admin hidden"><a href="https://neo-era.github.io/cskvtt/hoancong/" target="_blank" rel="noopener" class="mi"><span class="ic">📁</span>Hồ sơ hoàn công<span class="ext" aria-label="mở trang mới">↗</span></a></li>
       </ul>
@@ -174,6 +174,8 @@
     // ===== My KPI: hiện cho mọi role có quyền submit (không phải demo) =====
     if (hasPermission('submit')) {
       document.querySelectorAll('.menu-my-kpi').forEach(el => el.classList.remove('hidden'));
+      // Biên bản sự cố: mọi người nhập được thì lập biên bản được (user chốt 2026-09-30)
+      document.querySelectorAll('.menu-bcsc').forEach(el => el.classList.remove('hidden'));
     }
     // ===== User management menu (Reset PWD): chỉ role có users_manage =====
     if (hasPermission('users_manage')) {

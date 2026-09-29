@@ -1698,6 +1698,9 @@ function showSuccessDialog(stt) {
       <h2 class="text-lg font-semibold mb-1">Đã lưu STT #${escapeHtml(String(stt))}</h2>
       <p class="text-gray-600 text-sm mb-5">Bản ghi đã được gửi thành công vào Google Sheets.</p>
       <div class="flex flex-col gap-2">
+        ${state.schemaKey === 'bao_cao_su_co'
+          ? `<a href="bcsc.html?stt=${encodeURIComponent(String(stt))}" class="bg-red-700 text-white py-3 rounded-lg font-medium flex items-center justify-center" style="min-height:44px">📄 Lập biên bản sự cố</a>`
+          : ''}
         <button id="dlg-cont" class="bg-blue-700 text-white py-3 rounded-lg font-medium" style="min-height:44px">Nhập tiếp loại này</button>
         <button id="dlg-home" class="bg-gray-200 text-gray-800 py-3 rounded-lg font-medium" style="min-height:44px">Về trang chủ</button>
       </div>

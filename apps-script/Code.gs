@@ -1991,12 +1991,19 @@ function handleList(body) {
   const sttFilter = body.stt !== undefined && body.stt !== null && body.stt !== '' ? String(body.stt) : null;
   const from = body.from ? new Date(body.from) : null;
   const to = body.to ? new Date(body.to) : null;
-  const includeDeleted = !!body.includeDeleted;
-  const onlyDeleted = body.status === 'deleted';
-  const onlyActive = body.status === 'active' || (!includeDeleted && !onlyDeleted);
+  // Nếu role không có quyền manage/report → chỉ xem của mình.
+  // Ngoại lệ (user chốt 2026-09-30): báo cáo sự cố — ai có quyền nhập (trừ demo) đều lập biên bản
+  // được cho MỌI bản. Chỉ mở khi hỏi đúng loại này; hỏi "tất cả loại" vẫn chỉ trả bản của mình.
+  const isManager = can(auth.role, 'manage') || can(auth.role, 'report');
+  const openBcsc = type === 'bao_cao_su_co' && can(auth.role, 'submit');
+  const restrictToSelf = !openBcsc && !isManager;
+  // Xem để lập biên bản thôi: không mở bản đã xoá và cột hệ thống của người khác
+  const bcscLimited = openBcsc && !isManager;
+  if (bcscLimited && body.status === 'deleted') return { ok: true, rows: [], total: 0 };
 
-  // Nếu role không có quyền manage/report → chỉ xem của mình
-  const restrictToSelf = !can(auth.role, 'manage') && !can(auth.role, 'report');
+  const includeDeleted = !bcscLimited && !!body.includeDeleted;
+  const onlyDeleted = !bcscLimited && body.status === 'deleted';
+  const onlyActive = bcscLimited || body.status === 'active' || (!includeDeleted && !onlyDeleted);
   const usernameTarget = restrictToSelf ? auth.username : usernameFilter;
 
   const types = type ? [type] : Object.keys(SHEET_MAP);
@@ -2012,7 +2019,9 @@ function handleList(body) {
       const isDeleted = !!row['Deleted At'];
       if (onlyDeleted && !isDeleted) return;
       if (onlyActive && isDeleted) return;
-      results.push(Object.assign({ _type: t, _sheet: SHEET_MAP[t] }, row));
+      const out = Object.assign({ _type: t, _sheet: SHEET_MAP[t] }, row);
+      if (bcscLimited) ['User Agent', 'Deleted At', 'Deleted By', 'Cập nhật trạng thái'].forEach(k => delete out[k]);
+      results.push(out);
     });
   });
   return { ok: true, rows: results, total: results.length };

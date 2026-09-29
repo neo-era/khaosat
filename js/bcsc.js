@@ -4,7 +4,7 @@
 
 import { apiList } from './api.js';
 import { escapeHtml, showToast } from './utils.js';
-import { inlineImages, restoreImages } from './photos.js';
+import { inlineImages, restoreImages, fetchAsDataUrl } from './photos.js';
 
 const TYPE = 'bao_cao_su_co';
 const MAU_KEY = 'bcsc_mau';   // localStorage: dòng Công tác + tên người ký lần sửa gần nhất
@@ -27,7 +27,7 @@ export function initBcsc() {
   $('f-from').value = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
   $('btn-load').onclick = load;
   $('f-search').addEventListener('input', renderList);
-  $('btn-print').onclick = () => window.print();
+  $('btn-print').onclick = printDoc;
   $('btn-word').onclick = exportWord;
   $('btn-close').onclick = () => { $('doc-area').classList.add('hidden'); state.current = null; };
 
@@ -179,8 +179,18 @@ function openDoc(r) {
     <div style="height:90px"></div>
     <p><b>11 - Hình ảnh, file đính kèm:</b></p>
     ${photos.length
-      ? `<table class="bc-photos">${photoRows.map(row => `<tr>${row.map(u => `<td><img src="${escapeHtml(u)}" alt="Ảnh hiện trường sự cố"></td>`).join('')}${row.length < 2 ? '<td></td>' : ''}</tr>`).join('')}</table>`
+      ? `<table class="bc-photos">${photoRows.map(row => `<tr>${row.map(u => `<td><img data-src="${escapeHtml(u)}" src="${escapeHtml(u)}" alt="Ảnh hiện trường sự cố"></td>`).join('')}${row.length < 2 ? '<td></td>' : ''}</tr>`).join('')}</table>`
       : '<p style="font-style:italic;color:#666">(Không có ảnh đính kèm)</p>'}`;
+
+  // Ảnh Drive (uc?export=view) có lúc trình duyệt không hiện được → lấy qua máy chủ, để bản xem và bản in có ảnh
+  $('bcsc-preview').querySelectorAll('img[data-src]').forEach(img => {
+    // Không dùng once: Xuất Word xong trả src về URL gốc → lỗi lại → phải lấy lại (đã có cache, không gọi máy chủ).
+    // Ảnh đã là data: mà vẫn lỗi thì thôi, tránh lặp vô hạn.
+    img.addEventListener('error', () => {
+      if (img.src.startsWith('data:')) return;
+      fetchAsDataUrl(img.dataset.src).then(d => { img.src = d; }).catch(() => {});
+    });
+  });
 
   Object.keys(MAU_MAC_DINH).forEach(id => { const el = $(id); if (el) el.addEventListener('blur', saveMau); });
   // Đổi tên công ty trong mục 1 cũng được nhớ (phần sau dấu "- ")
@@ -195,6 +205,20 @@ function openDoc(r) {
   });
   $('doc-area').classList.remove('hidden');
   $('doc-area').scrollIntoView({ behavior: 'smooth' });
+}
+
+/** In: nhúng ảnh trước (ảnh Drive có lúc không hiện) — không trả lại URL, bản xem giữ ảnh đã nhúng. */
+async function printDoc() {
+  const btn = $('btn-print');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try {
+    await inlineImages($('bcsc-preview'), (done, total) => { btn.textContent = `⏳ Chuẩn bị ảnh ${done}/${total}...`; });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+  window.print();
 }
 
 // =====================================================================
@@ -217,9 +241,15 @@ async function exportWord() {
       el.removeAttribute('contenteditable');
       el.style.borderBottom = 'none';
     });
+    // Ngắt trang bằng thuộc tính của đoạn đầu trang sau, không chèn <br>: <br> thành 1 dòng trống
+    // ở đầu trang 2 khiến trang sau thụt xuống lệch so với lề trên của trang 1
     clone.querySelectorAll('.page-break').forEach(el => {
-      el.outerHTML = '<br clear="all" style="page-break-before:always">';
+      const next = el.nextElementSibling;
+      // Ghi thẳng chuỗi: gán qua el.style thì trình duyệt đổi thành "break-before: page" — Word không hiểu
+      if (next) next.setAttribute('style', 'page-break-before:always;margin-top:0');
+      el.remove();
     });
+    clone.querySelectorAll('img').forEach(img => img.removeAttribute('data-src'));
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>Báo cáo sự cố</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
