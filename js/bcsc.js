@@ -4,7 +4,8 @@
 
 import { apiList } from './api.js';
 import { escapeHtml, showToast } from './utils.js';
-import { inlineImages, restoreImages, fetchAsDataUrl } from './photos.js';
+import { inlineImages, restoreImages, fetchAsDataUrl, sizeImagesForWord } from './photos.js';
+import { driveViewUrl } from './drive-url.js';
 
 const TYPE = 'bao_cao_su_co';
 const MAU_KEY = 'bcsc_mau';   // localStorage: dòng Công tác + tên người ký lần sửa gần nhất
@@ -138,19 +139,18 @@ function openDoc(r) {
     (r['Tuyến đường'] ? ', ' + r['Tuyến đường'] : '') + (r['Phường'] ? ', phường ' + r['Phường'] : '') +
     (r['Quận'] ? ', ' + r['Quận'] : '');
   const nguyenNhan = [r['Nguyên nhân sơ bộ'], r['Năm lắp đặt'] ? 'Năm lắp đặt ' + r['Năm lắp đặt'] : ''].filter(Boolean).join('. ');
+  // Ảnh 1 cột, cỡ lớn như mẫu BCSC (mỗi ảnh rộng ~13 cm)
   const photos = String(r['Ảnh (URLs)'] || '').split('|').filter(Boolean);
-  const photoRows = [];
-  for (let i = 0; i < photos.length; i += 2) photoRows.push(photos.slice(i, i + 2));
 
   $('bcsc-preview').innerHTML = `
     <table class="bc-head"><tr>
-      <td style="width:45%"><b>CÔNG TY CỔ PHẦN<br>CHIẾU SÁNG CÔNG CỘNG TP. HCM</b><br>
-        <span style="display:inline-block;width:45%;border-top:1px solid #000;margin:2px 0 6px"></span><br>
+      <td nowrap style="width:46%"><b>CÔNG TY CỔ PHẦN<br>CHIẾU SÁNG CÔNG CỘNG TP. HCM</b>
+        <table class="bc-rule" align="center" style="width:45%;margin:2px auto 6px"><tr><td>&nbsp;</td></tr></table>
         Số: ${ed('ed-so', r['Số BCSC'] || '', '............/BCSC-CSKVTT')}</td>
-      <td style="width:55%"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b><br>
-        <span style="display:inline-block;width:40%;border-top:1px solid #000;margin-top:2px"></span></td>
+      <td nowrap style="width:54%"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b>Độc lập - Tự do - Hạnh phúc</b>
+        <table class="bc-rule" align="center" style="width:40%;margin:2px auto 6px"><tr><td>&nbsp;</td></tr></table></td>
     </tr></table>
-    <p style="text-align:right;font-style:italic;margin:10px 0 6px">Tp. Hồ Chí Minh, ngày ${ed('ed-ngay', String(ng.d), '__')} tháng ${ed('ed-thang', String(ng.m), '__')} năm ${ed('ed-nam', String(ng.y || new Date().getFullYear()), '____')}</p>
+    <p style="text-align:right;margin:10px 0 6px">Tp. Hồ Chí Minh, ngày ${ed('ed-ngay', String(ng.d), '__')} tháng ${ed('ed-thang', String(ng.m), '__')} năm ${ed('ed-nam', String(ng.y || new Date().getFullYear()), '____')}</p>
     <p style="text-align:center;font-weight:bold;font-size:14pt;margin:0">BÁO CÁO SỰ CỐ</p>
     <p style="text-align:center;font-weight:bold;font-size:14pt;margin:0 0 4px">CÔNG TÁC QUẢN LÝ, BẢO DƯỠNG HỆ THỐNG</p>
     <p style="text-align:center">Công tác: ${ed('ed-cong-tac', mau['ed-cong-tac'], 'Công tác / gói thầu')}</p>
@@ -165,7 +165,7 @@ function openDoc(r) {
     <p><b>7- Ý kiến của Chuyên viên quản lý địa bàn:</b></p>
     <p>- Cho phép triển khai công việc: Có ☐ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Không ☐</p>
     <p>- Ý kiến khác: ${ed('ed-y-kien', '', '')}</p>
-    <p style="letter-spacing:1px;overflow:hidden;white-space:nowrap">${'.'.repeat(160)}</p>
+    <table class="bc-dots"><tr><td>&nbsp;</td></tr></table>
     <table class="bc-sign"><tr>
       <td>CHUYÊN VIÊN QUẢN LÝ ĐỊA BÀN<div class="space"></div>${ed('ed-ky-cv', mau['ed-ky-cv'], 'Họ tên')}</td>
       <td>PHỤ TRÁCH KỸ THUẬT THI CÔNG<div class="space"></div>${ed('ed-ky-kt', mau['ed-ky-kt'], 'Họ tên')}<br>PHÒNG KỸ THUẬT<div class="space"></div>${ed('ed-ky-pkt', mau['ed-ky-pkt'], 'Họ tên')}</td>
@@ -176,10 +176,10 @@ function openDoc(r) {
     <p>- Chất lượng: ${'.'.repeat(110)}</p>
     <p>- Thời gian thực hiện: ${'.'.repeat(98)}</p>
     <p style="text-align:right;font-weight:bold;margin:8px 40px 0 0">GIÁM ĐỐC ĐƠN VỊ</p>
-    <div style="height:90px"></div>
+    <div class="space space-lg"></div>
     <p><b>11 - Hình ảnh, file đính kèm:</b></p>
     ${photos.length
-      ? `<table class="bc-photos">${photoRows.map(row => `<tr>${row.map(u => `<td><img data-src="${escapeHtml(u)}" src="${escapeHtml(u)}" alt="Ảnh hiện trường sự cố"></td>`).join('')}${row.length < 2 ? '<td></td>' : ''}</tr>`).join('')}</table>`
+      ? `<div class="bc-photos">${photos.map(u => `<p class="bc-photo"><img data-src="${escapeHtml(u)}" src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" alt="Ảnh hiện trường sự cố"></p>`).join('')}</div>`
       : '<p style="font-style:italic;color:#666">(Không có ảnh đính kèm)</p>'}`;
 
   // Ảnh Drive (uc?export=view) có lúc trình duyệt không hiện được → lấy qua máy chủ, để bản xem và bản in có ảnh
@@ -249,21 +249,31 @@ async function exportWord() {
       if (next) next.setAttribute('style', 'page-break-before:always;margin-top:0');
       el.remove();
     });
+    // Word bỏ qua div rỗng có height → chỗ ký bằng các đoạn trống (mỗi đoạn ~1 dòng 13pt)
+    clone.querySelectorAll('.space').forEach(el => {
+      el.outerHTML = '<p style="margin:0">&nbsp;</p>'.repeat(el.classList.contains('space-lg') ? 5 : 3);
+    });
+    sizeImagesForWord(preview, clone, 490, 640);   // 1 cột như mẫu: rộng ≤ 13 cm, cao ≤ 17 cm
     clone.querySelectorAll('img').forEach(img => img.removeAttribute('data-src'));
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>Báo cáo sự cố</title>
 <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
-@page { size: 21cm 29.7cm; margin: 1.5cm 1.5cm 1.5cm 2cm; }
-body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.4; }
+/* Word chỉ nhận khổ giấy/lề qua section có tên (@page thường bị bỏ qua → ra khổ Letter, lề 2,54 cm) */
+@page WordSection1 { size: 21cm 29.7cm; margin: 1.5cm 1.5cm 1.5cm 2cm; mso-header-margin: 0.8cm; mso-footer-margin: 0.8cm; }
+div.WordSection1 { page: WordSection1; }
+body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.3; }
 p { margin: 0 0 4pt; }
-table { border-collapse: collapse; width: 100%; }
-.bc-head td, .bc-sign td { vertical-align: top; text-align: center; }
-.bc-sign td { font-weight: bold; width: 50%; }
-.bc-sign .space { height: 60pt; }
-.bc-photos td { width: 50%; padding: 3pt; text-align: center; vertical-align: top; }
-.bc-photos img { width: 230pt; border: 1px solid #999; }
-</style></head><body>${clone.innerHTML}</body></html>`;
+table { border-collapse: collapse; }
+.bc-head, .bc-sign, .bc-dots { width: 100%; }
+.bc-head td { vertical-align: top; text-align: center; font-size: 12pt; }
+.bc-sign td { vertical-align: top; text-align: center; font-weight: bold; width: 50%; font-size: 12pt; }
+/* Word bỏ qua height của ô → dùng cỡ chữ ô rỗng để tạo khoảng hở giữa chữ và gạch ngắn */
+.bc-rule td { border-bottom: 1pt solid #000; padding: 0; font-size: 7pt; line-height: 7pt; mso-line-height-rule: exactly; }
+.bc-dots td { border-bottom: 1pt dotted #000; padding: 0; height: 14pt; }
+.bc-photo { margin: 6pt 0; }
+.bc-photo img { border: 1px solid #999; }
+</style></head><body><div class="WordSection1">${clone.innerHTML}</div></body></html>`;
     const blob = new Blob(['﻿', html], { type: 'application/msword' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

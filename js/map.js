@@ -5,6 +5,7 @@ import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
 import { createBoundaryLayer } from './boundaries.js';
+import { driveViewUrl } from './drive-url.js';
 
 // Trung tâm TP.HCM
 const CENTER = [10.7769, 106.7009];
@@ -225,7 +226,7 @@ function openDetail(r) {
     // Nếu là URL ảnh Cloudinary → render mini thumbnail
     if (label === 'Ảnh (URLs)' && /https?:/.test(String(value))) {
       valHtml = String(value).split('|').filter(u => u).map(u =>
-        `<a href="${escapeHtml(u)}" target="_blank"><img src="${escapeHtml(u)}" style="max-width:100px; max-height:100px; display:inline-block; margin:2px; border-radius:4px"></a>`
+        `<a href="${escapeHtml(u)}" target="_blank"><img src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" style="max-width:100px; max-height:100px; display:inline-block; margin:2px; border-radius:4px"></a>`
       ).join('');
     } else if ((label === 'Bản vẽ' || label === 'link' || label === 'Link Google Map') && /^https?:/.test(String(value))) {
       valHtml = `<a href="${escapeHtml(String(value))}" target="_blank" style="color:#1d4ed8; text-decoration:underline">${escapeHtml(String(value).slice(0, 60))}...</a>`;
