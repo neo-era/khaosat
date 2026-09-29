@@ -55,7 +55,8 @@ const SHEET_MAP = {
   tc_den_kc_xa:   '13 Tăng cường đèn kc xa',
   decal_so_tru:   '14 Decal số trụ',
   nang_mong:      '15. Nâng móng',
-  thao_go_bang_ron: '16. Thao go bang ron'
+  thao_go_bang_ron: '16. Thao go bang ron',
+  bao_cao_su_co:  '17. Bao cao su co'     // thêm 2026-09-29 — sheet mới: chạy initSheets()
 };
 
 /** Mã loại đứng đầu STT (vd TD-260926-A3F9). Đổi mã → bản ghi mới mang mã mới, bản cũ giữ nguyên. */
@@ -63,7 +64,8 @@ const STT_PREFIX = {
   tang_cuong_den: 'TCD', ngam_hoa: 'NH',   thay_den: 'TD',   hkn: 'HKN',
   tc_noi: 'TCN',         cap_luon_can: 'CLC', tc_ngam: 'TCG', thay_can: 'TCA',
   thay_tru: 'TT',        choa_den: 'CD',   nap_tru: 'NT',    vo_tu: 'VT',
-  tc_den_kc_xa: 'TDX',   decal_so_tru: 'DST', nang_mong: 'NM', thao_go_bang_ron: 'BR'
+  tc_den_kc_xa: 'TDX',   decal_so_tru: 'DST', nang_mong: 'NM', thao_go_bang_ron: 'BR',
+  bao_cao_su_co: 'SC'
 };
 
 /**
@@ -157,6 +159,12 @@ const HEADERS = {
   thao_go_bang_ron: [
     'STT','Tuyến đường','Quận','Phường','Vị trí','Loại quảng cáo','Số lượng',
     'Người khảo sát','Ngày khảo sát','kinh độ','vĩ độ','Ghi chú','Link Google Map'
+  ],
+  // Theo mẫu "Báo cáo sự cố công tác quản lý, bảo dưỡng hệ thống" (BCSC) — xuất biên bản ở bcsc.html
+  bao_cao_su_co: [
+    'STT','Số BCSC','Đơn vị báo cáo','Tủ điều khiển','Mã tủ','Tuyến đường','Quận','Phường',
+    'Ngày giờ phát hiện','Hiện trạng sự cố','Nguyên nhân sơ bộ','Năm lắp đặt','Đề xuất khắc phục',
+    'Người khảo sát','Ngày khảo sát','kinh độ','vĩ độ','Ghi chú','Link Google Map'
   ]
 };
 
@@ -180,7 +188,7 @@ const NO_GPS_TYPES = ['hkn'];
  *   GPS_LINK_TYPES    : chỉ lưu link Google Map (cột 'link')
  *   NO_GPS_TYPES      : không có GPS, bỏ qua khi tính pct_gps
  */
-const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa', 'thao_go_bang_ron'];
+const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa', 'thao_go_bang_ron', 'bao_cao_su_co'];
 const GPS_LINK_TYPES    = [
   'thay_den', 'tc_noi', 'cap_luon_can', 'tc_ngam', 'thay_can',
   'thay_tru', 'choa_den', 'nap_tru', 'vo_tu',

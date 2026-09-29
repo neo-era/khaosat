@@ -135,6 +135,7 @@ Có 4 role, mỗi role có set quyền riêng. Trường `role` trong sheet `tai
 | 14 | `decal_so_tru` | `14 Decal số trụ` | 12 | 1 |
 | 15 | `nang_mong` | `15. Nâng móng` | 15 | 1 |
 | 16 | `thao_go_bang_ron` | `16. Thao go bang ron` | 13 | — (sheet mới, không từ Excel) |
+| 17 | `bao_cao_su_co` | `17. Bao cao su co` | 19 | — (thêm 2026-09-29, theo mẫu BCSC — sheet cũ chưa có: chạy `initSheets()`) |
 
 > **Cách tạo nhanh**: KHÔNG cần thao tác tay tạo 16 sheet. Sau khi tạo file Google Sheets trống và bind Apps Script, admin chạy hàm `initSheets()` 1 lần — script tự tạo đủ 16 sheet với header chính xác + 2 sheet phụ + conditional format. Hàm idempotent: chạy lại chỉ tạo sheet còn thiếu, không đụng dữ liệu cũ. Chi tiết ở mục 7.
 
@@ -250,6 +251,8 @@ Có 3 mức GPS, ảnh hưởng đến KPI `pct_gps` và UX form:
 - `select` + `allowOther: true` — danh sách cố định + mục "Khác (nhập tay)"; giá trị ngoài danh sách lưu nguyên văn (bản ghi cũ gõ tự do vẫn hiển thị đúng ở ô Khác)
 - `multiselect` — ô tick nhiều lựa chọn + "Khác", lưu chuỗi `"A, B, C"` (dùng cho `Loại sự cố` của `thay_tru`)
 - `countFrom: '<key>'` (thuộc tính của ô `number`) — tự đếm các con số trong trường `<key>`, vẫn sửa tay được (dùng cho `Số lượng` của `nap_tru`, đếm từ `Số trụ`)
+- `datetime` *(2026-09-29)* — ô ngày giờ (`datetime-local`), lưu `yyyy-MM-dd HH:mm`; dùng cho `Ngày giờ phát hiện` của `bao_cao_su_co`
+- `default: <giá trị>` (thuộc tính, `'now'` = lúc mở form) — giá trị mặc định cho bản mới; không bị tính là "đã nhập" khi tự lưu nháp / hỏi "Bỏ form chưa lưu?"
 - `image_url` — upload ảnh lên Cloudinary, lưu URL; dùng cho trường `Bản vẽ` (chụp bản vẽ thiết kế)
 - `skip` — không hiển thị, không gửi (dự phòng)
 
@@ -581,6 +584,30 @@ Nghiệp vụ tháo gỡ băng rôn / quảng cáo trái phép treo trên trụ 
 | 11 | vĩ độ | lat | gps_lat | — | |
 | 12 | Ghi chú | ghi_chu | textarea | No | |
 | 13 | Link Google Map | link_gmap | link_gmap | — | auto từ GPS |
+
+**5.17 `bao_cao_su_co` — "17. Bao cao su co"** *(bổ sung 2026-09-29)* — theo mẫu PDF "BÁO CÁO SỰ CỐ công tác quản lý, bảo dưỡng hệ thống" (file `BCSC Nguyễn Hữu Dật 1 10-12-2025.pdf`). Người khảo sát nhập ngoài hiện trường; admin/user xuất biên bản ở `bcsc.html` (mục 15d). STT mã `SC-…`. Ảnh tối đa 5. GPS đầy đủ (lat+lng+link).
+
+| Order | Label | Field key | Type | Required | Mục trên mẫu |
+|---|---|---|---|---|---|
+| 1 | STT | stt | stt_auto | — | |
+| 2 | Số BCSC | so_bcsc | text | No | Số …/BCSC-… (người lập tự ghi) |
+| 3 | Đơn vị báo cáo | don_vi | select + Khác | **Yes** | 1 — mặc định `CSKV Bắc` |
+| 4 | Tủ điều khiển | tdk | tdk | **Yes** | 2 |
+| 5 | Mã tủ | ma_tu | text | No | 2 (vd TM118.03) |
+| 6 | Tuyến đường | tuyen_duong | text | **Yes** | 2 |
+| 7 | Quận | quan | quan | (tự điền) | 2 |
+| 8 | Phường | phuong | phuong | **Yes** | 2 |
+| 9 | Ngày giờ phát hiện | ngay_gio_pd | datetime | **Yes** | 3 — mặc định lúc mở form |
+| 10 | Hiện trạng sự cố | hien_trang | textarea | **Yes** | 4 |
+| 11 | Nguyên nhân sơ bộ | nguyen_nhan | textarea | No | 5 |
+| 12 | Năm lắp đặt | nam_ld | number | No | 5 |
+| 13 | Đề xuất khắc phục | de_xuat | textarea | **Yes** | 6 |
+| 14 | Người khảo sát | nguoi_ks | text | **Yes** | Người kiểm tra, phát hiện |
+| 15 | Ngày khảo sát | ngay_ks | date_auto | — | |
+| 16 | kinh độ | lng | gps_lng | — | |
+| 17 | vĩ độ | lat | gps_lat | — | |
+| 18 | Ghi chú | ghi_chu | textarea | No | |
+| 19 | Link Google Map | link_gmap | link_gmap | — | |
 
 > **Ảnh: tối đa 5** (các loại khác là 3). Khai bằng khoá `maxPhotos: 5` trong `js/schemas.js`; `js/form-renderer.js` đọc `state.schema.maxPhotos || 3` nên 15 loại cũ giữ nguyên mức 3. Ảnh vẫn lưu chung 1 ô `Ảnh (URLs)` phân tách bằng `|` — backend không đổi.
 
@@ -1317,6 +1344,13 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 - Trang `bbht.html` có nút **📒 Lưu vào sổ BBHT** → mở `sobbht.html` với form điền sẵn (số BB đã gõ, ngày/giờ trên biên bản, phường, người làm = người KS, **Giám sát = "Đại diện Trung tâm" (ed-dd1-ten)**, số điểm, mã bản ghi). Chuyển qua `localStorage['sobbht_prefill']`, dùng 1 lần, hết hạn 10 phút.
 - **Nhập sổ Excel cũ** (sheet "16. BBHT Ký App" trong `khao sat tang cuong den.xlsx`): xem trước rồi mới ghi. Ô ngày kiểu Date trong sổ cũ bị Excel **đảo tháng/ngày** → đối chiếu tháng trong Số BBHT ("01/07/Q5" = tháng 7) để sửa (tô vàng). Quận ghi đầy đủ ("8" → "Quận 8", "PN" → "Quận Phú Nhuận"); Giám sát lấy từ bảng phụ cột I:L (Quận → Giám sát). Bỏ qua dòng đã có (cùng Số BBHT + Ngày).
 - Xuất Excel có định dạng (`excel-export.js`).
+
+## 15d. Biên bản báo cáo sự cố `bcsc.html` (admin / user) — bổ sung 2026-09-29
+
+- Danh sách bản `bao_cao_su_co` (lọc ngày + tìm) → **📄 Lập biên bản** → biên bản A4 Times bám **đúng mẫu PDF**: quốc hiệu, `Số: …/BCSC-…`, "Tp. Hồ Chí Minh, ngày … tháng … năm …" (= ngày phát hiện), tiêu đề, dòng "Công tác", mục 1–7, ô `☐ Có ☐ Không` + dòng chấm (mục 7 **để trống cho ký tay**), 3 chữ ký, rồi sang trang: mục 10 (kết quả xử lý — **để trống**) + "GIÁM ĐỐC ĐƠN VỊ", mục 11 ảnh hiện trường (2 cột).
+- Mở thẳng 1 bản: `bcsc.html?stt=SC-…` (nút **Biên bản** ở trang Quản lý cho loại này). Menu trang chủ: "🚨 Biên bản báo cáo sự cố".
+- Mọi chữ sửa trực tiếp (`contenteditable`). **Số BCSC người lập tự ghi** (form có ô không bắt buộc). Dòng "Công tác", tên công ty ở mục 1 và **3 người ký** (mặc định theo mẫu: Phạm Xuân Sơn / Phạm Duy Thông / Nguyễn Huy Khương) sửa được và **app nhớ** (`localStorage['bcsc_mau']`, theo từng máy).
+- Xuất: 🖨️ In / Lưu PDF (`window.print`, `@media print` A4) · 📝 Xuất Word (HTML-Word như `bbht.js`, nhúng ảnh qua `inlineImages`).
 
 ## 16. PWA
 

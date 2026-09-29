@@ -873,7 +873,7 @@ const IMPORT_SHEET_MAP = {
   tc_ngam: '7. TCNgam', thay_can: '8. Thay Can', thay_tru: '9. Thay thế tru',
   choa_den: '10.choa den', nap_tru: '11. Nap tru', vo_tu: '12, Vo tu',
   tc_den_kc_xa: '13 Tăng cường đèn kc xa', decal_so_tru: '14 Decal số trụ', nang_mong: '15. Nâng móng',
-  thao_go_bang_ron: '16. Thao go bang ron'
+  thao_go_bang_ron: '16. Thao go bang ron', bao_cao_su_co: '17. Bao cao su co'
 };
 
 // Các cột server-managed: không gửi khi update
