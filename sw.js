@@ -1,7 +1,7 @@
 // sw.js — Service Worker đơn giản: precache shell + stale-while-revalidate cho assets.
 // Network only cho Apps Script + Cloudinary (đừng cache API response).
 
-const CACHE_NAME = 'khaosat-v26';
+const CACHE_NAME = 'khaosat-v27';
 
 const SHELL = [
   './',
@@ -60,8 +60,10 @@ const SHELL = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      // Best-effort: nếu 1 file fail, vẫn cache phần còn lại
-      Promise.allSettled(SHELL.map(url => cache.add(url)))
+      // Best-effort: nếu 1 file fail, vẫn cache phần còn lại.
+      // cache: 'reload' = bỏ qua HTTP cache của trình duyệt (GitHub Pages cho giữ 10 phút): không có
+      // thì mở app ngay sau khi deploy sẽ lưu file CŨ vào cache phiên bản mới và kẹt bản cũ.
+      Promise.allSettled(SHELL.map(url => cache.add(new Request(url, { cache: 'reload' }))))
     ).then(() => self.skipWaiting())
   );
 });
