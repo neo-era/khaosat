@@ -41,3 +41,11 @@ test('biên bản sự cố xuất Word: khổ A4 theo section Word, chỗ ký b
   assert.match(src, /\.space/, 'phải đổi .space thành đoạn trống khi xuất Word');
   assert.doesNotMatch(src, /photos\.slice\(i, i \+ 2\)/, 'ảnh vẫn xếp 2 cột, mẫu là 1 cột');
 });
+
+// 30/09/2026: cài SW mới bằng cache.add(url) đi qua HTTP cache (GitHub Pages max-age=600)
+// → mở app trong 10 phút sau khi deploy thì cache "phiên bản mới" chứa file CŨ, kẹt bản cũ.
+test('sw.js: lúc cài bản mới tải file thẳng từ máy chủ (cache: reload), không lấy HTTP cache', () => {
+  const sw = read('sw.js');
+  assert.match(sw, /cache:\s*'reload'/);
+  assert.doesNotMatch(sw, /cache\.add\(url\)/);
+});
