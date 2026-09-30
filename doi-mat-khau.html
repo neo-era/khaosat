@@ -70,12 +70,11 @@
   </div>
 
   <script type="module">
+    import { initSwUpdate } from './js/sw-update.js';
     import { initChangePassword } from './js/change-password.js';
     initChangePassword();
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
+    initSwUpdate();   // đăng ký SW + tự cập nhật khi có phiên bản mới (js/sw-update.js)
   </script>
 </body>
 </html>

@@ -102,6 +102,7 @@
   </div>
 
   <script type="module">
+    import { initSwUpdate } from './js/sw-update.js';
     import { requireAuth } from './js/auth.js';
     import { initUsers } from './js/users.js';
     import { initHelp } from './js/help.js';
@@ -117,9 +118,7 @@
     initUsers(user);
     initHelp('admin');
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
+    initSwUpdate();   // đăng ký SW + tự cập nhật khi có phiên bản mới (js/sw-update.js)
   </script>
 </body>
 </html>

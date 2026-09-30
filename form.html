@@ -31,6 +31,7 @@
   </main>
 
   <script type="module">
+    import { initSwUpdate } from './js/sw-update.js';
     import { requireAuth, logout } from './js/auth.js';
     import { SCHEMAS } from './js/schemas.js';
     import { renderForm } from './js/form-renderer.js';
@@ -66,12 +67,7 @@
       });
 
       initHelp('ktv');
-      // 5. Đăng ký service worker (best-effort, không chặn UX nếu fail)
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(() => {
-          // Im lặng — sw.js sẽ tạo ở B14
-        });
-      }
+      initSwUpdate();   // đăng ký SW + tự cập nhật khi có phiên bản mới (js/sw-update.js)
     }
   </script>
 </body>

@@ -4,6 +4,7 @@
 import { apiSobbhtList, apiSobbhtSave, apiSobbhtDelete } from './api.js';
 import { PHUONG_XA } from './dia-ban.js';
 import { showToast, escapeHtml } from './utils.js';
+import { beginBusy } from './sw-update.js';
 import { newWorkbook, addReportSheet, downloadWorkbook, periodLine } from './excel-export.js';
 import { loadXLSX } from './lazy-lib.js';
 
@@ -266,7 +267,13 @@ async function previewImport(e) {
   }
 }
 
+// Nhập hàng loạt gồm nhiều lệnh ghi liên tiếp: khoảng giữa 2 lệnh cũng không được tự tải lại (bỏ dở giữa chừng)
 async function runImport() {
+  const done = beginBusy();
+  try { return await runImportInner(); } finally { done(); }
+}
+
+async function runImportInner() {
   const items = state.importItems.map(({ _fixed, _dup, ...it }) => it);
   if (!items.length) { showToast('Không còn dòng nào để nhập', 'warning'); return; }
   if (!confirm(`Nhập ${items.length} dòng sổ cũ vào sheet "sobbht"?`)) return;
