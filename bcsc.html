@@ -30,9 +30,10 @@
     .bc-rule td { border-bottom: 1px solid #000; padding: 0; height: 6px; font-size: 2px; line-height: 2px; }
     .bc-dots { width: 100%; border-collapse: collapse; margin: 2px 0 8px; }
     .bc-dots td { border-bottom: 1px dotted #000; padding: 0; height: 16px; }
-    /* Ảnh 1 cột như mẫu BCSC: rộng tối đa 13 cm, cao tối đa 17 cm */
-    .bc-photo { margin: 6px 0 !important; }
-    .bc-photo img { max-width: 130mm; max-height: 170mm; width: auto; height: auto; border: 1px solid #999; }
+    /* Ảnh 2 cột, 4 ảnh/trang: mỗi ảnh rộng ≤ 84 mm, cao ≤ 110 mm, giữ tỉ lệ, căn giữa ô */
+    .bc-photos { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    .bc-photos td { width: 50%; padding: 4px; text-align: center; vertical-align: middle; }
+    .bc-photos img { max-width: 84mm; max-height: 110mm; width: auto; height: auto; border: 1px solid #999; }
     .page-break { page-break-before: always; break-before: page; height: 0; }
     @media print {
       /* Lề đặt ở trang giấy (không đặt ở khung): khung chỉ có 1 lần padding nên trang 2 trở đi
@@ -100,6 +101,7 @@
   </main>
 
   <script type="module">
+    import { initSwUpdate } from './js/sw-update.js';
     import { requireAuth } from './js/auth.js';
     import { initBcsc } from './js/bcsc.js';
     import { initHelp } from './js/help.js';
@@ -110,9 +112,7 @@
     initBcsc();
     initHelp('admin');
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
+    initSwUpdate();   // đăng ký SW + tự cập nhật khi có phiên bản mới (js/sw-update.js)
   </script>
 </body>
 </html>

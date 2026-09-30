@@ -1,7 +1,7 @@
 // sw.js — Service Worker đơn giản: precache shell + stale-while-revalidate cho assets.
 // Network only cho Apps Script + Cloudinary (đừng cache API response).
 
-const CACHE_NAME = 'khaosat-v27';
+const CACHE_NAME = 'khaosat-v28';
 
 const SHELL = [
   './',
@@ -54,18 +54,28 @@ const SHELL = [
   './bcsc.html',
   './js/bcsc.js',
   './js/lazy-lib.js',
-  './js/drive-url.js'
+  './js/drive-url.js',
+  './js/sw-update.js',
+  './js/file-name.js'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      // Best-effort: nếu 1 file fail, vẫn cache phần còn lại.
+      // Phải đủ MỌI file mới cài: thiếu file (mạng chập chờn) mà vẫn kích hoạt thì bản cũ bị xoá,
+      // app hỏng khi offline. Lỗi → giữ bản đang chạy, lần mở sau cài lại.
       // cache: 'reload' = bỏ qua HTTP cache của trình duyệt (GitHub Pages cho giữ 10 phút): không có
       // thì mở app ngay sau khi deploy sẽ lưu file CŨ vào cache phiên bản mới và kẹt bản cũ.
-      Promise.allSettled(SHELL.map(url => cache.add(new Request(url, { cache: 'reload' }))))
+      Promise.all(SHELL.map(url => cache.add(new Request(url, { cache: 'reload' }))))
     ).then(() => self.skipWaiting())
   );
+});
+
+// Trang hỏi số phiên bản đang chạy để hiện ở chân trang (js/sw-update.js)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'GET_VERSION' && event.source) {
+    event.source.postMessage({ type: 'VERSION', version: CACHE_NAME });
+  }
 });
 
 self.addEventListener('activate', (event) => {

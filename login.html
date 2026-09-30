@@ -159,6 +159,8 @@
   </div>
 
   <script type="module">
+    import { initSwUpdate } from './js/sw-update.js';
+    initSwUpdate();   // trang đầu vào: bản mới về máy ngay từ lúc đăng nhập
     import { login, getCurrentUser, defaultHomeFor } from './js/auth.js';
     import { CONFIG } from './js/config.js';
     import { initInstallPrompt } from './js/install.js';

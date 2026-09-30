@@ -3,6 +3,7 @@
 import { apiReport, apiUsers, apiList, apiExportRaw, apiUpdate, apiBulkImport } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES } from './schemas.js';
 import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
+import { beginBusy } from './sw-update.js';
 import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 import { loadJsPDF, loadXLSX } from './lazy-lib.js';
 
@@ -993,7 +994,13 @@ async function previewImport() {
   document.getElementById('btn-import-run').classList.remove('hidden');
 }
 
+// Nhập hàng loạt gồm nhiều lệnh ghi liên tiếp: khoảng giữa 2 lệnh cũng không được tự tải lại (bỏ dở giữa chừng)
 async function runImport() {
+  const done = beginBusy();
+  try { return await runImportInner(); } finally { done(); }
+}
+
+async function runImportInner() {
   const { type, inserts, updates } = importState;
   if (!type || (!inserts.length && !updates.length)) {
     showToast('Không có dữ liệu để import', 'warning');

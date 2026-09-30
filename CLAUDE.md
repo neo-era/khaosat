@@ -1358,7 +1358,7 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 ## 15d. Biên bản báo cáo sự cố `bcsc.html` (mọi tài khoản trừ demo) — bổ sung 2026-09-29
 
 - **Quyền (đổi 2026-09-30, user chốt)**: ai có quyền `submit` (admin/user/user1) mở được trang và xem/xuất biên bản của **TẤT CẢ** bản `bao_cao_su_co` — `handleList` mở riêng khi `type === 'bao_cao_su_co'` (biến `openBcsc`); hỏi "tất cả loại" hay loại khác user1 vẫn chỉ thấy của mình. Demo không vào được. Hộp "Đã lưu" của form sự cố có nút **📄 Lập biên bản sự cố** → `bcsc.html?stt=…`.
-- **Định dạng Word theo mẫu (2026-09-30, đối chiếu bằng Word 16 thật)**: khổ A4 + lề 1,5/1,5/2/1,5 cm qua `@page WordSection1`; tiêu đề 2 cột `nowrap` (46%/54%, 12pt); gạch ngắn & dòng chấm bằng viền ô bảng (`.bc-rule`, `.bc-dots`); ngày tháng chữ đứng; chỗ ký = đoạn trống (3 dòng, dưới Giám đốc 5 dòng); **ảnh 1 cột, rộng ≤ 13 cm, cao ≤ 17 cm** (`sizeImagesForWord`) — mẫu có 2 ảnh → trang 2 + 3 như mẫu.
+- **Định dạng Word theo mẫu (2026-09-30, đối chiếu bằng Word 16 thật)**: khổ A4 + lề 1,5/1,5/2/1,5 cm qua `@page WordSection1`; tiêu đề 2 cột `nowrap` (46%/54%, 12pt); gạch ngắn & dòng chấm bằng viền ô bảng (`.bc-rule`, `.bc-dots`); ngày tháng chữ đứng; chỗ ký = đoạn trống (3 dòng, dưới Giám đốc 5 dòng); ảnh **2 cột, 4 ảnh/trang** (mỗi ảnh ≤ 8,4 × 11 cm, `sizeImagesForWord(…, 318, 415)`; user chốt 30/09 thay cho 1 ảnh/trang của mẫu — 5 ảnh = 3 trang). **Tên file** Word và In/Lưu PDF = `BCSC <tủ> <dd-MM-yyyy>` như file mẫu (`js/file-name.js`; PDF lấy tên từ `document.title` đặt tạm lúc in).
 - **Ảnh Drive (2026-09-30)**: hiển thị/tải qua `js/drive-url.js → driveViewUrl()` (lh3, `referrerpolicy=no-referrer`) cho bcsc/bbht/bangron/manage/map/form; link lưu Sheets giữ nguyên. Dự phòng `photo_base64`.
 - **Ảnh + lề (2026-09-30)**: `<img>` phải có `data-src` (không có thì `inlineImages()` bỏ qua → Word mất ảnh; test `ui.test.mjs`). Ảnh Drive không hiện → tự lấy qua `photo_base64`; nút In nhúng ảnh xong mới in. In: lề đặt ở `@page` 15/15/15/20 mm (không đặt ở khung, nếu không trang 2 dính mép trên). Word: ngắt trang bằng `page-break-before:always` trên đoạn "10-" (không dùng `<br>` — tạo dòng trống đầu trang 2), ghi bằng `setAttribute` vì gán `el.style` bị đổi thành `break-before` Word không hiểu.
 
@@ -1386,6 +1386,11 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 ```
 
 `sw.js`: cache shell (`index.html`, `form.html`, `recent.html`, các file JS/CSS) cho phép mở app offline. Không cache API responses.
+
+**Tự cập nhật (2026-09-30, user chốt)** — mọi trang gọi `initSwUpdate()` (`js/sw-update.js`), KHÔNG tự `register('sw.js')`:
+- Hỏi bản mới lúc mở trang, mỗi 30 phút, và mỗi lần app hiện lại từ nền (`visibilitychange`). Phát hành = tăng `CACHE_NAME` trong `sw.js`.
+- Bản mới nắm quyền → trang không bận thì **tự tải lại**; đang bận thì hiện thanh "Có phiên bản mới — Cập nhật". Bận = ô đang focus, có ô `contenteditable` (biên bản đang mở), form có dữ liệu/ảnh/đang sửa (`registerBusyCheck` trong form-renderer), đang có lệnh GHI (`beginBusy` trong `api.js postJson`), đang gửi hàng chờ, đang nhập Excel. Tải lại giữa lệnh ghi = máy chủ đã ghi nhưng máy gửi lại → bản TRÙNG.
+- `sw.js` cài bằng `Promise.all` + `cache: 'reload'`: thiếu 1 file thì KHÔNG cài (giữ bản cũ chạy offline được); mọi file trong danh sách phải tồn tại (test). Chân trang chủ + cuối menu hiện "Phiên bản vNN" (`[data-app-version]`, SW trả `CACHE_NAME` qua message `GET_VERSION`).
 
 ---
 

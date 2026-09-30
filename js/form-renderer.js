@@ -19,6 +19,7 @@ import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
 import { showToast, escapeHtml, uuid, formatVnDate, debounce } from './utils.js';
 import { loadJsQR } from './lazy-lib.js';
+import { registerBusyCheck } from './sw-update.js';
 import { driveViewUrl } from './drive-url.js';
 
 // State module-scoped (1 form 1 lúc trên page)
@@ -69,6 +70,8 @@ export async function renderForm(containerEl, schemaKey) {
 
   renderShell();
   bindEvents();
+  // Có bản mới giữa lúc đang nhập: không tự tải lại (mất ảnh đang tải, chữ vừa gõ) → hiện thanh Cập nhật
+  registerBusyCheck(() => state.editMode || state.photos.length > 0 || hasUserInput(collectFormData()));
   if (state.editMode) {
     await loadEditRow();
     // Edit mode: không cần GPS auto-refresh hay autosave draft

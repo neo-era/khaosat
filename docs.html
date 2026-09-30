@@ -70,6 +70,7 @@
   </div>
 
   <script type="module">
+    import { initSwUpdate } from './js/sw-update.js';
     import { requireAuth, hasPermission, isFullAccess } from './js/auth.js';
     import { initDocs } from './js/docs.js';
     import { initHelp } from './js/help.js';
@@ -90,9 +91,7 @@
     initDocs(user);
     initHelp('chung');
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
+    initSwUpdate();   // đăng ký SW + tự cập nhật khi có phiên bản mới (js/sw-update.js)
   </script>
 </body>
 </html>

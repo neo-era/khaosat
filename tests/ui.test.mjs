@@ -34,12 +34,14 @@ test('biên bản xuất file: mọi <img> ảnh hiện trường có data-src �
 
 // 30/09/2026 — Word bỏ qua @page thường (ra khổ Letter, lề 2,54 cm) và bỏ qua div rỗng có height
 // (mất chỗ ký). Mở bằng Word 16 thật để đối chiếu mẫu BCSC.
-test('biên bản sự cố xuất Word: khổ A4 theo section Word, chỗ ký bằng đoạn trống, ảnh 1 cột như mẫu', () => {
+test('biên bản sự cố xuất Word: khổ A4 theo section Word, chỗ ký bằng đoạn trống, ảnh 2 cột', () => {
   const src = read('js/bcsc.js');
   assert.match(src, /@page WordSection1\s*\{[^}]*size:\s*21cm 29\.7cm/);
   assert.match(src, /class="WordSection1"/);
   assert.match(src, /\.space/, 'phải đổi .space thành đoạn trống khi xuất Word');
-  assert.doesNotMatch(src, /photos\.slice\(i, i \+ 2\)/, 'ảnh vẫn xếp 2 cột, mẫu là 1 cột');
+  // User chốt lại 30/09: 2 cột, 4 ảnh/trang (mẫu 1 ảnh/trang tốn giấy)
+  assert.match(src, /photos\.slice\(i, i \+ 2\)/, 'ảnh phải xếp 2 cột');
+  assert.match(src, /sizeImagesForWord\(preview, clone, 3\d\d, 4\d\d\)/, 'cỡ ảnh Word ~8,4 × 11 cm');
 });
 
 // 30/09/2026: cài SW mới bằng cache.add(url) đi qua HTTP cache (GitHub Pages max-age=600)

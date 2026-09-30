@@ -6,6 +6,7 @@ import { apiList } from './api.js';
 import { escapeHtml, showToast } from './utils.js';
 import { inlineImages, restoreImages, fetchAsDataUrl, sizeImagesForWord } from './photos.js';
 import { driveViewUrl } from './drive-url.js';
+import { bcscFileName } from './file-name.js';
 
 const TYPE = 'bao_cao_su_co';
 const MAU_KEY = 'bcsc_mau';   // localStorage: dòng Công tác + tên người ký lần sửa gần nhất
@@ -139,8 +140,10 @@ function openDoc(r) {
     (r['Tuyến đường'] ? ', ' + r['Tuyến đường'] : '') + (r['Phường'] ? ', phường ' + r['Phường'] : '') +
     (r['Quận'] ? ', ' + r['Quận'] : '');
   const nguyenNhan = [r['Nguyên nhân sơ bộ'], r['Năm lắp đặt'] ? 'Năm lắp đặt ' + r['Năm lắp đặt'] : ''].filter(Boolean).join('. ');
-  // Ảnh 1 cột, cỡ lớn như mẫu BCSC (mỗi ảnh rộng ~13 cm)
+  // Ảnh 2 cột, 4 ảnh/trang (user chốt 2026-09-30 — mẫu gốc 1 ảnh/trang tốn giấy)
   const photos = String(r['Ảnh (URLs)'] || '').split('|').filter(Boolean);
+  const photoRows = [];
+  for (let i = 0; i < photos.length; i += 2) photoRows.push(photos.slice(i, i + 2));
 
   $('bcsc-preview').innerHTML = `
     <table class="bc-head"><tr>
@@ -179,7 +182,8 @@ function openDoc(r) {
     <div class="space space-lg"></div>
     <p><b>11 - Hình ảnh, file đính kèm:</b></p>
     ${photos.length
-      ? `<div class="bc-photos">${photos.map(u => `<p class="bc-photo"><img data-src="${escapeHtml(u)}" src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" alt="Ảnh hiện trường sự cố"></p>`).join('')}</div>`
+      ? `<table class="bc-photos">${photoRows.map(row => `<tr class="bc-photo">${row.map(u =>
+          `<td><img data-src="${escapeHtml(u)}" src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" alt="Ảnh hiện trường sự cố"></td>`).join('')}${row.length < 2 ? '<td></td>' : ''}</tr>`).join('')}</table>`
       : '<p style="font-style:italic;color:#666">(Không có ảnh đính kèm)</p>'}`;
 
   // Ảnh Drive (uc?export=view) có lúc trình duyệt không hiện được → lấy qua máy chủ, để bản xem và bản in có ảnh
@@ -218,6 +222,11 @@ async function printDoc() {
     btn.disabled = false;
     btn.textContent = orig;
   }
+  // "Lưu PDF" của trình duyệt lấy tiêu đề trang làm tên file → đặt tạm theo sự cố, in xong trả lại
+  const oldTitle = document.title;
+  document.title = bcscFileName(state.current && state.current['Tủ điều khiển'],
+    state.current ? parseNgay(state.current['Ngày giờ phát hiện']).date : '');
+  window.addEventListener('afterprint', () => { document.title = oldTitle; }, { once: true });
   window.print();
 }
 
@@ -253,7 +262,7 @@ async function exportWord() {
     clone.querySelectorAll('.space').forEach(el => {
       el.outerHTML = '<p style="margin:0">&nbsp;</p>'.repeat(el.classList.contains('space-lg') ? 5 : 3);
     });
-    sizeImagesForWord(preview, clone, 490, 640);   // 1 cột như mẫu: rộng ≤ 13 cm, cao ≤ 17 cm
+    sizeImagesForWord(preview, clone, 318, 415);   // 2 cột: mỗi ảnh rộng ≤ 8,4 cm, cao ≤ 11 cm → 4 ảnh/trang
     clone.querySelectorAll('img').forEach(img => img.removeAttribute('data-src'));
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><title>Báo cáo sự cố</title>
@@ -271,13 +280,15 @@ table { border-collapse: collapse; }
 /* Word bỏ qua height của ô → dùng cỡ chữ ô rỗng để tạo khoảng hở giữa chữ và gạch ngắn */
 .bc-rule td { border-bottom: 1pt solid #000; padding: 0; font-size: 7pt; line-height: 7pt; mso-line-height-rule: exactly; }
 .bc-dots td { border-bottom: 1pt dotted #000; padding: 0; height: 14pt; }
-.bc-photo { margin: 6pt 0; }
-.bc-photo img { border: 1px solid #999; }
+.bc-photos { width: 100%; }
+.bc-photos td { width: 50%; padding: 4pt 3pt; text-align: center; vertical-align: middle; }
+.bc-photos img { border: 1px solid #999; }
+.bc-photo { page-break-inside: avoid; }
 </style></head><body><div class="WordSection1">${clone.innerHTML}</div></body></html>`;
     const blob = new Blob(['﻿', html], { type: 'application/msword' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `BCSC_${String(state.current['Tủ điều khiển'] || 'su-co').replace(/[\s,/\\]+/g, '_')}_${parseNgay(state.current['Ngày giờ phát hiện']).date.replace(/\//g, '-')}.doc`;
+    a.download = bcscFileName(state.current['Tủ điều khiển'], parseNgay(state.current['Ngày giờ phát hiện']).date) + '.doc';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);

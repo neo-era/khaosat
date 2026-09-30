@@ -4,21 +4,31 @@ import { CONFIG } from './config.js';
 import { compressImage } from './camera.js';
 import { getToken, getQueue, removeFromQueue } from './storage.js';
 import { showToast } from './utils.js';
+import { beginBusy } from './sw-update.js';
 
 /**
  * POST text/plain (tránh CORS preflight). Trả parsed JSON.
  * @throws Error nếu response.ok=false hoặc network fail.
  */
+// Lệnh chỉ đọc. Mọi lệnh khác là GHI → đang chạy thì không cho app tự tải lại (xem sw-update.js)
+const READ_ACTIONS = ['login', 'refresh', 'list', 'kpi', 'report', 'users', 'docs_list', 'schedule_list',
+                      'export_raw', 'photo_base64', 'check_dup', 'sobbht_list'];
+
 async function postJson(body) {
-  const res = await fetch(CONFIG.appsScriptUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Server error');
-  return json;
+  const done = READ_ACTIONS.includes(body && body.action) ? () => {} : beginBusy();
+  try {
+    const res = await fetch(CONFIG.appsScriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Server error');
+    return json;
+  } finally {
+    done();
+  }
 }
 
 /** Lấy token từ storage, throw nếu chưa login. */
@@ -341,6 +351,9 @@ export async function syncQueue() {
   if (!navigator.onLine) return { success: 0, failed: 0, skipped: true };
   const queue = getQueue();
   let success = 0, failed = 0;
+  // Cả vòng gửi hàng chờ là 1 việc: tải lại ở khoảng giữa 2 bản vẫn an toàn nhưng giữ bận cho gọn
+  const done = beginBusy();
+  try {
   for (const item of queue) {
     try {
       // Cập nhật token mới nếu cũ đã hết hạn
@@ -353,6 +366,9 @@ export async function syncQueue() {
     } catch (e) {
       failed++;
     }
+  }
+  } finally {
+    done();
   }
   return { success, failed };
 }
