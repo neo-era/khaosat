@@ -7,6 +7,7 @@ import { escapeHtml, showToast } from './utils.js';
 import { inlineImages, restoreImages, fetchAsDataUrl, sizeImagesForWord } from './photos.js';
 import { driveViewUrl } from './drive-url.js';
 import { bcscFileName } from './file-name.js';
+import { readListCache, saveListCache, filterByRange, mergeCache } from './list-cache.js';
 
 const TYPE = 'bao_cao_su_co';
 const MAU_KEY = 'bcsc_mau';   // localStorage: dòng Công tác + tên người ký lần sửa gần nhất
@@ -24,9 +25,11 @@ const state = { rows: [], current: null };
 const $ = id => document.getElementById(id);
 
 export function initBcsc() {
+  // Ngày theo giờ máy (Việt Nam), không dùng toISOString (giờ UTC): mở lúc 0–7 giờ sáng sẽ lùi về hôm qua
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const now = new Date();
-  $('f-to').value = now.toISOString().slice(0, 10);
-  $('f-from').value = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+  $('f-to').value = ymd(now);
+  $('f-from').value = ymd(new Date(now.getTime() - 30 * 86400000));
   $('btn-load').onclick = load;
   $('f-search').addEventListener('input', renderList);
   $('btn-print').onclick = printDoc;
@@ -38,18 +41,52 @@ export function initBcsc() {
   if (stt) openByStt(stt); else load();
 }
 
+const byNewest = (a, b) => String(b['Submitted At']).localeCompare(String(a['Submitted At']));
+
+let loadSeq = 0;   // bấm Tải nhiều lần: chỉ nhận kết quả của lần bấm cuối
+
 async function load() {
-  $('loading').classList.remove('hidden');
+  const seq = ++loadSeq;
+  const from = $('f-from').value, to = $('f-to').value;
+  // Hiện ngay danh sách lần trước (lọc theo khoảng ngày đang chọn) trong lúc chờ máy chủ (~2–20 s)
+  const cached = readListCache(TYPE);
+  const loading = $('loading');
+  if (cached) {
+    state.rows = filterByRange(cached.rows, from, to).sort(byNewest);
+    renderList();
+    const t = new Date(cached.at);
+    loading.textContent = `⏳ Đang cập nhật… (bản lưu ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')} ${t.getDate()}/${t.getMonth() + 1})`;
+  } else {
+    loading.textContent = '⏳ Đang tải...';
+  }
+  loading.classList.remove('hidden');
   try {
     const res = await apiList({ type: TYPE, status: 'active',
-      from: $('f-from').value ? $('f-from').value + 'T00:00:00' : undefined,
-      to: $('f-to').value ? $('f-to').value + 'T23:59:59' : undefined });
-    state.rows = (res.rows || []).sort((a, b) => String(b['Submitted At']).localeCompare(String(a['Submitted At'])));
+      from: from ? from + 'T00:00:00' : undefined,
+      to: to ? to + 'T23:59:59' : undefined });
+    if (seq !== loadSeq) return;   // đã có lần bấm Tải mới hơn
+    state.rows = (res.rows || []).sort(byNewest);
     renderList();
+    const latest = readListCache(TYPE);
+    saveListCache(TYPE, mergeCache(latest ? latest.rows : [], state.rows, from, to));
+    warnIfOpenDocChanged();
   } catch (e) {
-    showToast('Lỗi tải danh sách: ' + e.message, 'error', 5000);
+    if (seq !== loadSeq) return;
+    showToast('Lỗi tải danh sách: ' + e.message + (cached ? ' — đang hiện danh sách đã lưu, có thể chưa mới nhất' : ''), 'error', 5000);
   } finally {
-    $('loading').classList.add('hidden');
+    if (seq === loadSeq) loading.classList.add('hidden');
+  }
+}
+
+/** Đang mở biên bản lập từ danh sách lưu sẵn mà máy chủ báo bản đó đã đổi/xoá → nhắc lập lại. */
+function warnIfOpenDocChanged() {
+  const cur = state.current;
+  if (!cur) return;
+  const fresh = state.rows.find(r => String(r.STT) === String(cur.STT));
+  if (!fresh) {
+    showToast(`⚠️ Bản #${cur.STT} đang mở không còn trên máy chủ (đã xoá hoặc ngoài khoảng ngày) — kiểm tra lại trước khi in`, 'warning', 7000);
+  } else if (JSON.stringify(fresh) !== JSON.stringify(cur)) {
+    showToast(`⚠️ Bản #${cur.STT} vừa được cập nhật trên máy chủ — bấm "Lập biên bản" lại để lấy nội dung mới`, 'warning', 7000);
   }
 }
 
