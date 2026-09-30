@@ -31,6 +31,21 @@ async function postJson(body) {
   }
 }
 
+/**
+ * Đánh thức máy chủ Apps Script ngay lúc mở app (user chốt 2026-09-30).
+ * Lâu không ai dùng, Google cho script "ngủ": lệnh đầu tiên mất ~20 s (đo thật 19,9 s), sau đó 2–5 s.
+ * Gọi doGet (chỉ trả {ok:true}, không đọc/ghi Sheets) để máy chủ khởi động trong lúc người dùng còn
+ * bấm menu. no-cors: không cần đọc kết quả. Tối đa 1 lần / 3 phút cho khỏi gọi thừa.
+ */
+export function wakeServer() {
+  try {
+    const last = Number(localStorage.getItem('server_wake_at') || 0);
+    if (Date.now() - last < 3 * 60 * 1000 || !navigator.onLine) return;
+    localStorage.setItem('server_wake_at', String(Date.now()));
+  } catch (e) { /* không có localStorage vẫn gọi */ }
+  fetch(CONFIG.appsScriptUrl, { method: 'GET', mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+}
+
 /** Lấy token từ storage, throw nếu chưa login. */
 function requireToken() {
   const auth = getToken();
