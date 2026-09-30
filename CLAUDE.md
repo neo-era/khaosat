@@ -1390,6 +1390,7 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 **Tự cập nhật (2026-09-30, user chốt)** — mọi trang gọi `initSwUpdate()` (`js/sw-update.js`), KHÔNG tự `register('sw.js')`:
 - Hỏi bản mới lúc mở trang, mỗi 30 phút, và mỗi lần app hiện lại từ nền (`visibilitychange`). Phát hành = tăng `CACHE_NAME` trong `sw.js`.
 - Bản mới nắm quyền → trang không bận thì **tự tải lại**; đang bận thì hiện thanh "Có phiên bản mới — Cập nhật". Bận = ô đang focus, có ô `contenteditable` (biên bản đang mở), form có dữ liệu/ảnh/đang sửa (`registerBusyCheck` trong form-renderer), đang có lệnh GHI (`beginBusy` trong `api.js postJson`), đang gửi hàng chờ, đang nhập Excel. Tải lại giữa lệnh ghi = máy chủ đã ghi nhưng máy gửi lại → bản TRÙNG.
+- **Đánh thức máy chủ (2026-09-30)**: Apps Script "ngủ" khi vắng → lệnh đầu ~20 s. `wakeServer()` (api.js) gọi GET `doGet` (no-cors, không đụng Sheets) lúc mở `login.html`/`index.html`, tối đa 1 lần/3 phút. Đo thật: lệnh chào 14 s (chạy ngầm), lệnh ngay sau 1,9 s.
 - `sw.js` cài bằng `Promise.all` + `cache: 'reload'`: thiếu 1 file thì KHÔNG cài (giữ bản cũ chạy offline được); mọi file trong danh sách phải tồn tại (test). Chân trang chủ + cuối menu hiện "Phiên bản vNN" (`[data-app-version]`, SW trả `CACHE_NAME` qua message `GET_VERSION`).
 
 ---

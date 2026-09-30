@@ -144,11 +144,12 @@
     import { requireAuth, logout, hasPermission } from './js/auth.js';
     import { SCHEMAS, SURVEY_GROUPS } from './js/schemas.js';
     import { getQueue } from './js/storage.js';
-    import { syncQueue } from './js/api.js';
+    import { syncQueue, wakeServer } from './js/api.js';
     import { escapeHtml, showToast } from './js/utils.js';
     import { initHelp } from './js/help.js';
     import { initInstallPrompt } from './js/install.js';
 
+    wakeServer();   // máy chủ Apps Script có thể đang "ngủ" (~20 s) → đánh thức sớm
     const user = requireAuth();
 
     // ===== Header: user info + role badge =====

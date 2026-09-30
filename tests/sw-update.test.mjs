@@ -101,3 +101,12 @@ test('mọi trang HTML ở gốc repo gọi initSwUpdate', () => {
   const pages = fs.readdirSync(new URL('../', import.meta.url)).filter(f => f.endsWith('.html'));
   for (const p of pages) assert.match(read(p), /initSwUpdate\(/, p);
 });
+
+// 30/09: máy chủ Apps Script "ngủ" → lệnh đầu tiên mất ~20 s. User chốt: vừa mở app là đánh thức máy chủ.
+test('wakeServer: GET nhẹ (doGet) lúc mở app, không quá 1 lần / 3 phút; trang đăng nhập + trang chủ gọi', () => {
+  const api = read('js/api.js');
+  assert.match(api, /export function wakeServer\(/);
+  assert.match(api, /method:\s*'GET'/);
+  assert.match(api, /3 \* 60 \* 1000/);
+  for (const p of ['login.html', 'index.html']) assert.match(read(p), /wakeServer\(\)/, p);
+});
