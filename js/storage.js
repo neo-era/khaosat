@@ -2,6 +2,7 @@
 // Quản lý: draft form, queue offline submissions, today's records, auth token.
 
 import { dateKey, uuid } from './utils.js';
+import { clearListCaches } from './list-cache.js';
 
 // ===== Draft form =====
 
@@ -124,6 +125,8 @@ export function getToken() {
 }
 
 export function clearToken() {
+  // Hết hạn / đăng xuất: xoá cả danh sách lưu sẵn (list-cache.js) để người dùng máy sau không thấy
+  clearListCaches();
   sessionStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(TOKEN_KEY);
 }

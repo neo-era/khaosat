@@ -4,6 +4,7 @@
 
 import { apiLogin, apiRefresh } from './api.js';
 import { saveToken, getToken, clearToken } from './storage.js';
+import { clearListCaches } from './list-cache.js';
 
 export const PERMISSIONS = {
   admin:  { submit: true,  delete: true,  kpi: true,  manage: true,  report: true,  edit: true,  users_manage: true,  schedule_write: true,  notify_admin: true,  map: true  },
@@ -59,6 +60,7 @@ const REFRESH_BEFORE_MS = 180 * 24 * 60 * 60 * 1000;  // 180 ngày
  */
 export async function login(username, password, remember = true) {
   const res = await apiLogin(username, password, remember);
+  clearListCaches();   // có thể là người khác đăng nhập trên cùng máy mà không đăng xuất trước
   saveToken({
     token: res.token,
     username: res.username,
@@ -89,6 +91,7 @@ export function clearMustChange() {
 /** Clear token + redirect login. */
 export function logout() {
   clearToken();
+  clearListCaches();
   location.replace('login.html');
 }
 
