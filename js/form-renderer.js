@@ -21,6 +21,7 @@ import { showToast, escapeHtml, uuid, formatVnDate, debounce } from './utils.js'
 import { loadJsQR } from './lazy-lib.js';
 import { registerBusyCheck } from './sw-update.js';
 import { driveViewUrl } from './drive-url.js';
+import { initHdBar, hdLienKet } from './hd-bar.js';
 
 // State module-scoped (1 form 1 lúc trên page)
 const state = {
@@ -70,6 +71,11 @@ export async function renderForm(containerEl, schemaKey) {
 
   renderShell();
   bindEvents();
+  // Thông tin hợp đồng duy tu (gói / KL HĐ còn lại) theo phường — chỉ tham khảo, không chặn nhập
+  try {
+    initHdBar({ type: state.schemaKey, user: state.user,
+      getPhuong: () => (state.container.querySelector('[data-key="phuong"]') || {}).value || '' });
+  } catch (e) { console.warn('hd-bar', e); }
   // Có bản mới giữa lúc đang nhập: không tự tải lại (mất ảnh đang tải, chữ vừa gõ) → hiện thanh Cập nhật
   registerBusyCheck(() => state.editMode || state.photos.length > 0 || hasUserInput(collectFormData()));
   if (state.editMode) {
@@ -831,10 +837,12 @@ function renderPhuong(field, wrap, cls) {
 
   const quanEl = () => state.container.querySelector('[data-key="quan"]');
   const apply = (opt, text) => {
+    const before = hidden.value;
     hidden.value = opt ? opt.ten : text.trim();
     const q = quanEl();
     if (q) q.value = opt ? opt.quan : '';
     updateTdkList(opt ? opt.ten : '');
+    if (hidden.value !== before) document.dispatchEvent(new CustomEvent('phuong-change'));
   };
   const resolve = (text) => {
     const t = text.trim();
@@ -887,6 +895,7 @@ function renderPhuong(field, wrap, cls) {
     input.value = opt ? opt.display : ten;
     if (opt && quanEl() && !q) quanEl().value = opt.quan;
     updateTdkList(opt ? opt.ten : '');
+    document.dispatchEvent(new CustomEvent('phuong-change'));
   });
 
   wrap.append(box, hidden);
@@ -1453,6 +1462,12 @@ async function handleSubmit() {
   }
 
   if (!state.editMode && !(await confirmNotDuplicate())) return;
+  // Bản ghi đã được đưa vào phụ lục hợp đồng → nhắc (không chặn)
+  if (state.editMode) {
+    const lk = (await hdLienKet([{ type: state.schemaKey, stt: state.editStt }])).get(state.schemaKey + '#' + state.editStt);
+    if (lk && !/nháp/i.test(lk.trangThai) &&
+        !confirm('Bản ghi này đã "' + lk.trangThai + (lk.phuLuc ? ' · ' + lk.phuLuc : '') + '" bên Quản lý HĐ.\nSửa số lượng sẽ làm lệch với phụ lục — nhớ báo phòng Kế hoạch.\n\nVẫn cập nhật?')) return;
+  }
 
   const btn = document.getElementById('btn-submit');
   btn.disabled = true;

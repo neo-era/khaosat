@@ -46,6 +46,7 @@
     import { SCHEMAS } from './js/schemas.js';
     import { escapeHtml, formatVnDate } from './js/utils.js';
     import { initHelp } from './js/help.js';
+    import { hdLienKet, lienKetBadge } from './js/hd-bar.js';
 
     const user = requireAuth();
     document.getElementById('header-user').textContent = user.full_name;
@@ -64,6 +65,14 @@
       for (const r of list) {
         listEl.appendChild(renderCard(r));
       }
+      // Trạng thái liên kết hợp đồng (nếu app Quản lý HĐ đã đẩy) — lỗi/máy chủ cũ thì thôi
+      if (user.role !== 'demo') hdLienKet(list.filter(r => r.stt).map(r => ({ type: r.type, stt: String(r.stt) }))).then(m => {
+        for (const r of list) {
+          const html = lienKetBadge(m.get(r.type + '#' + r.stt));
+          const slot = listEl.querySelector(`[data-lk="${CSS.escape(r.type + '#' + r.stt)}"]`);
+          if (html && slot) slot.innerHTML = html;
+        }
+      });
     }
 
     function renderCard(r) {
@@ -77,6 +86,7 @@
           <div class="text-sm font-medium text-gray-800 truncate">${escapeHtml(r.name || r.type)} — STT #${escapeHtml(String(r.stt))}</div>
           <div class="text-xs text-gray-500 truncate">${escapeHtml(r.tuyen_duong || r.vi_tri || '(chưa có tuyến/vị trí)')}</div>
           <div class="text-xs text-gray-400">${formatVnDate(r._at)}</div>
+          <div data-lk="${escapeHtml(r.type + '#' + r.stt)}"></div>
         </div>
         ${r.photo_count > 0 ? `<div class="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-600 flex-shrink-0">📷 ${r.photo_count}</div>` : ''}
       `;

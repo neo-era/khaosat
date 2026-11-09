@@ -12,7 +12,7 @@ import { beginBusy } from './sw-update.js';
  */
 // Lệnh chỉ đọc. Mọi lệnh khác là GHI → đang chạy thì không cho app tự tải lại (xem sw-update.js)
 const READ_ACTIONS = ['login', 'refresh', 'list', 'kpi', 'report', 'users', 'docs_list', 'schedule_list',
-                      'export_raw', 'photo_base64', 'check_dup', 'sobbht_list'];
+                      'export_raw', 'photo_base64', 'check_dup', 'sobbht_list', 'hd_info'];
 
 async function postJson(body) {
   const done = READ_ACTIONS.includes(body && body.action) ? () => {} : beginBusy();
@@ -106,6 +106,19 @@ export async function apiSobbhtDelete(id) {
 }
 
 /** Đổi trạng thái xử lý cho 1 hoặc nhiều bản ghi cùng loại (quyền edit). */
+/**
+ * Thông tin hợp đồng duy tu (app Quản lý HĐ đẩy sang): gói / KL HĐ còn lại theo phường + trạng thái liên kết bản ghi.
+ * Máy chủ chưa triển khai bản có hd_info → trả { ok:true, has:false, oldBackend:true } (không ném lỗi).
+ */
+export async function apiHdInfo({ phuong, type, nam, pairs } = {}) {
+  try {
+    return await postJson({ action: 'hd_info', token: requireToken(), phuong, type, nam, pairs });
+  } catch (e) {
+    if (/^unknown action/.test(e.message || '')) return { ok: true, has: false, oldBackend: true };
+    throw e;
+  }
+}
+
 export async function apiSetStatus(type, stts, status, note = '') {
   return postJson({ action: 'set_status', token: requireToken(), type, stts, status, note });
 }

@@ -1,6 +1,7 @@
 // js/manage.js — Logic trang quản lý bản ghi: filter, xoá/khôi phục, lightbox.
 
 import { apiList, apiDelete, apiRestore, apiSetStatus } from './api.js';
+import { hdLienKet, lienKetBadge } from './hd-bar.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES, XU_LY_SKIP_TYPES } from './schemas.js';
 import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDate, formatVnDateOnly, safeHref } from './utils.js';
@@ -77,7 +78,11 @@ async function doSearch() {
       status
     });
     state.rows = res.rows || [];
+    state.lienKet = new Map();
     renderTable();
+    // Trạng thái liên kết hợp đồng (ngầm, không chặn danh sách)
+    hdLienKet(state.rows.filter(r => !r['Deleted At']).map(r => ({ type: r._type, stt: String(r['STT']) })))
+      .then(m => { if (m.size) { state.lienKet = m; renderTable(); } });
   } catch (e) {
     showToast('Lỗi tải danh sách: ' + e.message, 'error', 4000);
   } finally {
@@ -145,6 +150,8 @@ function renderTable() {
       </td>
     `;
     renderXuLyCell(tr.querySelector('.td-xuly'), r, isDeleted);
+    const lk = state.lienKet && state.lienKet.get(r._type + '#' + r['STT']);
+    if (lk) tr.querySelector('.td-xuly').insertAdjacentHTML('beforeend', '<div class="mt-1">' + lienKetBadge(lk) + '</div>');
     // Bind events
     tr.querySelector('.btn-view').onclick = () => openDetail(r);
     const photoBtn = tr.querySelector('[data-photos]');

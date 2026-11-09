@@ -354,14 +354,19 @@ function hashPassword(plain) {
  * @param {number} [issuedAt] - mặc định now (đăng nhập mới)
  * @returns {{token: string, expires_at: number}}
  */
-function generateToken(username, remember, issuedAt) {
+function generateToken(username, remember, issuedAt, opts) {
   const now = Date.now();
   const iat = issuedAt || now;
   const ttl = remember ? TOKEN_TTL_REMEMBER_MS : TOKEN_TTL_MS;
   const absMax = remember ? TOKEN_ABS_MAX_REMEMBER_MS : TOKEN_ABS_MAX_MS;
-  const expiresAt = Math.min(now + ttl, iat + absMax);
+  // opts.scope (vd 'hd' — token cấp cho app Quản lý HĐ, hạn opts.ttlMs) nằm TRONG phần được ký:
+  // payload 7 trường "v2|…|remember|scope" → bỏ scope thì sai chữ ký.
+  const scope = opts && opts.scope ? String(opts.scope) : '';
+  const expiresAt = scope ? now + opts.ttlMs : Math.min(now + ttl, iat + absMax);
   const tv = getTokenVersion(username);
-  const payload = ['v2', username, expiresAt, iat, tv, remember ? 1 : 0].join('|');
+  const fields = ['v2', username, expiresAt, iat, tv, remember ? 1 : 0];
+  if (scope) fields.push(scope);
+  const payload = fields.join('|');
   const sig = hmacSha256Hex(payload, getSalt());
   return { token: Utilities.base64EncodeWebSafe(payload + '|' + sig), expires_at: expiresAt };
 }
@@ -427,9 +432,12 @@ function verifyToken(token) {
   }
   const parts = decoded.split('|');
   // Token định dạng cũ (3 phần) bị từ chối → người dùng đăng nhập lại 1 lần sau bản vá.
-  if (parts.length !== 7 || parts[0] !== 'v2') throw new Error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
-  const [ver, username, expStr, iatStr, tvStr, remStr, sig] = parts;
-  const expectedSig = hmacSha256Hex(parts.slice(0, 6).join('|'), getSalt());
+  // 7 phần = token thường; 8 phần = token có phạm vi (vd 'hd' — app Quản lý HĐ), phạm vi nằm trong phần ký
+  if ((parts.length !== 7 && parts.length !== 8) || parts[0] !== 'v2') throw new Error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
+  const [ver, username, expStr, iatStr, tvStr, remStr] = parts;
+  const scope = parts.length === 8 ? parts[6] : '';
+  const sig = parts[parts.length - 1];
+  const expectedSig = hmacSha256Hex(parts.slice(0, -1).join('|'), getSalt());
   if (!safeEqual(sig, expectedSig)) throw new Error('invalid token signature');
   const expiresAt = parseInt(expStr, 10);
   if (!expiresAt || Date.now() > expiresAt) throw new Error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
@@ -446,7 +454,7 @@ function verifyToken(token) {
 
   return {
     username: user.username, role: user.role, full_name: user.full_name,
-    must_change: mustChange, remember: remStr === '1', issued_at: parseInt(iatStr, 10)
+    must_change: mustChange, remember: remStr === '1', issued_at: parseInt(iatStr, 10), scope: scope
   };
 }
 
@@ -1811,6 +1819,10 @@ function doPost(e) {
   // Khi user còn phải đổi mật khẩu, chỉ cho refresh + change_password (chặn ở máy chủ, v2.2.1)
   _allowMustChange = (action === 'refresh' || action === 'change_password');
   try {
+    // Token phạm vi 'hd' (app Quản lý HĐ) chỉ dùng được cho vài action đọc/đẩy tóm tắt
+    if (body.token && tokenScope_(body.token) === HD_SCOPE && HD_SCOPE_ACTIONS.indexOf(action) < 0) {
+      return jsonResponse({ ok: false, error: 'Token liên kết HĐ không đủ phạm vi cho thao tác này' });
+    }
     switch (action) {
       case 'login':   return jsonResponse(handleLogin(body));
       case 'refresh': return jsonResponse(handleRefresh(body));
@@ -1844,6 +1856,9 @@ function doPost(e) {
       case 'sobbht_list':   return jsonResponse(handleSobbhtList(body));
       case 'sobbht_save':   return jsonResponse(handleSobbhtSave(body));
       case 'sobbht_delete': return jsonResponse(handleSobbhtDelete(body));
+      case 'hd_link':       return jsonResponse(handleHdLink(body));
+      case 'hd_push':       return jsonResponse(handleHdPush(body));
+      case 'hd_info':       return jsonResponse(handleHdInfo(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -3791,4 +3806,201 @@ function handleExportRaw(body) {
   }
 
   return { ok: true, results };
+}
+
+// =====================================================================
+// LIÊN KẾT APP QUẢN LÝ HỢP ĐỒNG DUY TU (neo-era.github.io/quanly-hopdong-duytu)
+// Thiết kế: repo quanly-hopdong-duytu, docs/04_LienKet-KhaoSat.md
+// - hd_link: đổi token thường (manage/report) lấy token phạm vi 'hd' 30 ngày
+// - hd_push: app HĐ đẩy bản tóm tắt (4 sheet HD_*), ghi nguyên tử theo con trỏ HD_VERSION
+// - hd_info: form khảo sát hỏi gói / KL HĐ còn lại theo phường + trạng thái liên kết bản ghi
+// Không đụng 17 sheet khảo sát và cột "Trạng thái xử lý".
+// =====================================================================
+
+const HD_SCOPE = 'hd';
+const HD_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const HD_SCOPE_ACTIONS = ['list', 'hd_push', 'hd_info'];
+const HD_MAX_CHARS = 1000000;
+const HD_MAX_ROWS = 5000;
+const HD_MAX_PAIRS = 500;
+const HD_MAX_CELL = 500;
+// Cột của từng sheet tóm tắt; 'n' = cột số (số hoặc rỗng), còn lại là chữ
+const HD_SPEC = {
+  tomTat:    { sheet: 'HD_TomTat',    cols: ['Gói', 'Mã gói thầu', 'Năm', 'Mã HM', 'Tên HM', 'ĐVT', 'KL HĐ', 'Đã vào KH', 'Còn lại', 'NT luỹ kế'], num: [2, 6, 7, 8, 9] },
+  phuongGoi: { sheet: 'HD_PhuongGoi', cols: ['Phường', 'Gói'], num: [] },
+  loaiHM:    { sheet: 'HD_LoaiHM',    cols: ['Loại', 'Mã HM'], num: [] },
+  lienKet:   { sheet: 'HD_LienKet',   cols: ['Loại', 'STT', 'Gói', 'Mã HM', 'Phụ lục', 'Trạng thái', 'Tháng'], num: [] }
+};
+
+/** Đọc phạm vi token mà KHÔNG kiểm chữ ký (chỉ để chặn sớm; verifyToken vẫn kiểm đầy đủ). */
+function tokenScope_(token) {
+  try {
+    const parts = Utilities.newBlob(Utilities.base64DecodeWebSafe(String(token))).getDataAsString().split('|');
+    return parts.length === 8 ? parts[6] : '';
+  } catch (e) { return ''; }
+}
+
+function handleHdLink(body) {
+  const auth = verifyToken(body.token);
+  if (auth.scope) return { ok: false, error: 'Token liên kết HĐ không đủ phạm vi để cấp token mới' };
+  if (!can(auth.role, 'manage') && !can(auth.role, 'report')) return { ok: false, error: 'Tài khoản không có quyền liên kết (cần quyền quản lý hoặc báo cáo)' };
+  const hdTok = generateToken(auth.username, false, 0, { scope: HD_SCOPE, ttlMs: HD_TOKEN_TTL_MS });
+  appendAuditLog('hd_link', auth.username, '', '', 'cấp token liên kết HĐ 30 ngày');
+  return {
+    ok: true, token: hdTok.token, expires_at: hdTok.expires_at, username: auth.username, full_name: auth.full_name, role: auth.role,
+    can_push: can(auth.role, 'manage')
+  };
+}
+
+/** Kiểm tra dữ liệu đẩy lên; trả chuỗi lỗi hoặc ''. */
+function hdValidate_(data) {
+  if (!data || typeof data !== 'object') return 'Thiếu dữ liệu';
+  if (JSON.stringify(data).length > HD_MAX_CHARS) return 'Dữ liệu quá lớn (tối đa 1.000.000 ký tự mỗi lần đẩy)';
+  for (const k in HD_SPEC) {
+    const rows = data[k] || [];
+    if (!Array.isArray(rows)) return 'Sai kiểu dữ liệu: ' + k;
+    if (rows.length > HD_MAX_ROWS) return k + ': quá 5.000 dòng';
+    const spec = HD_SPEC[k];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!Array.isArray(r) || r.length !== spec.cols.length) return k + ' dòng ' + (i + 1) + ': sai số cột (cần ' + spec.cols.length + ')';
+      for (let j = 0; j < r.length; j++) {
+        const v = r[j];
+        if (v === null || v === '') continue;
+        if (spec.num.indexOf(j) >= 0) { if (typeof v !== 'number' || !isFinite(v)) return k + ' dòng ' + (i + 1) + ' cột "' + spec.cols[j] + '": sai kiểu (cần số)'; }
+        else if (typeof v !== 'string' && typeof v !== 'number') return k + ' dòng ' + (i + 1) + ' cột "' + spec.cols[j] + '": sai kiểu';
+        else if (String(v).length > HD_MAX_CELL) return k + ' dòng ' + (i + 1) + ': ô quá dài';
+      }
+    }
+  }
+  return '';
+}
+
+/** Chuỗi bắt đầu = + - @ được Sheets hiểu là công thức → thêm dấu ' để lưu nguyên văn. */
+function hdCell_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string' && /^[=+\-@]/.test(v)) return "'" + v;
+  return v;
+}
+function hdUncell_(v) {
+  return typeof v === 'string' && /^'[=+\-@]/.test(v) ? v.slice(1) : v;
+}
+function hdFlush_() { if (typeof SpreadsheetApp !== 'undefined') SpreadsheetApp.flush(); }
+function hdVersion_() {
+  try { return JSON.parse(getProp('HD_VERSION') || 'null'); } catch (e) { return null; }
+}
+
+function handleHdPush(body) {
+  const auth = verifyToken(body.token);
+  if (!can(auth.role, 'manage')) return { ok: false, error: 'Tài khoản không có quyền đẩy dữ liệu HĐ (cần quyền quản lý)' };
+  const err = hdValidate_(body.data);
+  if (err) return { ok: false, error: err };
+  const meta = body.meta || {};
+  const gen = new Date(meta.generated_at || '');
+  if (isNaN(gen.getTime())) return { ok: false, error: 'Thiếu thời điểm lập dữ liệu (generated_at)' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, error: 'Máy chủ đang bận, thử lại sau ít phút' };
+  const ss = getSpreadsheet();
+  const created = [];
+  try {
+    const cur = hdVersion_();
+    if (cur && !body.force && new Date(cur.generated_at) > gen) {
+      return { ok: false, error: 'Dữ liệu đang đẩy cũ hơn bản trên máy chủ (' + cur.generated_at + ', ' + cur.by + '). Đẩy lại từ dữ liệu mới nhất hoặc chọn ghi đè.' };
+    }
+    const v = (cur && cur.v ? cur.v : 0) + 1;
+    for (const k in HD_SPEC) {
+      const spec = HD_SPEC[k];
+      const name = spec.sheet + '_v' + v;
+      const old = ss.getSheetByName(name);
+      if (old) ss.deleteSheet(old);
+      const sh = ss.insertSheet(name);
+      created.push(sh);
+      const rows = [spec.cols].concat((body.data[k] || []).map(r => r.map(hdCell_)));
+      const rng = sh.getRange(1, 1, rows.length, spec.cols.length);
+      rng.setValues(rows);
+    }
+    hdFlush_();
+    const ver = { v: v, generated_at: gen.toISOString(), pushed_at: isoNow(), by: auth.username,
+                  source: String(meta.source_file_id || '').slice(0, 100) };
+    PropertiesService.getScriptProperties().setProperty('HD_VERSION', JSON.stringify(ver));
+    created.length = 0;   // đã đổi con trỏ: bản mới là chính thức
+    // Dọn mọi bản cũ (không ảnh hưởng nếu lỗi)
+    try {
+      (ss.getSheets ? ss.getSheets() : []).forEach(sh => {
+        const m = String(sh.getName()).match(/^HD_[A-Za-z]+_v(\d+)$/);
+        if (m && +m[1] !== v) ss.deleteSheet(sh);
+      });
+    } catch (e) { console.warn('hd_push dọn bản cũ: ' + e); }
+    try { CacheService.getScriptCache().remove('hd_data'); } catch (e) { /* bỏ qua */ }
+    appendAuditLog('hd_push', auth.username, 'HD_*', 'v' + v, 'tomTat ' + (body.data.tomTat || []).length + ' · lienKet ' + (body.data.lienKet || []).length);
+    return { ok: true, version: v, generated_at: ver.generated_at };
+  } catch (e) {
+    created.forEach(sh => { try { ss.deleteSheet(sh); } catch (x) { /* bỏ qua */ } });
+    throw e;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Đọc bản tóm tắt theo con trỏ; thiếu sheet → null (coi như chưa có dữ liệu). */
+function hdLoad_() {
+  const ver = hdVersion_();
+  if (!ver || !ver.v) return null;
+  const cache = CacheService.getScriptCache();
+  try {
+    const c = cache.get('hd_data');
+    if (c) { const o = JSON.parse(c); if (o.ver && o.ver.v === ver.v) return o; }
+  } catch (e) { /* bỏ qua */ }
+  const ss = getSpreadsheet();
+  const out = { ver: ver };
+  for (const k in HD_SPEC) {
+    const sh = ss.getSheetByName(HD_SPEC[k].sheet + '_v' + ver.v);
+    if (!sh) return null;
+    out[k] = sh.getDataRange().getValues().slice(1).map(r => r.slice(0, HD_SPEC[k].cols.length).map(hdUncell_));
+  }
+  try { const s = JSON.stringify(out); if (s.length < 95000) cache.put('hd_data', s, 21600); } catch (e) { /* bỏ qua */ }
+  return out;
+}
+
+/** Chuẩn hoá tên phường để so: bỏ dấu, chữ thường, bỏ tiền tố "phường / p. / xã". */
+function hdNormPhuong_(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd')
+    .toLowerCase().replace(/^\s*(phuong|p\.|p|xa)\s+/, '').replace(/\s+/g, ' ').trim();
+}
+
+function handleHdInfo(body) {
+  const auth = verifyToken(body.token);
+  if (auth.role === 'demo' || (!can(auth.role, 'submit') && !can(auth.role, 'report'))) return { ok: false, error: 'Tài khoản không có quyền xem thông tin HĐ' };
+  const pairs = Array.isArray(body.pairs) ? body.pairs : [];
+  if (pairs.length > HD_MAX_PAIRS) return { ok: false, error: 'Tối đa 500 bản ghi mỗi lần hỏi' };
+  const d = hdLoad_();
+  if (!d) return { ok: true, has: false };
+  const out = { ok: true, has: true, updated_at: d.ver.generated_at, pushed_at: d.ver.pushed_at, by: d.ver.by };
+
+  if (body.phuong !== undefined) {
+    const p = hdNormPhuong_(body.phuong);
+    const goiList = [];
+    d.phuongGoi.forEach(r => { if (hdNormPhuong_(r[0]) === p && r[1] && goiList.indexOf(String(r[1])) < 0) goiList.push(String(r[1])); });
+    goiList.sort();
+    const goi = goiList.length === 1 ? goiList[0] : (goiList.length > 1 ? 'nhieu' : null);
+    const tt = goi && goi !== 'nhieu' ? d.tomTat.filter(r => String(r[0]) === goi) : [];
+    const mgt = (tt.find(r => r[1]) || [])[1] || '';
+    out.goi = { goi: goi, goiList: goiList, maGoiThau: String(mgt) };
+    const nam = +body.nam || +Utilities.formatDate(new Date(), TZ, 'yyyy');
+    out.nam = nam;
+    const maLoai = d.loaiHM.filter(r => String(r[0]) === String(body.type || '')).map(r => String(r[1]));
+    out.hm = maLoai.map(ma => tt.find(r => String(r[3]) === ma && +r[2] === nam)).filter(Boolean).map(r => ({
+      ma: String(r[3]), ten: String(r[4] || ''), dvt: String(r[5] || ''), nam: +r[2],
+      hd: r[6] === '' ? null : +r[6], daKH: r[7] === '' ? null : +r[7], conLai: r[8] === '' ? null : +r[8]
+    }));
+  }
+  if (pairs.length) {
+    const idx = {};
+    d.lienKet.forEach(r => { idx[String(r[0]) + '#' + String(r[1])] = r; });
+    out.lienKet = pairs.map(q => idx[String(q.type) + '#' + String(q.stt)]).filter(Boolean).map(r => ({
+      type: String(r[0]), stt: String(r[1]), goi: String(r[2] || ''), phuLuc: String(r[4] || ''), trangThai: String(r[5] || ''), thang: String(r[6] || '')
+    }));
+  }
+  return out;
 }

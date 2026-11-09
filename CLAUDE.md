@@ -1368,6 +1368,16 @@ Các ô cần điền tay dùng `contenteditable class="ed"`; nội dung đã g�
 - Mọi chữ sửa trực tiếp (`contenteditable`). **Số BCSC người lập tự ghi** (form có ô không bắt buộc). Dòng "Công tác", tên công ty ở mục 1 và **3 người ký** (mặc định: Chuyên viên QLĐB **Võ Thanh Quang** / Phụ trách KT thi công **Trần Hữu Lưu** / Phòng KT Nguyễn Huy Khương — đổi 2026-09-29) sửa được và **app nhớ** (`localStorage['bcsc_mau']`, theo từng máy).
 - Xuất: 🖨️ In / Lưu PDF (`window.print`, `@media print` A4) · 📝 Xuất Word (HTML-Word như `bbht.js`, nhúng ảnh qua `inlineImages`).
 
+## 15e. Liên kết app Quản lý HĐ duy tu (2026-11-09, user duyệt "Hai chiều")
+
+Thiết kế + tiêu chí: repo `quanly-hopdong-duytu`, `docs/04_LienKet-KhaoSat.md`. Không đụng 17 sheet khảo sát, không ghi cột "Trạng thái xử lý".
+- **Token phạm vi `hd`** (`generateToken(u, ttl, 'hd')`, 30 ngày): phạm vi nằm trong phần được ký. `doPost` chặn token `hd` ở mọi action ngoài `list` / `hd_push` / `hd_info` (`HD_SCOPE_ACTIONS`). `verifyToken` trả thêm `scope`; so chữ ký thời gian hằng (`safeEqual_`).
+- `hd_link` (token thường, quyền `manage` hoặc `report`) → token `hd` + `can_push`.
+- `hd_push` (quyền `manage`): 4 bảng `tomTat` / `phuongGoi` / `loaiHM` / `lienKet` (cột theo `HD_SPEC`). Trần 1.000.000 ký tự, 5.000 dòng/bảng, ô ≤ 500 ký tự; `tryLock(10000)`. **Ghi nguyên tử**: ghi `HD_*_v{n}` → `flush` → đổi con trỏ Script Property `HD_VERSION` → xoá bản cũ; lỗi giữa chừng dọn bản dở, con trỏ cũ giữ nguyên. Bản có `generated_at` cũ hơn bị từ chối trừ khi `force`. Chuỗi đầu `= + - @` thêm `'` (chống chèn công thức).
+- `hd_info` (mọi role trừ `demo`): `{phuong, type, nam}` → gói (1 gói / `nhieu` / null), mã gói thầu, mã HM của loại kèm KL HĐ / đã vào KH / còn lại; `{pairs ≤ 500}` → trạng thái liên kết bản ghi. Trả theo danh sách trường cho phép, không tiền/đơn giá/số HĐ. Cache `hd_data` (CacheService, 6 giờ). Action `hd_*` không trả `stack`.
+- Client: `apiHdInfo` (lệnh đọc; backend cũ trả `unknown action` → `{has:false, oldBackend:true}`, ẩn êm). `js/hd-bar.js`: thanh "Hợp đồng" dính đáy form (màu trung tính, KHÔNG so với số đang nhập; ghi chú "Nhập đúng số đo hiện trường; KL HĐ chỉ để tham khảo"), chạm mở bảng chi tiết, ẩn khi bàn phím mở, cache theo phường 12 giờ (không lưu khi đăng nhập "không ghi nhớ"), nhãn "dữ liệu HĐ đã cũ" > 30 ngày. Nhãn trạng thái liên kết ở `recent.html` và cột Xử lý `manage.html`; sửa bản ghi đã "Đã vào PL" → hỏi xác nhận (không chặn).
+- **Triển khai**: dán Code.gs mới → Deploy → Manage deployments → New version (URL giữ nguyên). Test: `tests/hd-link.test.mjs`, `tests/hd-bar.test.mjs`.
+
 ## 16. PWA
 
 `manifest.json`:
