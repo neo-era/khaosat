@@ -158,7 +158,9 @@ test('QA bản "cần sửa" mở lại form đọc thẳng hàng chờ (ảnh c
   const idx = read('index.html');
   assert.match(idx, /&queue=' \+ encodeURIComponent\(it\.id\)/);
   assert.doesNotMatch(idx, /saveDraft\(/);
-  assert.doesNotMatch(idx, /queueStore\(\)\.remove\(it\.id\)/);
+  // chỉ bản hỏng (không mở lại được) mới bị bỏ, và phải hỏi trước
+  assert.equal(idx.split('queueStore().remove(it.id)').length - 1, 1);
+  assert.match(idx, /for \(const it of broken\) await queueStore\(\)\.remove\(it\.id\)/);
   const fr = read('js/form-renderer.js');
   assert.match(fr, /async function loadFromQueue\(id\)/);
   assert.match(fr, /status: 'offline', blob/);
@@ -192,4 +194,14 @@ test('QA máy không có IndexedDB: kho localStorage bền qua lần mở, từ 
   await a.add(item('q1'));
   assert.equal((await oq.lsStore(ls).list()).length, 1, 'mở lại vẫn còn');
   await assert.rejects(a.add(item('q2', { photos: [{ buf: new ArrayBuffer(1) }] })));
+});
+
+test('QA mất mạng thật nhiều lần KHÔNG biến bản hợp lệ thành "cần sửa"', async () => {
+  const store = oq.memoryStore([item('q1')]);
+  const netErr = () => { throw Object.assign(new Error('Failed to fetch'), { kind: 'network', name: 'TypeError' }); };
+  for (let i = 0; i < core.MAX_ATTEMPTS + 3; i++) await core.runSync({ store, me: 'ktv01', post: async () => netErr(), upload: async () => 'u' });
+  for (let i = 0; i < 3; i++) await core.runSync({ store, me: 'ktv01', online: false, post: async () => { throw new Error('x'); }, upload: async () => 'u' });
+  assert.equal((await store.get('q1')).status, 'pending');
+  const r = await core.runSync({ store, me: 'ktv01', post: async () => ({ ok: true }), upload: async () => 'u' });
+  assert.equal(r.success, 1);
 });

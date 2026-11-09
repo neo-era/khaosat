@@ -93,6 +93,13 @@ export async function runSync({ store, me, post, upload, now = Date.now(), onlin
         out.needFix++;
         continue;
       }
+      // Mất mạng THẬT (fetch bị từ chối, đã gắn kind) hoặc máy offline: không tính là "lần lỗi" —
+      // bản hợp lệ phải tự gửi khi có mạng lại, dù mất mạng bao nhiêu lần.
+      if (kind === 'network' && ((e && e.kind === 'network') || !online)) {
+        await store.update(it.id, { error: String(e.message || e).slice(0, 300) });
+        out.failed++;
+        break;
+      }
       const attempts = (it.attempts || 0) + 1;
       // Lỗi lặp lại quá nhiều lần (bản hỏng, lỗi lập trình bị coi là "mạng") → thành "cần sửa", không chặn cả hàng chờ
       if (attempts >= MAX_ATTEMPTS) {

@@ -292,6 +292,12 @@
     queueBadge.addEventListener('click', async () => {
       const q = lastSummary || await queueSummary();
       const fix = q.items.filter(it => it.status === 'need_fix' && !it.owner_unknown && (!it.username || it.username === user.username));
+      const broken = fix.filter(it => !it.payload || !it.payload.type);
+      if (broken.length && confirm(broken.length + ' bản trong hàng chờ bị hỏng, không mở lại được. Bỏ các bản này?')) {
+        for (const it of broken) await queueStore().remove(it.id);
+        await updateQueueBadge();
+      }
+      fix.splice(0, fix.length, ...fix.filter(it => it.payload && it.payload.type));
       if (!fix.length) { showToast(queueBadge.title || 'Hàng chờ trống', 'info', 5000); return; }
       const it = fix[0];
       const name = (SCHEMAS[it.payload.type] || {}).name || it.payload.type;
@@ -303,8 +309,12 @@
       const q = await queueSummary();
       const unk = q.items.filter(it => it.owner_unknown);
       if (!unk.length) return;
+      try { if (sessionStorage.getItem('unknown_owner_declined') === '1') return; } catch (e) { /* bỏ qua */ }
       if (!confirm('Máy này có ' + unk.length + ' bản khảo sát cũ đang chờ gửi nhưng không ghi người nhập.\n\n' +
-        'Đây có phải bản do ' + user.full_name + ' khảo sát không?\n(Bấm Huỷ nếu không phải — bản sẽ giữ lại.)')) return;
+        'Đây có phải bản do ' + user.full_name + ' khảo sát không?\n(Bấm Huỷ nếu không phải — bản sẽ giữ lại.)')) {
+        try { sessionStorage.setItem('unknown_owner_declined', '1'); } catch (e) { /* bỏ qua */ }
+        return;
+      }
       const store = queueStore();
       for (const it of unk) await store.update(it.id, { owner_unknown: false, username: user.username, full_name: user.full_name });
       await trySync();
