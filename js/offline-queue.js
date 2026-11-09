@@ -55,7 +55,8 @@ export const idbStore = {
   async remove(id) { await tx('readwrite', st => { st.delete(id); }); },
   async update(id, patch) {
     await tx('readwrite', st => reqP(st.get(id)).then(cur => { if (cur) st.put(Object.assign(cur, patch)); }));
-  }
+  },
+  async get(id) { return tx('readonly', (st, set) => reqP(st.get(id)).then(set)); }
 };
 
 /** Kho trong bộ nhớ — dùng cho test và khi trình duyệt không có IndexedDB. */
@@ -66,12 +67,37 @@ export function memoryStore(initial = []) {
     async list() { return [...m.values()].sort((a, b) => (a.queued_at || 0) - (b.queued_at || 0)); },
     async remove(id) { m.delete(id); },
     async update(id, patch) { const c = m.get(id); if (c) m.set(id, Object.assign(c, patch)); },
+    async get(id) { return m.get(id); },
     _map: m
   };
 }
 
-/** Kho dùng thật: IndexedDB nếu có. */
-export function queueStore() { return hasIdb() ? idbStore : memoryStore(); }
+/**
+ * Kho dự phòng khi trình duyệt không có IndexedDB: localStorage (bền qua lần mở app), KHÔNG chứa
+ * được ảnh — thêm bản có ảnh chờ mạng sẽ báo lỗi để form giữ nguyên (không "lưu offline" giả).
+ */
+export function lsStore(ls, key = 'queue_v2') {
+  const read = () => { try { return JSON.parse(ls.getItem(key) || '[]'); } catch { return []; } };
+  const write = a => ls.setItem(key, JSON.stringify(a));
+  return {
+    async add(rec) {
+      if (rec.photos && rec.photos.some(p => p.buf)) throw new Error('Máy không lưu được ảnh khi mất mạng');
+      write(read().filter(x => x.id !== rec.id).concat([rec])); return rec.id;
+    },
+    async list() { return read().sort((a, b) => (a.queued_at || 0) - (b.queued_at || 0)); },
+    async remove(id) { write(read().filter(x => x.id !== id)); },
+    async update(id, patch) { write(read().map(x => x.id === id ? Object.assign(x, patch) : x)); },
+    async get(id) { return read().find(x => x.id === id); }
+  };
+}
+
+/** Kho dùng thật: IndexedDB nếu có, không thì localStorage. */
+let _fallback = null;
+export function queueStore() {
+  if (hasIdb()) return idbStore;
+  if (!_fallback) _fallback = lsStore(localStorage);
+  return _fallback;
+}
 
 /** Xin trình duyệt giữ dữ liệu (không tự xoá khi thiếu chỗ) — có ảnh chờ thì mới xin. */
 export function requestPersist() {
@@ -94,10 +120,13 @@ export async function migrateLegacy(store, ls, newId) {
   let n = 0;
   for (const it of arr) {
     if (!it || !it.payload) continue;
+    const id = it.id || newId();
     await store.add({
-      id: it.id || newId(), client_id: it.payload.client_id || newId(),
+      // client_id suy từ id cũ → chuyển 2 lần (2 tab) vẫn ra cùng mã, máy chủ chống trùng được
+      id, client_id: it.payload.client_id || ('legacy-' + String(id).replace(/[^A-Za-z0-9_-]/g, '')).slice(0, 64),
       client_at: it.payload.client_at || it.queued_at || null,
-      username: it.username || '', full_name: it.full_name || '',
+      // Hàng chờ cũ không ghi người tạo → "chưa rõ": KHÔNG tự gửi dưới tên người đang đăng nhập
+      username: it.username || '', full_name: it.full_name || '', owner_unknown: !it.username,
       queued_at: it.queued_at || Date.now(), payload: it.payload, photos: [],
       status: 'pending', attempts: 0, next_try: 0
     });

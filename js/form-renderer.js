@@ -85,6 +85,14 @@ export async function renderForm(containerEl, schemaKey) {
   if (state.editMode) {
     await loadEditRow();
     // Edit mode: không cần GPS auto-refresh hay autosave draft
+  } else if (new URLSearchParams(location.search).get('queue')) {
+    // v2.3.0 — sửa bản "cần sửa" lấy thẳng từ hàng chờ: giữ toạ độ hiện trường, ảnh chưa tải,
+    // mã chống trùng, giờ bấm Lưu gốc. KHÔNG lấy GPS chỗ đang ngồi sửa (bấm "Lấy lại" nếu muốn).
+    applyDefaults();
+    await loadFromQueue(new URLSearchParams(location.search).get('queue'));
+    const formEl = document.getElementById('survey-form');
+    formEl.addEventListener('focusout', prefetchDup);
+    formEl.addEventListener('change', prefetchDup);
   } else {
     refreshGps();              // async, không await
     applyDefaults();           // trước khôi phục nháp: nháp (nếu có) ghi đè mặc định
@@ -101,6 +109,59 @@ export async function renderForm(containerEl, schemaKey) {
   if (state.schema.fields.some(f => f.type === 'tdk')) {
     setTimeout(() => loadJsQR().catch(() => {}), 4000);
   }
+}
+
+/** Mở lại 1 bản trong hàng chờ (thường là bản máy chủ từ chối) để sửa rồi gửi lại. */
+async function loadFromQueue(id) {
+  let it = null;
+  try { it = await queueStore().get(id); } catch (e) { /* bỏ qua */ }
+  if (!it || it.payload.type !== state.schemaKey || (it.username && it.username !== state.user.username)) {
+    showToast('Không tìm thấy bản trong hàng chờ', 'error', 4000);
+    return;
+  }
+  state.clientId = it.client_id;
+  state.origClientAt = it.client_at || null;
+  state.fromQueueId = it.id;
+  const data = Object.assign({}, it.payload.data || {});
+  (it.photos || []).forEach(p => { if (p.url && p.field) data[p.field] = p.url; });
+  state.queueOrigData = data;
+
+  const banner = document.createElement('div');
+  banner.className = 'bg-amber-50 border-l-4 border-amber-500 text-amber-900 p-3 mb-3 rounded text-sm';
+  banner.innerHTML = '<b>Sửa bản bị máy chủ từ chối</b><br>' + escapeHtml(it.error || '') +
+    '<br><span class="text-xs">Giữ nguyên toạ độ hiện trường và giờ khảo sát gốc. Gửi lại thành công thì bản rời hàng chờ.</span>';
+  state.container.insertBefore(banner, state.container.firstChild);
+
+  for (const f of state.schema.fields) {
+    const val = data[f.label];
+    if (val === undefined || val === null || val === '') continue;
+    if (['stt_auto', 'date_auto', 'link_gmap', 'gps_lat', 'gps_lng'].includes(f.type) || f.key === 'nguoi_ks') continue;
+    if (f.type === 'image_url') {
+      state.imageUrls[f.key] = { status: 'done', url: String(val), fileName: '(ảnh đã tải)', thumbnail: driveViewUrl(String(val)) };
+      renderImageFieldPreview(f.key);
+      continue;
+    }
+    const el = state.container.querySelector(`[data-key="${f.key}"]`);
+    if (el) setFieldValue(el, val);
+  }
+  // Ảnh đã có URL + ảnh chưa tải (ArrayBuffer) — không bỏ ảnh nào
+  (it.payload.photos || []).forEach(url => state.photos.push({ id: uuid(), file: null, status: 'done', url, thumbnail: driveViewUrl(url), error: null }));
+  for (const p of (it.photos || [])) {
+    if (p.url && !p.field) { state.photos.push({ id: uuid(), file: null, status: 'done', url: p.url, thumbnail: driveViewUrl(p.url), error: null }); continue; }
+    if (!p.buf) continue;
+    const blob = new Blob([p.buf], { type: p.mime || 'image/jpeg' });
+    const thumb = URL.createObjectURL(blob);
+    if (p.field) {
+      const f = state.schema.fields.find(x => x.label === p.field);
+      if (f) { state.imageUrls[f.key] = { status: 'offline', blob, fileName: '(ảnh chờ mạng)', thumbnail: thumb }; renderImageFieldPreview(f.key); }
+    } else {
+      state.photos.push({ id: uuid(), file: null, status: 'offline', blob, url: null, thumbnail: thumb, error: null });
+    }
+  }
+  renderPhotoGrid();
+  const hasLoc = state.schema.fields.some(f => ['link_gmap', 'gps_lat', 'gps_lng'].includes(f.type) && data[f.label]);
+  state.gps = { status: hasLoc ? 'kept' : 'idle' };
+  updateGpsUI();
 }
 
 /** Sau khi submit thành công, tự đánh dấu schedule item pending hôm nay → done (smart-match loai_ks). */
@@ -1351,7 +1412,8 @@ function collectFormData() {
     // Auto fields: server gán, không cần gửi
     if (t === 'stt_auto' || t === 'date_auto') continue;
     // Sửa bản ghi mà không có GPS mới → giữ giá trị cũ; gửi rỗng thì server ghi đè mất vị trí.
-    const kept = state.editMode && state.editOrigData ? (state.editOrigData[f.label] ?? '') : '';
+    const orig = (state.editMode && state.editOrigData) ? state.editOrigData : state.queueOrigData;
+    const kept = orig ? (orig[f.label] ?? '') : '';
     if (t === 'link_gmap') {
       data[f.label] = (state.gps.status === 'ok')
         ? `https://www.google.com/maps?q=${state.gps.lat},${state.gps.lng}`

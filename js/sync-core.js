@@ -45,10 +45,13 @@ export function backoffMs(attempts) {
  * @param {boolean} [o.online]
  * @returns {Promise<{success, failed, needFix, others, othersNames, duplicates}>}
  */
+export const MAX_ATTEMPTS = 8;
+
 export async function runSync({ store, me, post, upload, now = Date.now(), online = true }) {
-  const out = { success: 0, failed: 0, needFix: 0, others: 0, othersNames: [], duplicates: 0, authEnded: false };
+  const out = { success: 0, failed: 0, needFix: 0, others: 0, othersNames: [], duplicates: 0, authEnded: false, unknownOwner: 0 };
   const items = await store.list();
   for (const it of items) {
+    if (it.owner_unknown) { out.unknownOwner++; continue; }   // chờ người dùng xác nhận là của mình
     if (it.username && it.username !== me) {
       out.others++;
       const nm = it.full_name || it.username;
@@ -91,6 +94,12 @@ export async function runSync({ store, me, post, upload, now = Date.now(), onlin
         continue;
       }
       const attempts = (it.attempts || 0) + 1;
+      // Lỗi lặp lại quá nhiều lần (bản hỏng, lỗi lập trình bị coi là "mạng") → thành "cần sửa", không chặn cả hàng chờ
+      if (attempts >= MAX_ATTEMPTS) {
+        await store.update(it.id, { attempts, status: 'need_fix', error: 'Gửi lỗi ' + attempts + ' lần: ' + String(e.message || e).slice(0, 250) });
+        out.needFix++;
+        continue;
+      }
       await store.update(it.id, { attempts, next_try: kind === 'temporary' ? now + backoffMs(attempts) : 0, error: String(e.message || e).slice(0, 300) });
       out.failed++;
       if (kind === 'network') break;   // mất mạng: dừng vòng, đợi có mạng lại

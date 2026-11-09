@@ -107,7 +107,8 @@ test('migrateLegacy: chuyển hàng chờ localStorage cũ, cấp client_id, xo�
   let i = 0;
   assert.equal(await oq.migrateLegacy(store, lsApi, () => 'gen-' + (++i) + '-xxxxxxxx'), 1);
   const [rec] = await store.list();
-  assert.ok(rec.client_id.startsWith('gen-'));
+  assert.equal(rec.client_id, 'legacy-old1', 'suy từ id cũ — chuyển 2 lần vẫn cùng mã');
+  assert.equal(rec.owner_unknown, true, 'chưa rõ người tạo → không tự gửi');
   assert.equal(rec.client_at, 5);
   assert.equal(ls.has('queue_submissions'), false);
   assert.equal(await oq.migrateLegacy(store, lsApi, () => 'x'), 0, 'chạy lại không nhân đôi');
@@ -153,11 +154,42 @@ test('NV biên bản hiện trường chọn bản theo Ngày khảo sát (hỏi
   assert.match(s, /ngay < from \|\| ngay > to/);
 });
 
-test('NV bản "cần sửa" mở lại giữ client_id + giờ bấm Lưu gốc, chỉ rời hàng chờ khi gửi lại thành công', () => {
+test('QA bản "cần sửa" mở lại form đọc thẳng hàng chờ (ảnh chưa tải, toạ độ gốc), không đụng bản nháp', () => {
   const idx = read('index.html');
-  assert.match(idx, /__client_at: it\.client_at/);
+  assert.match(idx, /&queue=' \+ encodeURIComponent\(it\.id\)/);
+  assert.doesNotMatch(idx, /saveDraft\(/);
   assert.doesNotMatch(idx, /queueStore\(\)\.remove\(it\.id\)/);
   const fr = read('js/form-renderer.js');
+  assert.match(fr, /async function loadFromQueue\(id\)/);
+  assert.match(fr, /status: 'offline', blob/);
+  assert.match(fr, /state\.gps = \{ status: hasLoc \? 'kept' : 'idle' \}/);
   assert.match(fr, /from_queue: true, client_at: state\.origClientAt/);
   assert.match(fr, /queueStore\(\)\.remove\(state\.fromQueueId\)/);
+});
+
+test('QA hàng chờ cũ chưa rõ người tạo: không tự gửi; người dùng nhận thì gửi', async () => {
+  const store = oq.memoryStore([item('q1', { username: '', owner_unknown: true })]);
+  let posted = 0;
+  const r = await core.runSync({ store, me: 'ktv09', post: async () => { posted++; return { ok: true }; }, upload: async () => 'u' });
+  assert.equal(posted, 0); assert.equal(r.unknownOwner, 1);
+  await store.update('q1', { owner_unknown: false, username: 'ktv09' });
+  await core.runSync({ store, me: 'ktv09', post: async () => { posted++; return { ok: true }; }, upload: async () => 'u' });
+  assert.equal(posted, 1);
+});
+
+test('QA bản lỗi lặp lại quá nhiều lần → "cần sửa", không chặn các bản sau', async () => {
+  const store = oq.memoryStore([item('q1', { payload: null, attempts: core.MAX_ATTEMPTS - 1 }), item('q2')]);
+  let posted = 0;
+  const r = await core.runSync({ store, me: 'ktv01', post: async () => { posted++; return { ok: true }; }, upload: async () => 'u' });
+  assert.equal(r.needFix, 1); assert.equal(posted, 1);
+  assert.equal((await store.get('q1')).status, 'need_fix');
+});
+
+test('QA máy không có IndexedDB: kho localStorage bền qua lần mở, từ chối bản có ảnh chờ mạng', async () => {
+  const m = new Map();
+  const ls = { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) };
+  const a = oq.lsStore(ls);
+  await a.add(item('q1'));
+  assert.equal((await oq.lsStore(ls).list()).length, 1, 'mở lại vẫn còn');
+  await assert.rejects(a.add(item('q2', { photos: [{ buf: new ArrayBuffer(1) }] })));
 });

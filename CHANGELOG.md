@@ -34,6 +34,12 @@
 - Bản "cần sửa" mở lại form giữ mã chống trùng + giờ bấm Lưu gốc; chỉ rời hàng chờ khi gửi lại thành công.
 - Lý do xoá cần ít nhất 5 chữ/số.
 
+### Vòng duyệt kết quả (QA)
+- Bản "cần sửa" mở lại form **đọc thẳng từ hàng chờ** (`form.html?type=…&queue=…`): giữ ảnh chưa tải, toạ độ hiện trường (không lấy GPS chỗ đang ngồi sửa), không ghi đè bản nháp đang có.
+- Hàng chờ cũ (trước v2.3.0) không ghi người tạo → **không tự gửi**; trang chủ hỏi người đang đăng nhập có nhận không.
+- Bản gửi lỗi quá 8 lần → "cần sửa", không chặn các bản sau. Máy không có IndexedDB → hàng chờ dùng localStorage (không nhận ảnh chờ mạng, báo rõ).
+- Mã chống trùng của hàng chờ cũ suy từ id cũ (chuyển 2 lần vẫn cùng mã); dọn `client_ids` chạy trong khoá.
+
 ### Chưa đổi (cần anh chốt sau)
 - **KPI và Báo cáo tổng hợp vẫn tính theo `Submitted At`** (lúc máy chủ nhận): bản gửi trễ qua ngày cuối tháng sẽ rơi sang tháng sau.
 

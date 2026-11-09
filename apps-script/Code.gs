@@ -2213,7 +2213,7 @@ function handleSubmit(body) {
   try {
     if (clientId) {
       const prev = findClientId_(clientId);
-      if (prev) return { ok: true, stt: prev.stt, sheet: sheetName, duplicate: true, warnings: warnings };
+      if (prev) return { ok: true, stt: prev.stt, sheet: SHEET_MAP[prev.type] || sheetName, duplicate: true, warnings: warnings };
     }
     stt = newSttId(type, sheet, effDate);
 
@@ -2242,6 +2242,7 @@ function handleSubmit(body) {
       CacheService.getScriptCache().put('cid_' + clientId, JSON.stringify({ type: type, stt: stt }), 21600);
     }
     if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.flush) SpreadsheetApp.flush();
+    if (clientId) pruneClientIds_();   // trong khoá: không chen với lần tra client_id khác
   } finally {
     lock.releaseLock();
   }
@@ -2251,7 +2252,6 @@ function handleSubmit(body) {
     appendAuditLog('client_time', auth.username, sheetName, stt,
       'Ngày khảo sát theo giờ máy ' + ngayKsString + ', gửi lên trễ ' + Math.round((nowMs - clientAtMs) / 60000) + ' phút');
   }
-  if (clientId) pruneClientIds_();
 
   // Notification email cho admin/user có quyền notify_admin (best-effort, không chặn submit)
   try {

@@ -443,9 +443,10 @@ export async function queueSummary() {
   const store = queueStore();
   try { await migrateLegacy(store, localStorage, uuid); } catch (e) { /* bỏ qua */ }
   const items = await store.list();
-  const out = { mine: 0, others: 0, needFix: 0, othersNames: [], items };
+  const out = { mine: 0, others: 0, needFix: 0, unknown: 0, othersNames: [], items };
   items.forEach(it => {
-    if (it.username && it.username !== me) {
+    if (it.owner_unknown) out.unknown++;
+    else if (it.username && it.username !== me) {
       out.others++;
       const nm = it.full_name || it.username;
       if (!out.othersNames.includes(nm)) out.othersNames.push(nm);
