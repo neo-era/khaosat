@@ -28,6 +28,15 @@
 - Sheet thiếu cột so với `HEADERS`: vẫn ghi, cảnh báo, Audit `header_mismatch` ghi giá trị bị rơi.
 - Biên bản hiện trường escape chữ người dùng nhập.
 
+### Vòng duyệt kết quả (nghiệp vụ)
+- Báo cáo sự cố: phát hiện cũ hơn 30 ngày → cảnh báo; ô ngày giờ phải đúng mẫu `yyyy-MM-dd HH:mm` (chặn "09/11/2026" bị hiểu kiểu Mỹ).
+- **Biên bản hiện trường chọn bản theo Ngày khảo sát** (ngày ra hiện trường), không theo lúc gửi lên.
+- Bản "cần sửa" mở lại form giữ mã chống trùng + giờ bấm Lưu gốc; chỉ rời hàng chờ khi gửi lại thành công.
+- Lý do xoá cần ít nhất 5 chữ/số.
+
+### Chưa đổi (cần anh chốt sau)
+- **KPI và Báo cáo tổng hợp vẫn tính theo `Submitted At`** (lúc máy chủ nhận): bản gửi trễ qua ngày cuối tháng sẽ rơi sang tháng sau.
+
 ### Triển khai — Apps Script TRƯỚC, frontend sau
 1. Dán `apps-script/Code.gs` (đã gồm v2.2.1) → Triển khai → Quản lý → sửa → **Phiên bản mới**.
 2. Frontend v2.3.0 (`sw.js` → `khaosat-v33`) vẫn chạy được với máy chủ cũ; máy chủ mới chạy được với frontend cũ (trừ nút Xoá ở trang Quản lý bản cũ — cần lý do, sẽ báo lỗi rõ).

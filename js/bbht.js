@@ -3,7 +3,7 @@ import { apiList } from './api.js';
 import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { inlineImages, restoreImages, sizeImagesForWord } from './photos.js';
 import { driveViewUrl } from './drive-url.js';
-import { escapeHtml, localDateStr } from './utils.js';
+import { escapeHtml, localDateStr, vnDateKey } from './utils.js';
 import { loadJsPDF, loadHtml2canvas } from './lazy-lib.js';
 
 const BBHT_MAP = {
@@ -29,6 +29,13 @@ const ALL_TYPES = Object.keys(BBHT_MAP);
 let state = { rows: [], from: '', to: '', quan: '', phuong: '' };
 
 function todayStr() { return localDateStr(); }
+/** 'yyyy-MM-dd' + n ngày (lịch, không phụ thuộc múi giờ). */
+function addDaysStr(s, n) {
+  const [y, m, d] = s.split('-').map(Number);
+  const x = new Date(Date.UTC(y, m - 1, d + n));
+  const p = v => String(v).padStart(2, '0');
+  return x.getUTCFullYear() + '-' + p(x.getUTCMonth() + 1) + '-' + p(x.getUTCDate());
+}
 
 function parseDate(dateStr) {
   if (!dateStr) return { d: '___', m: '___', y: '2026' };
@@ -173,7 +180,9 @@ async function loadData() {
 
   try {
     const results = await Promise.allSettled(
-      selTypes.map(type => apiList({ type, from, to, status: 'active' }))
+      // v2.3.0 — biên bản ký theo NGÀY RA HIỆN TRƯỜNG: bản gửi trễ (hàng chờ offline, ≤ 72 giờ) có
+      // Submitted At muộn hơn Ngày khảo sát → hỏi rộng thêm 3 ngày rồi lọc lại theo Ngày khảo sát.
+      selTypes.map(type => apiList({ type, from, to: addDaysStr(to, 3), status: 'active' }))
     );
 
     let allRows = [];
@@ -185,6 +194,8 @@ async function loadData() {
                  : [];
       const type = selTypes[i];
       rows.forEach(row => {
+        const ngay = vnDateKey(row['Ngày khảo sát'] || row['ngày khảo sát']) || vnDateKey(row['Submitted At']);
+        if (ngay && (ngay < from || ngay > to)) return;
         if (phuong && row['Phường'] !== phuong) return;
         if (!phuong && quan && row['Quận'] !== quan) return;
         if (ktv && row['Username'] !== ktv) return;

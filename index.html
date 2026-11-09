@@ -145,7 +145,6 @@
     import { SCHEMAS, SURVEY_GROUPS } from './js/schemas.js';
     import { saveDraft } from './js/storage.js';
     import { syncQueue, wakeServer, queueSummary } from './js/api.js';
-    import { queueStore } from './js/offline-queue.js';
     import { escapeHtml, showToast } from './js/utils.js';
     import { initHelp } from './js/help.js';
     import { initInstallPrompt } from './js/install.js';
@@ -297,10 +296,12 @@
       const name = (SCHEMAS[it.payload.type] || {}).name || it.payload.type;
       if (!confirm('Bản "' + name + '" bị máy chủ từ chối:\n' + (it.error || '') + '\n\nMở lại form để sửa?')) return;
       const urls = (it.payload.photos || []).concat((it.photos || []).filter(p => p.url && !p.field).map(p => p.url));
-      const data = Object.assign({}, it.payload.data, { __photos: urls });
+      // Giữ client_id + giờ bấm Lưu gốc (Ngày khảo sát không đổi thành ngày sửa); chỉ xoá khỏi hàng chờ
+      // khi gửi lại thành công (form làm việc đó qua __queue_id)
+      const data = Object.assign({}, it.payload.data, { __photos: urls,
+        __client_id: it.client_id, __client_at: it.client_at, __queue_id: it.id });
       (it.photos || []).forEach(p => { if (p.url && p.field) data[p.field] = p.url; });
       saveDraft(it.payload.type, data);
-      await queueStore().remove(it.id);
       location.href = 'form.html?type=' + encodeURIComponent(it.payload.type);
     });
     updateQueueBadge();

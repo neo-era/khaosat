@@ -41,6 +41,18 @@ export function localDateStr(d = new Date()) {
   return x.getFullYear() + '-' + p(x.getMonth() + 1) + '-' + p(x.getDate());
 }
 
+/**
+ * Ngày 'yyyy-MM-dd' (giờ VN) của 1 giá trị ngày từ Sheets: chuỗi 'yyyy-MM-dd HH:mm:ss' (giờ VN, lấy
+ * nguyên), ISO có Z / Date (đổi sang giờ VN). Không đọc được → ''. (v2.3.0)
+ */
+export function vnDateKey(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}(?:[ ]\d{2}:\d{2}(?::\d{2})?)?$/.test(s)) return s.slice(0, 10);
+  const t = new Date(v).getTime();
+  return isNaN(t) ? '' : new Date(t + 7 * 3600e3).toISOString().slice(0, 10);
+}
+
 /** Escape HTML cho innerHTML an toàn. */
 export function escapeHtml(str) {
   if (str === null || str === undefined) return '';

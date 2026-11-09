@@ -133,3 +133,31 @@ test('sw.js cache 2 module mới của hàng chờ', () => {
   const s = read('sw.js');
   assert.match(s, /js\/sync-core\.js/); assert.match(s, /js\/offline-queue\.js/);
 });
+
+test('NV vnDateKey: chuỗi giờ VN lấy nguyên ngày, ISO Z đổi sang giờ VN', async () => {
+  const src = read('js/utils.js');
+  const a = src.indexOf('export function vnDateKey(');
+  let d = 0, i = src.indexOf('{', a);
+  for (; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}' && --d === 0) break; }
+  const f = new Function('return (' + src.slice(a + 7, i + 1) + ')')();
+  assert.equal(f('2026-11-07 23:30:00'), '2026-11-07');
+  assert.equal(f('2026-11-07T17:30:00.000Z'), '2026-11-08');
+  assert.equal(f(''), '');
+  assert.equal(f('rác'), '');
+});
+
+test('NV biên bản hiện trường chọn bản theo Ngày khảo sát (hỏi rộng thêm 3 ngày)', () => {
+  const s = read('js/bbht.js');
+  assert.match(s, /to: addDaysStr\(to, 3\)/);
+  assert.match(s, /vnDateKey\(row\['Ngày khảo sát'\]/);
+  assert.match(s, /ngay < from \|\| ngay > to/);
+});
+
+test('NV bản "cần sửa" mở lại giữ client_id + giờ bấm Lưu gốc, chỉ rời hàng chờ khi gửi lại thành công', () => {
+  const idx = read('index.html');
+  assert.match(idx, /__client_at: it\.client_at/);
+  assert.doesNotMatch(idx, /queueStore\(\)\.remove\(it\.id\)/);
+  const fr = read('js/form-renderer.js');
+  assert.match(fr, /from_queue: true, client_at: state\.origClientAt/);
+  assert.match(fr, /queueStore\(\)\.remove\(state\.fromQueueId\)/);
+});

@@ -118,8 +118,9 @@ function validateRecord_(type, data, labels) {
   });
   R.dt.forEach(k => {
     if (!has(k) || val(k) === '') return;
-    const d = parseDayBound_(val(k), false);
-    if (!d) errs.push('"' + k + '" sai định dạng ngày giờ');
+    // Chỉ nhận đúng mẫu yyyy-MM-dd HH:mm[:ss] — "09/11/2026 08:00" dễ bị hiểu thành 11/9 kiểu Mỹ
+    const d = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(val(k)) ? parseDayBound_(val(k), false) : null;
+    if (!d) errs.push('"' + k + '" phải đúng dạng năm-tháng-ngày giờ:phút');
     else if (d.getTime() > Date.now() + 5 * 60e3) errs.push('"' + k + '" đang ở tương lai');
   });
   return errs;
@@ -2174,6 +2175,11 @@ function handleSubmit(body) {
   }
   const geoWarn = cleanGeo_(dataIn);
   if (geoWarn) warnings.push(geoWarn);
+  // Ngày giờ (vd phát hiện sự cố) cũ hơn 30 ngày → cảnh báo, không chặn
+  ((FIELD_RULES[type] || {}).dt || []).forEach(k => {
+    const d = parseDayBound_(dataIn[k], false);
+    if (d && Date.now() - d.getTime() > 30 * 24 * 3600e3) warnings.push('"' + k + '" cách đây hơn 30 ngày — kiểm tra lại');
+  });
 
   // Cột có trong HEADERS nhưng sheet thật đang thiếu → giá trị sẽ rơi. Vẫn ghi (không chặn hiện trường).
   const missingCols = (HEADERS[type] || []).filter(h => header.indexOf(h) < 0);
@@ -2395,7 +2401,7 @@ function handleDelete(body) {
 
   // v2.3.0 — bắt buộc lý do (≥ 5 ký tự), ghi Audit
   const reason = String(body.reason || '').trim().slice(0, 300);
-  if (reason.length < 5) return { ok: false, error: 'Nhập lý do xoá (ít nhất 5 ký tự)' };
+  if ((reason.match(/[\p{L}\p{N}]/gu) || []).length < 5) return { ok: false, error: 'Nhập lý do xoá (ít nhất 5 chữ/số)' };
 
   const found = findRowByStt(sheet, stt);
   if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };

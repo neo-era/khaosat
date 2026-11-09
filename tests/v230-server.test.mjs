@@ -223,3 +223,26 @@ test('sanitizeCell áp cho tài liệu, lịch công tác, họ tên, nhập Exc
   assert.match(String(rowObj(sh, 2)['Tuyến đường']), /^'=/);
   assert.equal(rowObj(sh, 2)['Số lượng'], 'ba', 'nhập dữ liệu cũ không áp FIELD_RULES');
 });
+
+// ---------- Vòng duyệt kết quả (nghiệp vụ) ----------
+test('NV báo cáo sự cố: phát hiện cũ hơn 30 ngày → lưu + cảnh báo; sai mẫu ngày giờ → từ chối', () => {
+  const gs = loadGs();
+  addSurveySheet(gs, 'bao_cao_su_co');
+  const base = { 'Đơn vị báo cáo': 'CSKVTT', 'Tủ điều khiển': 'A', 'Tuyến đường': 'B', 'Phường': 'C',
+    'Hiện trạng sự cố': 'Đổ trụ', 'Đề xuất khắc phục': 'Thay trụ' };
+  const old = gs.handleSubmit({ token: 't', type: 'bao_cao_su_co', client_id: 'cid-s-000010',
+    data: { ...base, 'Ngày giờ phát hiện': vnStr(Date.now() - 40 * 24 * HOUR).slice(0, 16) } });
+  assert.equal(old.ok, true);
+  assert.ok(old.warnings.some(w => /30 ngày/.test(w)));
+  const us = gs.handleSubmit({ token: 't', type: 'bao_cao_su_co', client_id: 'cid-s-000011', data: { ...base, 'Ngày giờ phát hiện': '09/11/2026 08:00' } });
+  assert.equal(us.ok, false);
+  assert.match(us.error, /Ngày giờ phát hiện/);
+});
+
+test('NV lý do xoá phải có ít nhất 5 chữ/số ("....." bị từ chối)', () => {
+  const gs = loadAuthGs();
+  addSurveySheet(gs, 'hkn', [{ STT: 'HKN-1' }]);
+  const tok = gs.login('admin').token;
+  assert.equal(gs.post({ action: 'delete', token: tok, type: 'hkn', stt: 'HKN-1', reason: '.....' }).ok, false);
+  assert.equal(gs.post({ action: 'delete', token: tok, type: 'hkn', stt: 'HKN-1', reason: 'Trùng 2' }).ok, true);
+});

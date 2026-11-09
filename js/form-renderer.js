@@ -16,6 +16,7 @@ import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
 import { apiSubmit, apiUpdate, apiList, apiCheckDup, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate, enqueueOffline } from './api.js';
 import { saveDraft, loadDraft, clearDraft, saveSubmittedToday } from './storage.js';
 import { classifyError } from './sync-core.js';
+import { queueStore } from './offline-queue.js';
 import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
 import { showToast, escapeHtml, uuid, formatVnDate, debounce, localDateStr } from './utils.js';
@@ -1309,6 +1310,10 @@ async function maybeRestoreDraft() {
     if (!el) continue;
     setFieldValue(el, val);
   }
+  // Bản "cần sửa" từ hàng chờ: giữ mã chống trùng + giờ bấm Lưu gốc
+  if (draft.data.__client_id) state.clientId = draft.data.__client_id;
+  if (draft.data.__client_at) state.origClientAt = Number(draft.data.__client_at);
+  if (draft.data.__queue_id) state.fromQueueId = draft.data.__queue_id;
   if (Array.isArray(draft.data.__photos)) {
     draft.data.__photos.forEach(url => state.photos.push({ id: uuid(), file: null, status: 'done', url, thumbnail: driveViewUrl(url), error: null }));
     renderPhotoGrid();
@@ -1322,7 +1327,8 @@ function startAutosave() {
     const hasAny = hasUserInput(data);
     // v2.3.0 — nháp giữ cả URL ảnh đã tải xong (mở lại form không mất ảnh)
     if (hasAny) saveDraft(state.schemaKey, Object.assign({}, data, {
-      __photos: state.photos.filter(p => p.status === 'done').map(p => p.url)
+      __photos: state.photos.filter(p => p.status === 'done').map(p => p.url),
+      __client_id: state.clientId, __client_at: state.origClientAt || undefined, __queue_id: state.fromQueueId || undefined
     }));
   }, CONFIG.autosaveIntervalMs);
 }
@@ -1545,7 +1551,10 @@ async function handleSubmit() {
     }
     // CREATE MODE — còn ảnh chờ mạng thì đi thẳng vào hàng chờ (gửi kèm ảnh khi có mạng)
     if (hasOfflinePhotos()) throw Object.assign(new Error('Ảnh chưa tải được'), { kind: 'network' });
-    res = await apiSubmit(state.schemaKey, data, photoUrls, { client_id: state.clientId });
+    res = await apiSubmit(state.schemaKey, data, photoUrls, state.origClientAt
+      ? { client_id: state.clientId, from_queue: true, client_at: state.origClientAt }
+      : { client_id: state.clientId });
+    if (state.fromQueueId) { try { await queueStore().remove(state.fromQueueId); } catch (e) { /* bỏ qua */ } }
     state.dup = null;   // kết quả cũ chưa tính bản vừa lưu → nhập tiếp cùng tuyến phải hỏi lại
     clearDraft(state.schemaKey);
     stopAutosave();
@@ -1624,7 +1633,7 @@ async function buildQueueRecord(data, photoUrls, clientAt) {
     }
   }
   return {
-    id: uuid(), client_id: state.clientId, client_at: clientAt,
+    id: state.fromQueueId || uuid(), client_id: state.clientId, client_at: state.origClientAt || clientAt,
     username: state.user.username, full_name: state.user.full_name,
     queued_at: Date.now(),
     payload: { action: 'submit', type: state.schemaKey, data, photos: photoUrls, ua: navigator.userAgent },
