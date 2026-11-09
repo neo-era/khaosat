@@ -3879,11 +3879,10 @@ function hdValidate_(data) {
 /** Chuỗi bắt đầu = + - @ được Sheets hiểu là công thức → thêm dấu ' để lưu nguyên văn. */
 function hdCell_(v) {
   if (v === null || v === undefined) return '';
-  if (typeof v === 'string' && /^[=+\-@]/.test(v)) return "'" + v;
-  return v;
+  return sanitizeCell(v);   // chung quy tắc chống chèn công thức với dữ liệu khảo sát
 }
 function hdUncell_(v) {
-  return typeof v === 'string' && /^'[=+\-@]/.test(v) ? v.slice(1) : v;
+  return typeof v === 'string' && /^'[\s\uFEFF]*[=+\-@\t\r\n]/.test(v) ? v.slice(1) : v;
 }
 function hdFlush_() { if (typeof SpreadsheetApp !== 'undefined') SpreadsheetApp.flush(); }
 function hdVersion_() {
@@ -3917,8 +3916,9 @@ function handleHdPush(body) {
       const sh = ss.insertSheet(name);
       created.push(sh);
       const rows = [spec.cols].concat((body.data[k] || []).map(r => r.map(hdCell_)));
-      const rng = sh.getRange(1, 1, rows.length, spec.cols.length);
-      rng.setValues(rows);
+      // Cột chữ định dạng văn bản TRƯỚC khi ghi: "10/2026" không thành ngày, mã "2.10" không thành số 2,1
+      spec.cols.forEach((c, j) => { if (spec.num.indexOf(j) < 0) sh.getRange(1, j + 1, rows.length, 1).setNumberFormat('@'); });
+      sh.getRange(1, 1, rows.length, spec.cols.length).setValues(rows);
     }
     hdFlush_();
     const ver = { v: v, generated_at: gen.toISOString(), pushed_at: isoNow(), by: auth.username,
@@ -3966,7 +3966,7 @@ function hdLoad_() {
 /** Chuẩn hoá tên phường để so: bỏ dấu, chữ thường, bỏ tiền tố "phường / p. / xã". */
 function hdNormPhuong_(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd')
-    .toLowerCase().replace(/^\s*(phuong|p\.|p|xa)\s+/, '').replace(/\s+/g, ' ').trim();
+    .toLowerCase().replace(/^\s*(?:(?:phuong|xa)\s+|p\.\s*|p\s+)/, '').replace(/\s+/g, ' ').trim();
 }
 
 function handleHdInfo(body) {

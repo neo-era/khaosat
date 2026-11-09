@@ -12,7 +12,11 @@ function gsThat() {
   gs.LockService = { getScriptLock: () => ({ waitLock() {}, tryLock: () => gs.lockOk !== false, releaseLock() {} }) };
   gs.run(`getSpreadsheet = () => ({
     getSheetByName: n => sheets[n] || null,
-    insertSheet: n => (sheets[n] = __mkSheet(n, [[]])),
+    insertSheet: n => {
+      const sh = __mkSheet(n, [[]]); const g = sh.getRange; sh.fmt = [];
+      sh.getRange = (r, c, nr, nc) => { const x = g(r, c, nr, nc); x.setNumberFormat = f => { sh.fmt.push([c, f]); return x; }; return x; };
+      return (sheets[n] = sh);
+    },
     deleteSheet: sh => { delete sheets[sh.getName()]; },
     getSheets: () => Object.values(sheets)
   });`);
@@ -89,6 +93,8 @@ test('hd_push: ghi 4 sheet, con trỏ HD_VERSION, cột chữ giữ nguyên văn
   assert.ok(sh);
   assert.equal(sh._d[1][4], "'=HYPERLINK(\"http://x\")");
   assert.equal(sh._d.length, 4);
+  assert.deepEqual(plain(sh.fmt.map(f => f[0])), [1, 2, 4, 5, 6], 'cột chữ của HD_TomTat định dạng @ trước khi ghi');
+  assert.equal(gs.sheets['HD_LienKet_v1'].fmt.length, 7, 'mọi cột HD_LienKet (kể cả "Tháng" 10/2026) là chữ');
   assert.ok(gs.sheets['HD_PhuongGoi_v1'] && gs.sheets['HD_LoaiHM_v1'] && gs.sheets['HD_LienKet_v1']);
   // lần 2: bản mới v2, xoá v1
   const r2 = push(gs, t, { meta: { source_file_id: 'f1', generated_at: '2026-11-09T03:00:00Z' } });
@@ -149,6 +155,8 @@ test('hd_info: gói theo phường (1 gói / nhiều gói / lạ), mã HM của 
   assert.equal(b.goi.goi, 'nhieu');
   assert.deepEqual(b.goi.goiList, ['G1', 'G2']);
   assert.deepEqual(b.hm, [], 'nhiều gói thì không hiện KL của gói nào');
+  assert.equal(plain(gs.post({ action: 'hd_info', token: t, phuong: 'P.Bàn Cờ', type: 'thay_tru', nam: 2026 })).goi.goi, 'G1', '"P.Bàn Cờ" (không dấu cách) vẫn khớp');
+  assert.equal(plain(gs.post({ action: 'hd_info', token: t, phuong: 'Phan Đình Phùng', type: 'thay_tru', nam: 2026 })).goi.goi, null, 'tên bắt đầu bằng "P" không bị cắt');
   const c = plain(gs.post({ action: 'hd_info', token: t, phuong: 'Phường Lạ', type: 'thay_tru', nam: 2026 }));
   assert.equal(c.goi.goi, null);
   const d = plain(gs.post({ action: 'hd_info', token: t, pairs: [{ type: 'thay_tru', stt: 'TT-261105-AB12' }, { type: 'thay_tru', stt: 'khong-co' }] }));

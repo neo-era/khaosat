@@ -35,6 +35,12 @@ test('không có chữ so sánh với số đang nhập (KL HĐ chỉ tham khả
   assert.doesNotMatch(src, /lớn hơn KL còn lại|vượt/i);
   assert.match(src, /Nhập đúng số đo hiện trường; KL HĐ chỉ để tham khảo\./);
 });
+test('chuỗi từ máy chủ luôn qua escapeHtml khi chèn HTML (B5); đăng xuất xoá cache HĐ', () => {
+  const src = read('js/hd-bar.js');
+  assert.match(src, /goiList \|\| \[\]\)\.map\(escapeHtml\)/);
+  assert.doesNotMatch(src, /\$\{(h|cur|g|lk)\.[a-zA-Z]+\}/, 'không chèn trường thô vào template');
+  assert.match(read('js/auth.js'), /hd_info:/);
+});
 test('api: hd_info là lệnh đọc; máy chủ cũ trả unknown action → ẩn êm', () => {
   const api = read('js/api.js');
   assert.match(api, /READ_ACTIONS = \[[^\]]*'hd_info'/s);

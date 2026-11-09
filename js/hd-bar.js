@@ -157,7 +157,7 @@ export function initHdBar({ type, user, getPhuong }) {
     const g = cur.goi || {};
     const rows = (cur.hm || []).map(h => `<tr><td><b>${escapeHtml(h.ma)}</b><div class="hd-ten">${escapeHtml(h.ten)}</div></td>
       <td class="n">${fmt(h.hd)}</td><td class="n">${fmt(h.daKH)}</td><td class="n"><b>${fmt(h.conLai)}</b> ${escapeHtml(h.dvt)}</td></tr>`).join('');
-    const goiTx = g.goi === 'nhieu' ? 'Phường thuộc nhiều gói: ' + (g.goiList || []).join(', ') + ' — số theo từng gói xem ở app Quản lý HĐ.'
+    const goiTx = g.goi === 'nhieu' ? 'Phường thuộc nhiều gói: ' + (g.goiList || []).map(escapeHtml).join(', ') + ' — số theo từng gói xem ở app Quản lý HĐ.'
       : g.goi ? `${escapeHtml(g.goi.replace(/^G/, 'Gói '))}${g.maGoiThau ? ' · mã gói thầu <b>' + escapeHtml(g.maGoiThau) + '</b>' : ''} · năm ${escapeHtml(String(cur.nam || ''))}`
       : 'Phường này chưa có trong dữ liệu hợp đồng.';
     sheet.innerHTML = `<div class="hd-scrim" data-close></div>
