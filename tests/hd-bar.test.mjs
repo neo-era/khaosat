@@ -41,6 +41,9 @@ test('chuỗi từ máy chủ luôn qua escapeHtml khi chèn HTML (B5); đăng x
   assert.doesNotMatch(src, /\$\{(h|cur|g|lk)\.[a-zA-Z]+\}/, 'không chèn trường thô vào template');
   assert.match(read('js/auth.js'), /hd_info:/);
 });
+test('thanh HĐ hiện ở mọi loại khảo sát (kể cả băng rôn, sự cố)', () => {
+  assert.match(read('js/hd-bar.js'), /const SKIP_TYPES = \[\];/);
+});
 test('api: hd_info là lệnh đọc; máy chủ cũ trả unknown action → ẩn êm', () => {
   const api = read('js/api.js');
   assert.match(api, /READ_ACTIONS = \[[^\]]*'hd_info'/s);

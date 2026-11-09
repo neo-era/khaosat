@@ -7,7 +7,8 @@
 import { apiHdInfo } from './api.js';
 import { escapeHtml } from './utils.js';
 
-const SKIP_TYPES = ['thao_go_bang_ron', 'bao_cao_su_co'];
+// Anh chốt 09/11/2026: mọi loại khảo sát đều có hạng mục HĐ duy tu tương ứng → thanh HĐ hiện ở cả 17 form
+const SKIP_TYPES = [];
 const CACHE_MS = 12 * 3600e3;          // dùng lại kết quả theo phường ≤ 12 giờ (mạng yếu)
 const STALE_MS = 30 * 864e5;           // dữ liệu HĐ lập quá 30 ngày → nhãn "đã cũ"
 const KEY = 'hd_info:';
