@@ -4,7 +4,7 @@ import { apiList, apiDelete, apiRestore, apiSetStatus } from './api.js';
 import { hdLienKet, lienKetBadge } from './hd-bar.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES, XU_LY_SKIP_TYPES } from './schemas.js';
 import { hasPermission } from './auth.js';
-import { showToast, escapeHtml, formatVnDate, formatVnDateOnly, safeHref } from './utils.js';
+import { showToast, escapeHtml, formatVnDate, formatVnDateOnly, safeHref, localDateStr } from './utils.js';
 import { driveViewUrl } from './drive-url.js';
 
 const state = {
@@ -44,8 +44,8 @@ export async function initManage(taikhoanUsers = []) {
   // Default date range = last 30 days
   const now = new Date();
   const past = new Date(now.getTime() - 30 * 86400000);
-  document.getElementById('filter-from').value = past.toISOString().slice(0, 10);
-  document.getElementById('filter-to').value = now.toISOString().slice(0, 10);
+  document.getElementById('filter-from').value = localDateStr(past);
+  document.getElementById('filter-to').value = localDateStr(now);
 
   document.getElementById('btn-search').onclick = doSearch;
   document.getElementById('filter-search').addEventListener('keydown', e => {
@@ -283,10 +283,20 @@ async function confirmDelete(r) {
   const photos = String(r['Ảnh (URLs)'] || '').split('|').filter(u => u);
   const msg = `Xoá bản ghi STT #${r['STT']} của loại "${schema ? schema.name : r._type}"?\n\n` +
     `• Dữ liệu sẽ được đánh dấu xoá (có thể khôi phục).\n` +
-    `• ${photos.length} ảnh đính kèm sẽ bị XOÁ VĨNH VIỄN khỏi Cloudinary, KHÔNG khôi phục được.`;
+    `• ${photos.length} ảnh đính kèm: ảnh Google Drive vào thùng rác (khôi phục được trong 30 ngày), ảnh Cloudinary bị xoá hẳn.`;
   if (!confirm(msg)) return;
+  if (String(r['Trạng thái xử lý'] || '').trim() === 'Nghiệm thu') {
+    showToast('Bản đã Nghiệm thu — không xoá được. Đổi trạng thái xử lý trước nếu thật cần xoá.', 'warning', 5000);
+    return;
+  }
+  if (String(r['Trạng thái xử lý'] || '').trim() === 'Đã thi công' &&
+      !confirm('Bản này đã THI CÔNG. Chắc chắn xoá?')) return;
+  // v2.3.0 — máy chủ bắt buộc lý do xoá (ghi vào Audit)
+  const reason = (prompt('Lý do xoá STT #' + r['STT'] + ' (ít nhất 5 ký tự):', '') || '').trim();
+  if (!reason) return;
+  if (reason.length < 5) { showToast('Lý do quá ngắn (ít nhất 5 ký tự)', 'warning'); return; }
   try {
-    await apiDelete(r._type, r['STT']);
+    await apiDelete(r._type, r['STT'], reason);
     showToast('Đã xoá STT #' + r['STT'], 'success');
     await doSearch();
   } catch (e) {
@@ -295,10 +305,12 @@ async function confirmDelete(r) {
 }
 
 async function doRestore(r) {
-  if (!confirm(`Khôi phục bản ghi STT #${r['STT']}? Ảnh đính kèm KHÔNG khôi phục được.`)) return;
+  if (!confirm(`Khôi phục bản ghi STT #${r['STT']}? Ảnh Google Drive sẽ được lấy lại từ thùng rác (ảnh Cloudinary đã xoá hẳn).`)) return;
   try {
-    await apiRestore(r._type, r['STT']);
-    showToast('Đã khôi phục STT #' + r['STT'] + ' (ảnh vẫn mất)', 'success');
+    const res = await apiRestore(r._type, r['STT']);
+    const n = res && typeof res.photos_restored === 'number' ? res.photos_restored : null;
+    showToast('Đã khôi phục STT #' + r['STT'] + (n === null ? '' : ' · lấy lại ' + n + ' ảnh') +
+      (res && res.warning ? ' · ' + res.warning : ''), res && res.warning ? 'warning' : 'success', 5000);
     await doSearch();
   } catch (e) {
     showToast('Lỗi khôi phục: ' + e.message, 'error', 4000);

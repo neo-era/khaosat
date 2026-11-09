@@ -3,7 +3,7 @@
 import { apiScheduleList, apiScheduleCreate, apiScheduleUpdate, apiScheduleDelete, apiUsers } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { hasPermission } from './auth.js';
-import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
+import { showToast, escapeHtml, formatVnDateOnly, localDateStr } from './utils.js';
 
 const state = {
   me: null,
@@ -74,8 +74,8 @@ function applyPreset(p) {
   } else if (p === 'month') {
     to = new Date(today.getTime() + 29 * 86400000);
   }
-  document.getElementById('filter-from').value = from.toISOString().slice(0, 10);
-  document.getElementById('filter-to').value = to.toISOString().slice(0, 10);
+  document.getElementById('filter-from').value = localDateStr(from);
+  document.getElementById('filter-to').value = localDateStr(to);
 }
 
 async function loadSchedule() {
@@ -112,7 +112,7 @@ function renderTable() {
   // Sort theo ngày ascending
   const sorted = [...state.items].sort((a, b) => String(a.ngay).localeCompare(String(b.ngay)));
   const canWrite = hasPermission('schedule_write');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   const statusBadge = {
     pending: '<span class="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">⏳ Chờ làm</span>',
@@ -182,7 +182,7 @@ async function doDelete(item) {
 }
 
 function openAddDialog() {
-  document.getElementById('f-ngay').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('f-ngay').value = localDateStr();
   document.getElementById('f-loaiks').value = '';
   document.getElementById('f-khuvuc').value = '';
   document.getElementById('f-ghichu').value = '';

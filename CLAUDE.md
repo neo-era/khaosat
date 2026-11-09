@@ -219,6 +219,7 @@ Nếu sheet này không tồn tại, Apps Script dùng giá trị mặc định 
   - Mã loại (`STT_PREFIX` trong Code.gs): `tang_cuong_den` TCD · `ngam_hoa` NH · `thay_den` TD · `hkn` HKN · `tc_noi` TCN · `cap_luon_can` CLC · `tc_ngam` TCG · `thay_can` TCA · `thay_tru` TT · `choa_den` CD · `nap_tru` NT · `vo_tu` VT · `tc_den_kc_xa` TDX · `decal_so_tru` DST · `nang_mong` NM · `thao_go_bang_ron` BR.
   - `findRowByStt` báo lỗi nếu gặp STT trùng (không sửa/xoá dòng đầu tiên cho qua).
 - `ngày khảo sát` / `Ngày khảo sát`: **Người khảo sát không nhập tay**. Apps Script tự ghi `new Date()` khi nhận request, theo timezone `Asia/Ho_Chi_Minh`, format `yyyy-MM-dd HH:mm:ss`.
+  - **Ngoại lệ v2.3.0 (anh Lâm chốt 09/11/2026):** bản gửi từ **hàng chờ offline** (`from_queue: true`) dùng `client_at` = giờ máy lúc bấm Lưu, chỉ khi nằm trong 72 giờ trước lúc máy chủ nhận và không ở tương lai; ngoài khoảng → giờ máy chủ. Ngày trong mã STT theo cùng mốc. `Submitted At` vẫn là giờ máy chủ. Lệch > 10 phút → Audit `client_time`; `client_at` + độ lệch lưu ở sheet `client_ids`.
 - `kinh độ`, `vĩ độ`: lấy tự động bằng `navigator.geolocation`, Người khảo sát có nút "Lấy lại GPS" nếu cần.
 - `link` / `Link Google Map`: tự sinh `https://www.google.com/maps?q=<lat>,<lng>` nếu có GPS, để trống nếu không.
 - `Bản vẽ`: upload ảnh (`image_url`) — Người khảo sát chụp ảnh bản vẽ thiết kế tại hiện trường, upload Cloudinary, lưu URL vào cột. Không bắt buộc. (chốt 2026-05-26: cho nhập; update 2026-05-28: đổi từ `text` → `image_url` để Người khảo sát chụp ảnh bản vẽ giấy — đã implement trong `js/schemas.js`)

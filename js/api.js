@@ -2,9 +2,11 @@
 
 import { CONFIG } from './config.js';
 import { compressImage } from './camera.js';
-import { getToken, getQueue, removeFromQueue, clearToken } from './storage.js';
-import { showToast } from './utils.js';
+import { getToken, clearToken } from './storage.js';
+import { showToast, uuid } from './utils.js';
 import { beginBusy } from './sw-update.js';
+import { kindOfServerError, classifyError, runSync, withLock } from './sync-core.js';
+import { queueStore, migrateLegacy } from './offline-queue.js';
 
 /**
  * POST text/plain (tránh CORS preflight). Trả parsed JSON.
@@ -17,13 +19,24 @@ const READ_ACTIONS = ['login', 'refresh', 'list', 'kpi', 'report', 'users', 'doc
 async function postJson(body) {
   const done = READ_ACTIONS.includes(body && body.action) ? () => {} : beginBusy();
   try {
-    const res = await fetch(CONFIG.appsScriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const json = await res.json();
+    let res;
+    try {
+      res = await fetch(CONFIG.appsScriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+    } catch (e) {
+      // v2.3.0: fetch bị từ chối = không tới được máy chủ (mất mạng) — gắn loại để xử lý đúng
+      throw Object.assign(new Error(e && e.message || 'Mất mạng'), { kind: 'network', name: e && e.name || 'TypeError' });
+    }
+    if (!res.ok) {
+      const kind = (res.status >= 500 || res.status === 429) ? 'temporary' : 'permanent';
+      throw Object.assign(new Error('HTTP ' + res.status), { kind });
+    }
+    let json;
+    try { json = await res.json(); }
+    catch (e) { throw Object.assign(new Error('Máy chủ trả dữ liệu lỗi'), { kind: 'temporary' }); }
     if (!json.ok) {
       // v2.2.1: token cũ/đã đổi mật khẩu/hết hạn tuyệt đối → xoá phiên, về trang đăng nhập
       if (body && body.action !== 'login' && isSessionEndedError(json.error)) {
@@ -32,7 +45,7 @@ async function postJson(body) {
           location.replace('login.html');
         }
       }
-      throw new Error(json.error || 'Server error');
+      throw Object.assign(new Error(json.error || 'Server error'), { kind: kindOfServerError(json.error) });
     }
     return json;
   } finally {
@@ -80,13 +93,14 @@ export async function apiRefresh(remember) {
 
 // ===== CRUD bản ghi =====
 
-export async function apiSubmit(type, data, photos = []) {
-  return postJson({
+/** extra: { client_id } (v2.3.0 — chống ghi trùng khi gửi lại). */
+export async function apiSubmit(type, data, photos = [], extra = {}) {
+  return postJson(Object.assign({
     action: 'submit',
     token: requireToken(),
     type, data, photos,
     ua: navigator.userAgent
-  });
+  }, extra));
 }
 
 /** Hỏi server bản mới có thể trùng bản đã khảo sát trong 90 ngày không (chỉ cảnh báo). */
@@ -140,8 +154,9 @@ export async function apiUpdate(type, stt, data, photos) {
   });
 }
 
-export async function apiDelete(type, stt) {
-  return postJson({ action: 'delete', token: requireToken(), type, stt });
+/** v2.3.0: máy chủ bắt buộc lý do xoá (≥ 5 ký tự). */
+export async function apiDelete(type, stt, reason) {
+  return postJson({ action: 'delete', token: requireToken(), type, stt, reason });
 }
 
 export async function apiRestore(type, stt) {
@@ -348,6 +363,8 @@ export async function uploadBlobToDrive(blob, surveyType) {
   } catch (err) {
     // Chưa đăng nhập / hết phiên thì Cloudinary cũng vô nghĩa — ném lỗi luôn (tránh ảnh mồ côi)
     if (/chưa đăng nhập/i.test(err.message || '') || isSessionEndedError(err.message)) throw err;
+    // Mất mạng → Cloudinary cũng không tới được: báo đúng loại để form giữ ảnh chờ mạng (v2.3.0)
+    if (classifyError(err, typeof navigator === 'undefined' || navigator.onLine !== false) === 'network') throw err;
 
     console.warn('[upload] Drive lỗi → chuyển sang Cloudinary:', err.message);
     // Báo 1 lần/phiên: fallback im lặng dễ khiến Drive hỏng cả tháng không ai biết
@@ -389,28 +406,51 @@ async function uploadToCloudinary(blob, folder, fileName) {
  * Retry tất cả submission trong queue. Item thành công sẽ bị xoá.
  * @returns {Promise<{success: number, failed: number}>}
  */
+/**
+ * v2.3.0 — gửi hàng chờ offline (IndexedDB). Không chạy chồng (Web Locks / cờ localStorage).
+ * Chỉ gửi bản của người đang đăng nhập; ảnh chờ mạng tải lên trước; client_id chống ghi trùng.
+ * @returns {Promise<{success, failed, needFix, others, othersNames, duplicates, skipped?}>}
+ */
 export async function syncQueue() {
-  if (!navigator.onLine) return { success: 0, failed: 0, skipped: true };
-  const queue = getQueue();
-  let success = 0, failed = 0;
-  // Cả vòng gửi hàng chờ là 1 việc: tải lại ở khoảng giữa 2 bản vẫn an toàn nhưng giữ bận cho gọn
-  const done = beginBusy();
-  try {
-  for (const item of queue) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { success: 0, failed: 0, skipped: true };
+  const auth = getToken();
+  if (!auth) return { success: 0, failed: 0, skipped: true };
+  const store = queueStore();
+  const res = await withLock('khaosat-sync', async () => {
+    const done = beginBusy();   // đang gửi → không cho app tự tải lại giữa chừng
     try {
-      // Cập nhật token mới nếu cũ đã hết hạn
-      const auth = getToken();
-      if (!auth) { failed++; continue; }
-      const payload = { ...item.payload, token: auth.token };
-      await postJson(payload);
-      removeFromQueue(item.id);
-      success++;
-    } catch (e) {
-      failed++;
+      await migrateLegacy(store, localStorage, uuid);
+      return await runSync({
+        store, me: auth.username, online: navigator.onLine !== false,
+        post: payload => postJson(Object.assign({}, payload, { token: requireToken() })),
+        upload: p => uploadBlobToDrive(new Blob([p.buf], { type: p.mime || 'image/jpeg' }), p.folder)
+      });
+    } finally {
+      done();
     }
-  }
-  } finally {
-    done();
-  }
-  return { success, failed };
+  }, { locks: navigator.locks, localStorage });
+  return res || { success: 0, failed: 0, skipped: true };
+}
+
+/** Thêm 1 bản vào hàng chờ offline (kèm ảnh chờ mạng). Ném lỗi nếu máy hết chỗ lưu. */
+export async function enqueueOffline(rec) {
+  return queueStore().add(rec);
+}
+
+/** Đếm hàng chờ cho huy hiệu trang chủ: của tôi / của tài khoản khác / cần sửa. */
+export async function queueSummary() {
+  const me = (getToken() || {}).username;
+  const store = queueStore();
+  try { await migrateLegacy(store, localStorage, uuid); } catch (e) { /* bỏ qua */ }
+  const items = await store.list();
+  const out = { mine: 0, others: 0, needFix: 0, othersNames: [], items };
+  items.forEach(it => {
+    if (it.username && it.username !== me) {
+      out.others++;
+      const nm = it.full_name || it.username;
+      if (!out.othersNames.includes(nm)) out.othersNames.push(nm);
+    } else if (it.status === 'need_fix') out.needFix++;
+    else out.mine++;
+  });
+  return out;
 }

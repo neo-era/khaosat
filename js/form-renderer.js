@@ -13,11 +13,12 @@ import { SCHEMAS } from './schemas.js';
 import { PHUONG_XA, TDK_LIST, TDK_BY_PHUONG } from './dia-ban.js';
 import { CONFIG } from './config.js';
 import { requireAuth, logout, getCurrentUser, hasPermission } from './auth.js';
-import { apiSubmit, apiUpdate, apiList, apiCheckDup, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate } from './api.js';
-import { saveDraft, loadDraft, clearDraft, enqueueSubmission, saveSubmittedToday } from './storage.js';
+import { apiSubmit, apiUpdate, apiList, apiCheckDup, uploadImageToDrive, uploadBlobToDrive, apiScheduleList, apiScheduleUpdate, enqueueOffline } from './api.js';
+import { saveDraft, loadDraft, clearDraft, saveSubmittedToday } from './storage.js';
+import { classifyError } from './sync-core.js';
 import { compressImage, createThumbnail, stampImage } from './camera.js';
 import { getCurrentPosition, reverseGeocode } from './gps.js';
-import { showToast, escapeHtml, uuid, formatVnDate, debounce } from './utils.js';
+import { showToast, escapeHtml, uuid, formatVnDate, debounce, localDateStr } from './utils.js';
 import { loadJsQR } from './lazy-lib.js';
 import { registerBusyCheck } from './sw-update.js';
 import { driveViewUrl } from './drive-url.js';
@@ -56,6 +57,8 @@ export async function renderForm(containerEl, schemaKey) {
   state.gps = { status: 'idle' };
   state.photos = [];
   state.imageUrls = {};
+  // v2.3.0 — mã chống ghi trùng cho bản MỚI: giữ nguyên qua các lần bấm Lưu lại / hàng chờ
+  state.clientId = uuid();
 
   // Edit mode: ?edit=STT
   const editStt = new URLSearchParams(location.search).get('edit');
@@ -103,7 +106,7 @@ export async function renderForm(containerEl, schemaKey) {
 async function autoMarkScheduleDone() {
   if (!state.user || state.user.role === 'demo') return;
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     const res = await apiScheduleList({
       from: today, to: today, status: 'pending', ktv_username: state.user.username
     });
@@ -124,7 +127,7 @@ async function autoMarkScheduleDone() {
 async function showScheduleBadge() {
   if (!state.user || state.user.role === 'demo') return;
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     const res = await apiScheduleList({
       from: today, to: today, status: 'pending', ktv_username: state.user.username
     });
@@ -1078,6 +1081,7 @@ function handleFileSelect(e) {
 }
 
 async function uploadOne(item) {
+  let stamped = null;
   try {
     item.thumbnail = await createThumbnail(item.file);
     renderPhotoGrid();
@@ -1094,7 +1098,7 @@ async function uploadOne(item) {
     const location = state.gps.status === 'ok'
       ? `GPS: ${state.gps.lat.toFixed(5)}, ${state.gps.lng.toFixed(5)}`
       : '';
-    const stamped = await stampImage(compressed, {
+    stamped = await stampImage(compressed, {
       time,
       location,
       surveyName: state.schema.name
@@ -1104,9 +1108,33 @@ async function uploadOne(item) {
     //    schema.driveFolder cho phép loại KS chỉ định thư mục riêng (vd băng rôn)
     item.url = await uploadBlobToDrive(stamped, state.schema.driveFolder || state.schemaKey);
     item.status = 'done';
+    item.blob = null;
   } catch (e) {
-    item.status = 'error';
-    item.error = e.message || 'Upload fail';
+    // v2.3.0 — mất mạng: GIỮ ảnh (đã nén + đóng dấu) để gửi kèm hàng chờ; lỗi khác: báo rõ, chặn Lưu
+    if (stamped && classifyError(e, navigator.onLine) === 'network') {
+      item.status = 'offline';
+      item.blob = stamped;
+      item.error = null;
+    } else {
+      item.status = 'error';
+      item.error = e.message || 'Upload fail';
+    }
+  }
+  renderPhotoGrid();
+}
+
+/** Thử tải lại các ảnh đang "chờ mạng" (bấm Lưu khi đã có mạng lại). */
+async function retryOfflinePhotos() {
+  const folder = state.schema.driveFolder || state.schemaKey;
+  for (const p of state.photos.filter(x => x.status === 'offline' && x.blob)) {
+    try { p.url = await uploadBlobToDrive(p.blob, folder); p.status = 'done'; p.blob = null; }
+    catch (e) { if (classifyError(e, navigator.onLine) !== 'network') { p.status = 'error'; p.error = e.message; } }
+  }
+  for (const [k, it] of Object.entries(state.imageUrls)) {
+    if (it.status !== 'offline' || !it.blob) continue;
+    try { it.url = await uploadBlobToDrive(it.blob, 'banve/' + state.schemaKey); it.status = 'done'; it.blob = null; }
+    catch (e) { if (classifyError(e, navigator.onLine) !== 'network') { it.status = 'error'; it.error = e.message; } }
+    renderImageFieldPreview(k);
   }
   renderPhotoGrid();
 }
@@ -1129,10 +1157,17 @@ async function handleImageFieldSelect(e, fieldKey, fieldLabel) {
   try {
     state.imageUrls[fieldKey].thumbnail = await createThumbnail(file);
     renderImageFieldPreview(fieldKey);
-    const url = await uploadImageToDrive(file, 'banve/' + state.schemaKey);
+    const compressed = await compressImage(file);
+    state.imageUrls[fieldKey].blob = compressed;
+    const url = await uploadBlobToDrive(compressed, 'banve/' + state.schemaKey);
     state.imageUrls[fieldKey] = { status: 'done', url, fileName: file.name, thumbnail: state.imageUrls[fieldKey].thumbnail };
   } catch (err) {
-    state.imageUrls[fieldKey] = { status: 'error', url: null, fileName: file.name, thumbnail: null, error: err.message || 'Upload fail' };
+    const cur = state.imageUrls[fieldKey] || {};
+    if (cur.blob && classifyError(err, navigator.onLine) === 'network') {
+      state.imageUrls[fieldKey] = Object.assign(cur, { status: 'offline', error: null });   // giữ ảnh, gửi kèm hàng chờ
+    } else {
+      state.imageUrls[fieldKey] = { status: 'error', url: null, fileName: file.name, thumbnail: null, error: err.message || 'Upload fail' };
+    }
   }
   renderImageFieldPreview(fieldKey);
 }
@@ -1180,6 +1215,7 @@ function renderImageFieldPreview(fieldKey) {
   if (item.status === 'uploading') { status.textContent = '⏳ Đang tải...'; status.classList.add('text-yellow-700'); }
   else if (item.status === 'done')  { status.textContent = '✅ Đã tải xong'; status.classList.add('text-green-700'); }
   else if (item.status === 'error') { status.textContent = '❌ ' + (item.error || 'Lỗi'); status.classList.add('text-red-700'); }
+  else if (item.status === 'offline') { status.textContent = '📵 Chờ mạng — sẽ gửi kèm khi có mạng'; status.classList.add('text-amber-700'); }
   info.appendChild(status);
   preview.appendChild(info);
 
@@ -1227,6 +1263,9 @@ function renderPhotoGrid() {
       } else if (p.status === 'error') {
         overlay.textContent = '❌ ' + (p.error || 'Lỗi');
         overlay.classList.add('bg-red-700/70');
+      } else if (p.status === 'offline') {
+        overlay.textContent = '📵 Chờ mạng';
+        overlay.classList.add('bg-amber-700/60');
       }
       cell.appendChild(overlay);
     }
@@ -1270,6 +1309,10 @@ async function maybeRestoreDraft() {
     if (!el) continue;
     setFieldValue(el, val);
   }
+  if (Array.isArray(draft.data.__photos)) {
+    draft.data.__photos.forEach(url => state.photos.push({ id: uuid(), file: null, status: 'done', url, thumbnail: driveViewUrl(url), error: null }));
+    renderPhotoGrid();
+  }
   showToast('Đã khôi phục bản nháp', 'info', 2000);
 }
 
@@ -1277,7 +1320,10 @@ function startAutosave() {
   state.autosaveTimer = setInterval(() => {
     const data = collectFormData();
     const hasAny = hasUserInput(data);
-    if (hasAny) saveDraft(state.schemaKey, data);
+    // v2.3.0 — nháp giữ cả URL ảnh đã tải xong (mở lại form không mất ảnh)
+    if (hasAny) saveDraft(state.schemaKey, Object.assign({}, data, {
+      __photos: state.photos.filter(p => p.status === 'done').map(p => p.url)
+    }));
   }, CONFIG.autosaveIntervalMs);
 }
 
@@ -1352,6 +1398,13 @@ function validateForm() {
   if (pendingPhotos.length > 0) {
     errors.push({ message: `Đợi ${pendingPhotos.length} ảnh hiện trường upload xong rồi mới Lưu` });
   }
+  // v2.3.0 — ảnh lỗi (không phải do mạng) không được bỏ qua im lặng
+  const failedPhotos = state.photos.filter(p => p.status === 'error');
+  if (failedPhotos.length > 0) {
+    errors.push({ message: `Có ${failedPhotos.length} ảnh tải lỗi — bấm ✕ để xoá rồi chụp lại` });
+  }
+  const failedImgs = Object.values(state.imageUrls).filter(v => v.status === 'error');
+  if (failedImgs.length > 0) errors.push({ message: 'Ảnh bản vẽ tải lỗi — xoá hoặc chọn lại ảnh' });
   // image_url fields đang upload chưa xong
   const pendingImgs = Object.entries(state.imageUrls).filter(([k, v]) => v.status === 'uploading').map(([k]) => k);
   if (pendingImgs.length > 0) {
@@ -1474,6 +1527,10 @@ async function handleSubmit() {
   const origText = btn.textContent;
   btn.textContent = state.editMode ? '⏳ Đang cập nhật...' : '⏳ Đang lưu...';
 
+  const clientAt = Date.now();   // giờ bấm Lưu — máy chủ dùng làm Ngày khảo sát nếu bản đi qua hàng chờ
+  // Có ảnh "chờ mạng" mà giờ đã có mạng → thử tải lại trước
+  if (!state.editMode && navigator.onLine && hasOfflinePhotos()) await retryOfflinePhotos();
+
   const data = collectFormData();
   const photoUrls = state.photos.filter(p => p.status === 'done').map(p => p.url);
 
@@ -1486,8 +1543,9 @@ async function handleSubmit() {
       setTimeout(() => location.replace('manage.html'), 1500);
       return;
     }
-    // CREATE MODE
-    res = await apiSubmit(state.schemaKey, data, photoUrls);
+    // CREATE MODE — còn ảnh chờ mạng thì đi thẳng vào hàng chờ (gửi kèm ảnh khi có mạng)
+    if (hasOfflinePhotos()) throw Object.assign(new Error('Ảnh chưa tải được'), { kind: 'network' });
+    res = await apiSubmit(state.schemaKey, data, photoUrls, { client_id: state.clientId });
     state.dup = null;   // kết quả cũ chưa tính bản vừa lưu → nhập tiếp cùng tuyến phải hỏi lại
     clearDraft(state.schemaKey);
     stopAutosave();
@@ -1505,11 +1563,13 @@ async function handleSubmit() {
     });
     // v2.0.5: auto-mark schedule item pending hôm nay → done (smart-match loai_ks)
     autoMarkScheduleDone();
+    if (res.warnings && res.warnings.length) showToast('⚠️ ' + res.warnings.join(' · '), 'warning', 7000);
     showSuccessDialog(res.stt);
   } catch (e) {
     const msg = String(e.message || e);
-    // Token sai/hết hạn → logout
-    if (/token|expired|forbidden|invalid|user not found|user disabled/i.test(msg)) {
+    const kind = classifyError(e, navigator.onLine);
+    // Hết phiên → đăng xuất (hàng chờ & bản nháp vẫn giữ)
+    if (kind === 'auth') {
       showToast('Phiên hết hạn, vui lòng đăng nhập lại', 'error');
       setTimeout(() => logout(), 1500);
       return;
@@ -1521,25 +1581,55 @@ async function handleSubmit() {
       btn.textContent = origText;
       return;
     }
-    // Submit mode + Network fail → enqueue
-    if (!navigator.onLine || e.name === 'TypeError' || /fetch|network|HTTP/i.test(msg)) {
-      enqueueSubmission({
-        action: 'submit',
-        type: state.schemaKey,
-        data: data,
-        photos: photoUrls,
-        ua: navigator.userAgent
-      });
+    // Mất mạng / máy chủ bận → đưa vào hàng chờ (IndexedDB, kèm ảnh chờ mạng), giữ nguyên client_id
+    if (kind === 'network' || kind === 'temporary') {
+      try {
+        await enqueueOffline(await buildQueueRecord(data, photoUrls, clientAt));
+      } catch (qe) {
+        showToast('Không lưu được vào máy (máy hết chỗ?). Giữ nguyên form, thử lại khi có mạng.', 'error', 6000);
+        btn.disabled = false;
+        btn.textContent = origText;
+        return;
+      }
       clearDraft(state.schemaKey);
       stopAutosave();
-      showToast('📵 Đã lưu offline, sẽ tự đồng bộ khi có mạng', 'warning', 4000);
+      state.photos = [];   // đã nằm trong hàng chờ — form không còn "bận"
+      showToast(kind === 'network' ? '📵 Đã lưu offline, sẽ tự đồng bộ khi có mạng' : '⏳ Máy chủ bận — đã lưu vào hàng chờ, sẽ tự gửi lại', 'warning', 4000);
       setTimeout(() => location.replace('index.html'), 2000);
       return;
     }
-    showToast('Lỗi: ' + msg, 'error', 4000);
+    // Máy chủ từ chối dữ liệu → giữ form để sửa
+    showToast('Lỗi: ' + msg, 'error', 6000);
     btn.disabled = false;
     btn.textContent = origText;
   }
+}
+
+function hasOfflinePhotos() {
+  return state.photos.some(p => p.status === 'offline') ||
+    Object.values(state.imageUrls).some(v => v.status === 'offline');
+}
+
+/** Bản ghi hàng chờ v2.3.0: dữ liệu + ảnh đã tải (URL) + ảnh chờ mạng (ArrayBuffer). */
+async function buildQueueRecord(data, photoUrls, clientAt) {
+  const folder = state.schema.driveFolder || state.schemaKey;
+  const photos = [];
+  for (const p of state.photos.filter(x => x.status === 'offline' && x.blob)) {
+    photos.push({ mime: p.blob.type || 'image/jpeg', buf: await p.blob.arrayBuffer(), folder, field: null });
+  }
+  for (const f of state.schema.fields) {
+    const it = state.imageUrls[f.key];
+    if (it && it.status === 'offline' && it.blob) {
+      photos.push({ mime: it.blob.type || 'image/jpeg', buf: await it.blob.arrayBuffer(), folder: 'banve/' + state.schemaKey, field: f.label });
+    }
+  }
+  return {
+    id: uuid(), client_id: state.clientId, client_at: clientAt,
+    username: state.user.username, full_name: state.user.full_name,
+    queued_at: Date.now(),
+    payload: { action: 'submit', type: state.schemaKey, data, photos: photoUrls, ua: navigator.userAgent },
+    photos, status: 'pending', attempts: 0, next_try: 0
+  };
 }
 
 // =====================================================================

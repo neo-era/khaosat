@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## v2.3.0 — 2026-11-09 — Đúng dữ liệu (chi tiết: `docs/v2.3.0-thiet-ke.md`)
+
+### Ngày giờ
+- Máy chủ hiểu `from`/`to` dạng `yyyy-MM-dd` là 00:00–23:59 **giờ Việt Nam** (`parseDayBound_`) ở danh sách, báo cáo, xuất dữ liệu thô. Trước đây "hôm nay" ở Biên bản hiện trường ra 0 bản, mất các bản 0h–7h.
+- Máy lấy ngày "hôm nay / tháng này" theo giờ máy (`localDateStr`), bỏ `toISOString().slice(0,10)` ở 7 trang.
+
+### Không trùng, không mất khi mất mạng
+- `client_id` cho mỗi bản mới; gửi lại / hàng chờ gửi 2 lần → máy chủ trả STT cũ, không ghi dòng mới (sheet phụ `client_ids`, tự dọn sau 90 ngày).
+- Hàng chờ chuyển sang **IndexedDB**, mang theo **ảnh chụp lúc mất mạng** (tải lên khi có mạng). Tự chuyển hàng chờ cũ từ localStorage.
+- Bản từ hàng chờ dùng **giờ bấm Lưu** làm Ngày khảo sát (≤ 72 giờ — anh Lâm chốt).
+- Chỉ gửi bản của **người đang đăng nhập**; bản của tài khoản khác giữ lại, báo tên. Đăng xuất không xoá hàng chờ.
+- Không chạy gửi hàng chờ chồng nhau (Web Locks). Lỗi phân loại mạng / máy chủ bận (thử lại có giãn cách) / dữ liệu sai (đánh dấu "cần sửa", bấm 📥 để mở lại form) / hết phiên.
+- Ảnh tải lỗi không phải do mạng → chặn Lưu (trước bị bỏ qua im lặng). Bản nháp giữ cả ảnh đã tải.
+
+### Máy chủ kiểm dữ liệu
+- `FIELD_RULES` (sinh từ `js/schemas.js`, có test đồng bộ): thiếu trường bắt buộc, số đếm < 1 hoặc lẻ, số đo ≤ 0, số không bắt buộc âm/không phải số → từ chối, nêu tên trường. Nhận dấu phẩy thập phân, nhận 0 ở trường không bắt buộc. Năm lắp đặt không giới hạn khoảng.
+- Máy chưa cập nhật (không gửi `client_id`): lỗi dữ liệu chỉ thành cảnh báo (giai đoạn chuyển tiếp).
+- Toạ độ ngoài TP.HCM / (0,0) / đảo → vẫn lưu, bỏ trống toạ độ + link, cảnh báo.
+- Báo cáo sự cố: Ngày giờ phát hiện ở tương lai bị từ chối.
+- Chống chèn công thức thêm ở tài liệu, lịch công tác, họ tên, nhập Excel (nhập Excel không áp FIELD_RULES).
+
+### Lưu vết
+- Sửa bản ghi: chỉ kiểm trường đổi; Audit ghi `Trường: cũ → mới`.
+- Xoá: **bắt buộc lý do** (≥ 5 ký tự) ghi Audit; **không xoá bản Nghiệm thu**; hỏi thêm khi xoá bản Đã thi công.
+- Khôi phục: lấy ảnh Drive ra khỏi thùng rác, báo số ảnh lấy lại được.
+- Sheet thiếu cột so với `HEADERS`: vẫn ghi, cảnh báo, Audit `header_mismatch` ghi giá trị bị rơi.
+- Biên bản hiện trường escape chữ người dùng nhập.
+
+### Triển khai — Apps Script TRƯỚC, frontend sau
+1. Dán `apps-script/Code.gs` (đã gồm v2.2.1) → Triển khai → Quản lý → sửa → **Phiên bản mới**.
+2. Frontend v2.3.0 (`sw.js` → `khaosat-v33`) vẫn chạy được với máy chủ cũ; máy chủ mới chạy được với frontend cũ (trừ nút Xoá ở trang Quản lý bản cũ — cần lý do, sẽ báo lỗi rõ).
+
 ## v2.2.1 — 2026-11-09 — 🔒 Vá bảo mật khẩn (rà soát tổng thể 09/11/2026)
 
 ### Lỗ hổng đã vá (đều có test chứng minh trong `tests/security.test.mjs`)

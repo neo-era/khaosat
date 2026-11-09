@@ -3,7 +3,7 @@
 import { apiList, apiUsers } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { hasPermission } from './auth.js';
-import { showToast, escapeHtml, formatVnDateOnly, safeHref } from './utils.js';
+import { showToast, escapeHtml, formatVnDateOnly, safeHref, localDateStr } from './utils.js';
 import { createBoundaryLayer } from './boundaries.js';
 import { driveViewUrl } from './drive-url.js';
 
@@ -30,8 +30,8 @@ export async function initMap(user) {
   // Date default = 30 ngày gần đây
   const now = new Date();
   const past = new Date(now.getTime() - 30 * 86400000);
-  document.getElementById('filter-from').value = past.toISOString().slice(0, 10);
-  document.getElementById('filter-to').value = now.toISOString().slice(0, 10);
+  document.getElementById('filter-from').value = localDateStr(past);
+  document.getElementById('filter-to').value = localDateStr(now);
 
   // Init Leaflet map
   state.map = L.map('map', { zoomControl: true }).setView(CENTER, DEFAULT_ZOOM);

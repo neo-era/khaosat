@@ -3,7 +3,7 @@ import { apiList } from './api.js';
 import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { inlineImages, restoreImages, sizeImagesForWord } from './photos.js';
 import { driveViewUrl } from './drive-url.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, localDateStr } from './utils.js';
 import { loadJsPDF, loadHtml2canvas } from './lazy-lib.js';
 
 const BBHT_MAP = {
@@ -28,7 +28,7 @@ const BBHT_MAP = {
 const ALL_TYPES = Object.keys(BBHT_MAP);
 let state = { rows: [], from: '', to: '', quan: '', phuong: '' };
 
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() { return localDateStr(); }
 
 function parseDate(dateStr) {
   if (!dateStr) return { d: '___', m: '___', y: '2026' };
@@ -295,11 +295,11 @@ function renderTable(allRows, selTypes) {
       html += `<tr>
         <td style="text-align:center;padding:3px 5px;border:1px solid #bbb;">${stt++}</td>
         <td style="padding:3px 5px;border:1px solid #bbb;">${meta.label}</td>
-        <td style="padding:3px 5px;border:1px solid #bbb;">${tuyen}</td>
-        <td style="padding:3px 5px;border:1px solid #bbb;">${loc}</td>
+        <td style="padding:3px 5px;border:1px solid #bbb;">${escapeHtml(tuyen)}</td>
+        <td style="padding:3px 5px;border:1px solid #bbb;">${escapeHtml(loc)}</td>
         <td style="text-align:center;padding:3px 5px;border:1px solid #bbb;">${meta.dvt}</td>
-        <td style="text-align:center;padding:3px 5px;border:1px solid #bbb;font-weight:bold;">${kl}</td>
-        <td style="padding:3px 5px;border:1px solid #bbb;">${ghi}</td>
+        <td style="text-align:center;padding:3px 5px;border:1px solid #bbb;font-weight:bold;">${escapeHtml(kl)}</td>
+        <td style="padding:3px 5px;border:1px solid #bbb;">${escapeHtml(ghi)}</td>
       </tr>`;
     });
   }

@@ -40,6 +40,20 @@ export function mkSheet(name, rows = [[]]) {
     setFrozenRows() {}, setColumnWidth() {},
     getConditionalFormatRules: () => [], setConditionalFormatRules() {},
     appendRow: r => { d.push(r.slice()); return sheet; },
+    // TextFinder tối thiểu (v2.3.0 — tra client_id): khớp nguyên ô, trả ô đầu tiên tìm được
+    createTextFinder: text => {
+      const tf = {
+        matchEntireCell() { return tf; },
+        findNext() {
+          for (let i = 0; i < d.length; i++) for (let j = 0; j < d[i].length; j++) {
+            if (String(d[i][j]) === String(text)) return { getRow: () => i + 1, getColumn: () => j + 1 };
+          }
+          return null;
+        }
+      };
+      return tf;
+    },
+    deleteRows: (r, n) => { d.splice(r - 1, n); },
     deleteRow: r => { d.splice(r - 1, 1); },
     insertColumnAfter: c => { d.forEach(r => r.splice(c, 0, '')); },
     insertColumnBefore: c => { d.forEach(r => r.splice(c - 1, 0, '')); },
@@ -79,6 +93,7 @@ export function loadGs({ user = { username: 'tester', role: 'admin', full_name: 
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {}, getProperties: () => ({}) }) },
+    SpreadsheetApp: { flush() {} },
     sheets: {}, audit: [], user, allow: true
   };
   vm.createContext(ctx);

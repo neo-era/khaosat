@@ -58,7 +58,9 @@ const SHELL = [
   './js/drive-url.js',
   './js/sw-update.js',
   './js/file-name.js',
-  './js/list-cache.js'
+  './js/list-cache.js',
+  './js/sync-core.js',
+  './js/offline-queue.js'
 ];
 
 self.addEventListener('install', (event) => {

@@ -39,7 +39,7 @@ export function loadAuthGs() {
   const folders = { ROOT: { name: 'root', parent: null }, OUTSIDE: { name: 'Tài liệu riêng', parent: null } };
   const files = {};
   const drive = {
-    files, folders, trashed: [], read: [], created: [],
+    files, folders, trashed: [], untrashed: [], read: [], created: [],
     addFolder(id, parent) { folders[id] = { name: id, parent }; },
     addFile(id, { mime = 'image/jpeg', parent = 'ROOT' } = {}) { files[id] = { mime, parent }; }
   };
@@ -68,7 +68,7 @@ export function loadAuthGs() {
         getMimeType: () => f.mime,
         getParents: () => mkIter(f.parent ? [folderObj(f.parent)] : []),
         getBlob: () => { drive.read.push(id); return { getContentType: () => f.mime, getBytes: () => [1, 2, 3] }; },
-        setTrashed: v => { if (v) drive.trashed.push(id); }
+        setTrashed: v => { (v ? drive.trashed : drive.untrashed).push(id); }
       };
     }
   };
@@ -103,6 +103,7 @@ export function loadAuthGs() {
     DriveApp,
     UrlFetchApp: { fetch: (url, opt) => { fetched.push(url); return { getResponseCode: () => 200, getBlob: () => ({ getContentType: () => 'image/jpeg', getBytes: () => [9] }), getContentText: () => '{"result":"ok"}' }; } },
     MailApp: { sendEmail() {} },
+    SpreadsheetApp: { flush() {} },
     sheets: {}, audit: []
   };
   vm.createContext(ctx);

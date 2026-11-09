@@ -49,6 +49,158 @@ const DEFAULT_CLOUDINARY_CLOUD = 'dmlsqbe8c';
 // không bao giờ bị đăng xuất, còn token bị lộ vẫn có hạn chết.
 // Thu hồi ngay lập tức = đặt active=FALSE trong sheet taikhoan (verifyToken kiểm mỗi request).
 
+// =====================================================================
+// v2.3.0 — KIỂM DỮ LIỆU PHÍA MÁY CHỦ
+// =====================================================================
+/**
+ * Quy tắc từng loại khảo sát, SINH TỪ js/schemas.js (test tests/v230-server.test.mjs bắt lệch):
+ *   req: bắt buộc · pos: số đo bắt buộc (> 0, cho thập phân) · cnt: số đếm bắt buộc (nguyên ≥ 1)
+ *   num: số không bắt buộc (≥ 0, cho 0) · dt: ngày giờ 'yyyy-MM-dd HH:mm'
+ * Sửa schemas.js thì chạy lại test và chép kết quả sinh vào đây.
+ */
+const FIELD_RULES = {
+  tang_cuong_den: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ rộng đường","Số đèn dự kiến","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn dự kiến"],num: ["Số làn xe","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ"],dt: []},
+  ngam_hoa: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ rộng đường","Số đèn dự kiến","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn dự kiến"],num: ["Số làn xe","Đường nhựa","Vỉa hè các loại","Vỉa hè bê tông","Vỉa hè đá","Số đèn thu hồi","CD cáp thu hồi","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ"],dt: []},
+  thay_den: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số đèn hiện hữu","Độ rộng đường","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn hiện hữu"],num: ["Năm lắp đặt","Số làn xe","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ"],dt: []},
+  hkn: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng","Loại hộp (6A, 10A)"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []},
+  tc_noi: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: ["Số lượng"],cnt: [],num: ["Năm lắp đặt"],dt: []},
+  cap_luon_can: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: ["Số lượng"],cnt: [],num: ["Năm lắp đặt"],dt: []},
+  tc_ngam: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: ["Số lượng"],cnt: [],num: ["Năm lắp đặt"],dt: []},
+  thay_can: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng","Loại kiềng (HTLT, TTLT, B2...)"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []},
+  thay_tru: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng","Loại sự cố (mục, gỉ sét, hư mặt bích,...)","Quy cách trụ (loại trụ: chiều cao VD: STK 9m; be tông 8,4m; trang trí;...)"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []},
+  choa_den: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng","Loại chóa"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []},
+  nap_tru: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số trụ","Số lượng"],pos: [],cnt: ["Số lượng"],num: [],dt: []},
+  vo_tu: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []},
+  tc_den_kc_xa: {req: ["Tuyến đường","Phường","Tủ điều khiển","Chủng loại đèn","Số lượng"],pos: [],cnt: ["Số lượng"],num: ["Khoảng cách giữa 2 trụ"],dt: []},
+  decal_so_tru: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: [],cnt: ["Số lượng"],num: [],dt: []},
+  nang_mong: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ cao nâng","Số lượng"],pos: ["Độ cao nâng"],cnt: ["Số lượng"],num: ["Năm lắp đặt","Chiều cao nắp cửa trụ (từ mặt bích đến nắp cửa trụ)"],dt: []},
+  thao_go_bang_ron: {req: ["Tuyến đường","Phường","Loại quảng cáo","Số lượng"],pos: [],cnt: ["Số lượng"],num: [],dt: []},
+  bao_cao_su_co: {req: ["Đơn vị báo cáo","Tủ điều khiển","Tuyến đường","Phường","Ngày giờ phát hiện","Hiện trạng sự cố","Đề xuất khắc phục"],pos: [],cnt: [],num: ["Năm lắp đặt"],dt: ["Ngày giờ phát hiện"]}
+};
+
+function getFieldRules_() { return FIELD_RULES; }
+
+/** Chuỗi số kiểu VN ("2,5", " 3 ") → Number; không phải số → NaN. Rỗng → null. */
+function parseNumVn_(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return v;
+  const t = String(v).trim().replace(',', '.');
+  if (t === '') return null;
+  return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
+}
+
+/**
+ * Kiểm các trường `labels` của `data` theo FIELD_RULES[type]. Trả mảng lỗi (chuỗi tiếng Việt,
+ * KHÔNG chứa chữ token/invalid/forbidden để client không tưởng là hết phiên).
+ * @param {string[]|null} labels — null = mọi trường (bản mới); mảng = chỉ các trường đang đổi (sửa bản ghi)
+ */
+function validateRecord_(type, data, labels) {
+  const R = FIELD_RULES[type];
+  if (!R) return [];
+  const errs = [];
+  const has = k => labels === null || labels.indexOf(k) >= 0;
+  const val = k => data[k] === undefined || data[k] === null ? '' : String(data[k]).trim();
+  R.req.forEach(k => { if (has(k) && val(k) === '') errs.push('Thiếu "' + k + '"'); });
+  R.cnt.forEach(k => {
+    if (!has(k) || val(k) === '') return;
+    const n = parseNumVn_(data[k]);
+    if (!(n >= 1) || Math.floor(n) !== n) errs.push('"' + k + '" phải là số nguyên từ 1 trở lên');
+  });
+  R.pos.forEach(k => {
+    if (!has(k) || val(k) === '') return;
+    const n = parseNumVn_(data[k]);
+    if (!(n > 0)) errs.push('"' + k + '" phải là số lớn hơn 0');
+  });
+  R.num.forEach(k => {
+    if (!has(k) || val(k) === '') return;
+    const n = parseNumVn_(data[k]);
+    if (!(n >= 0)) errs.push('"' + k + '" phải là số, không âm');
+  });
+  R.dt.forEach(k => {
+    if (!has(k) || val(k) === '') return;
+    const d = parseDayBound_(val(k), false);
+    if (!d) errs.push('"' + k + '" sai định dạng ngày giờ');
+    else if (d.getTime() > Date.now() + 5 * 60e3) errs.push('"' + k + '" đang ở tương lai');
+  });
+  return errs;
+}
+
+/** Khung toạ độ TP.HCM sau sáp nhập (gồm Bình Dương, Bà Rịa–Vũng Tàu, Côn Đảo) — rộng tay. */
+const GEO_BOX = { latMin: 8.3, latMax: 11.8, lngMin: 105.9, lngMax: 107.7 };
+
+/**
+ * Toạ độ ngoài khung / (0,0) / đảo vĩ-kinh → bỏ trống vĩ độ, kinh độ, link (KHÔNG từ chối bản ghi:
+ * GPS do máy tự lấy, người khảo sát không sửa được). Trả cảnh báo hoặc null. Sửa `data` tại chỗ.
+ */
+function cleanGeo_(data) {
+  const latK = 'vĩ độ', lngK = 'kinh độ';
+  let lat = parseNumVn_(data[latK]), lng = parseNumVn_(data[lngK]);
+  if ((lat === null || lng === null)) {
+    const m = String(data['Link Google Map'] || data['link'] || '').match(/q=(-?[\d.]+),(-?[\d.]+)/);
+    if (!m) return null;
+    lat = Number(m[1]); lng = Number(m[2]);
+  }
+  const inBox = lat >= GEO_BOX.latMin && lat <= GEO_BOX.latMax && lng >= GEO_BOX.lngMin && lng <= GEO_BOX.lngMax;
+  if (inBox) return null;
+  [latK, lngK, 'Link Google Map', 'link'].forEach(k => { if (data[k] !== undefined) data[k] = ''; });
+  return 'Toạ độ GPS (' + lat + ', ' + lng + ') nằm ngoài TP.HCM — đã bỏ trống toạ độ, bản ghi vẫn được lưu';
+}
+
+/** client_id hợp lệ: 8–64 ký tự chữ/số/gạch. Không hợp lệ → null (coi như máy cũ không gửi). */
+function cleanClientId_(v) {
+  const s = String(v || '').trim();
+  return /^[A-Za-z0-9_-]{8,64}$/.test(s) ? s : null;
+}
+
+const CLIENT_IDS_HEADER = ['client_id', 'type', 'stt', 'username', 'at', 'client_at', 'lech_phut'];
+const CLIENT_AT_MAX_MS = 72 * 3600e3;   // anh Lâm chốt 09/11/2026: tối đa 72 giờ
+
+/** Báo lệch cột (tối đa 1 lần/giờ/sheet — người gọi giới hạn). Chỉ ghi log máy chủ. */
+function notifyHeaderMismatch_(sheetName, missingCols) {
+  Logger.log('header_mismatch ' + sheetName + ': thiếu ' + missingCols.join(', '));
+}
+
+function getClientIdsSheet_() {
+  const ss = getSpreadsheet();
+  let sh = ss.getSheetByName('client_ids');
+  if (!sh) {
+    sh = ss.insertSheet('client_ids');
+    sh.getRange(1, 1, 1, CLIENT_IDS_HEADER.length).setValues([CLIENT_IDS_HEADER]);
+    try { sh.setFrozenRows(1); } catch (e) { /* sheet giả trong test */ }
+  }
+  return sh;
+}
+
+/** Tra client_id đã ghi → { type, stt } hoặc null. CacheService trước, TextFinder cột A sau. */
+function findClientId_(cid) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('cid_' + cid);
+  if (hit) { try { return JSON.parse(hit); } catch (e) { /* bỏ qua */ } }
+  const sh = getClientIdsSheet_();
+  const cell = sh.createTextFinder(cid).matchEntireCell(true).findNext();
+  if (!cell || cell.getRow() === 1) return null;
+  const v = sh.getRange(cell.getRow(), 1, 1, 3).getValues()[0];
+  return { type: v[1], stt: v[2] };
+}
+
+/** Dọn client_ids cũ hơn 90 ngày, tối đa 1 lần/ngày (cờ trong ScriptProperties). Lỗi thì bỏ qua. */
+function pruneClientIds_() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    if (props.getProperty('CLIENT_IDS_PRUNED') === today) return;
+    props.setProperty('CLIENT_IDS_PRUNED', today);
+    const sh = getClientIdsSheet_();
+    const last = sh.getLastRow();
+    if (last < 2) return;
+    const at = sh.getRange(2, 5, last - 1, 1).getValues();
+    const cutoff = Date.now() - 90 * 24 * 3600e3;
+    let n = 0;
+    while (n < at.length && new Date(at[n][0]).getTime() < cutoff) n++;
+    if (n > 0) sh.deleteRows(2, n);
+  } catch (e) { Logger.log('pruneClientIds_: ' + e); }
+}
+
 /** Mapping type-key → tên sheet trong Google Sheets (giữ NGUYÊN VĂN). */
 const SHEET_MAP = {
   tang_cuong_den: 'Tang cuong den',
@@ -323,6 +475,28 @@ function nowVnString() {
 
 function isoNow() {
   return new Date().toISOString();
+}
+
+/**
+ * v2.3.0 — mốc ngày theo GIỜ VIỆT NAM (UTC+7, không có giờ mùa hè).
+ *   'yyyy-MM-dd'            → 00:00:00.000 (end=false) hoặc 23:59:59.999 (end=true) giờ VN
+ *   'yyyy-MM-ddTHH:mm[:ss]' → giờ VN đúng như ghi (client cũ gửi kèm T00:00:00/T23:59:59)
+ *   có Z / +hh:mm           → giữ nguyên
+ * Trước đây `new Date('2026-11-09')` = 00:00 UTC = 07:00 VN → mất bản 0h–7h và gần hết ngày cuối.
+ * @returns {Date|null}
+ */
+function parseDayBound_(s, end) {
+  if (s === null || s === undefined || s === '') return null;
+  const str = String(s).trim();
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const t = Date.UTC(+m[1], +m[2] - 1, +m[3]) - 7 * 3600e3;
+    return new Date(end ? t + 24 * 3600e3 - 1 : t);
+  }
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) - 7 * 3600e3 + (end && !m[6] ? 59999 : 0));
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function safe(v) {
@@ -1229,7 +1403,7 @@ function handleDocsCreate(body) {
   }
 
   const id = Utilities.getUuid().slice(0, 8);
-  const row = [id, title, category, url, description, auth.username, nowVnString()];
+  const row = [id, sanitizeCell(title), sanitizeCell(category), url, sanitizeCell(description), auth.username, nowVnString()];
   sheet.appendRow(row);
   appendAuditLog('docs_create', auth.username, 'tailieu', id, 'title=' + title);
   return { ok: true, id: id };
@@ -1377,8 +1551,8 @@ function handleScheduleCreate(body) {
 
     const id = Utilities.getUuid().slice(0, 8);
     const row = [
-      id, ktv, ngay, loai_ks, String(it.khu_vuc || ''),
-      String(it.ghi_chu || ''), 'pending', auth.username, now
+      id, ktv, ngay, loai_ks, sanitizeCell(String(it.khu_vuc || '')),
+      sanitizeCell(String(it.ghi_chu || '')), 'pending', auth.username, now
     ];
     sheet.appendRow(row);
     created.push(id);
@@ -1433,7 +1607,7 @@ function handleScheduleUpdate(body) {
     }
     const col = header.indexOf(k);
     if (col < 0) continue;
-    sheet.getRange(item._rowIndex, col + 1).setValue(fields[k]);
+    sheet.getRange(item._rowIndex, col + 1).setValue(sanitizeCell(fields[k]));
     changes.push(k + '=' + fields[k]);
   }
   if (changes.length === 0) return { ok: true, message: 'Không có thay đổi' };
@@ -1984,19 +2158,58 @@ function handleSubmit(body) {
   if (!sheet) return { ok: false, error: 'Sheet không tồn tại: ' + sheetName };
 
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-  const dataIn = body.data || {};
+  const dataIn = Object.assign({}, body.data || {});
   const photos = Array.isArray(body.photos) ? body.photos : [];
   const badUrl = findBadPhotoUrl(photos, dataIn);
   if (badUrl !== null) return { ok: false, error: 'Đường dẫn ảnh không hợp lệ: ' + String(badUrl).slice(0, 80) };
   const ua = String(body.ua || 'unknown');
+  const clientId = cleanClientId_(body.client_id);
+  const warnings = [];
+
+  // v2.3.0 — kiểm dữ liệu. Máy đã cập nhật (có client_id) → từ chối; máy cũ → chỉ cảnh báo (chuyển tiếp)
+  const errs = validateRecord_(type, dataIn, null);
+  if (errs.length) {
+    if (clientId) return { ok: false, error: 'Dữ liệu chưa đúng: ' + errs.join('; '), field_errors: errs };
+    errs.forEach(e => warnings.push(e));
+  }
+  const geoWarn = cleanGeo_(dataIn);
+  if (geoWarn) warnings.push(geoWarn);
+
+  // Cột có trong HEADERS nhưng sheet thật đang thiếu → giá trị sẽ rơi. Vẫn ghi (không chặn hiện trường).
+  const missingCols = (HEADERS[type] || []).filter(h => header.indexOf(h) < 0);
+  const dropped = missingCols.filter(h => dataIn[h] !== undefined && dataIn[h] !== '')
+    .map(h => h + '=' + String(dataIn[h]).slice(0, 200));
+  if (missingCols.length) {
+    const ck = 'hdrwarn_' + sheetName;
+    const cache = CacheService.getScriptCache();
+    if (!cache.get(ck)) {
+      cache.put(ck, '1', 3600);
+      notifyHeaderMismatch_(sheetName, missingCols);
+    }
+    warnings.push('Sheet "' + sheetName + '" thiếu cột: ' + missingCols.join(', ') + ' — báo admin chạy capNhatCotSheet()');
+  }
+
   const submittedAt = isoNow();
-  const ngayKsString = nowVnString();
-  // Khoá từ lúc cấp STT tới khi ghi xong: 2 người gửi cùng lúc không được nhận cùng STT.
+  const nowMs = Date.now();
+  // v2.3.0 — bản gửi từ HÀNG CHỜ offline: Ngày khảo sát = giờ máy lúc bấm Lưu (≤ 72 giờ, không ở tương lai)
+  let effDate = new Date(nowMs);
+  let clientAtMs = null;
+  if (body.from_queue === true) {
+    const c = Number(body.client_at);
+    if (isFinite(c) && c <= nowMs && nowMs - c <= CLIENT_AT_MAX_MS) { effDate = new Date(c); clientAtMs = c; }
+  }
+  const ngayKsString = Utilities.formatDate(effDate, TZ, 'yyyy-MM-dd HH:mm:ss');
+
+  // Khoá từ lúc kiểm client_id/cấp STT tới khi ghi xong: 2 lần gửi cùng lúc không được nhận 2 dòng.
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   let stt, newRowNum;
   try {
-    stt = newSttId(type, sheet, new Date());
+    if (clientId) {
+      const prev = findClientId_(clientId);
+      if (prev) return { ok: true, stt: prev.stt, sheet: sheetName, duplicate: true, warnings: warnings };
+    }
+    stt = newSttId(type, sheet, effDate);
 
     const row = header.map(label => {
       // Server-managed fields: bỏ qua giá trị từ client
@@ -2016,9 +2229,23 @@ function handleSubmit(body) {
 
     sheet.appendRow(row);
     newRowNum = sheet.getLastRow();
+    if (clientId) {
+      const lech = clientAtMs === null ? '' : Math.round((nowMs - clientAtMs) / 60000);
+      getClientIdsSheet_().appendRow([clientId, type, stt, auth.username, submittedAt,
+        clientAtMs === null ? '' : new Date(clientAtMs).toISOString(), lech]);
+      CacheService.getScriptCache().put('cid_' + clientId, JSON.stringify({ type: type, stt: stt }), 21600);
+    }
+    if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.flush) SpreadsheetApp.flush();
   } finally {
     lock.releaseLock();
   }
+
+  if (dropped.length) appendAuditLog('header_mismatch', auth.username, sheetName, stt, 'giá trị bị rơi: ' + dropped.join(' | '));
+  if (clientAtMs !== null && nowMs - clientAtMs > 10 * 60e3) {
+    appendAuditLog('client_time', auth.username, sheetName, stt,
+      'Ngày khảo sát theo giờ máy ' + ngayKsString + ', gửi lên trễ ' + Math.round((nowMs - clientAtMs) / 60000) + ' phút');
+  }
+  if (clientId) pruneClientIds_();
 
   // Notification email cho admin/user có quyền notify_admin (best-effort, không chặn submit)
   try {
@@ -2035,7 +2262,7 @@ function handleSubmit(body) {
     Logger.log('notify fail (silent): ' + e);
   }
 
-  return { ok: true, stt: stt, sheet: sheetName, timestamp: submittedAt };
+  return { ok: true, stt: stt, sheet: sheetName, timestamp: submittedAt, warnings: warnings };
 }
 
 // =====================================================================
@@ -2118,8 +2345,8 @@ function handleList(body) {
   const type = body.type;
   const usernameFilter = body.username;
   const sttFilter = body.stt !== undefined && body.stt !== null && body.stt !== '' ? String(body.stt) : null;
-  const from = body.from ? new Date(body.from) : null;
-  const to = body.to ? new Date(body.to) : null;
+  const from = parseDayBound_(body.from, false);
+  const to = parseDayBound_(body.to, true);
   // Nếu role không có quyền manage/report → chỉ xem của mình.
   // Ngoại lệ (user chốt 2026-09-30): báo cáo sự cố — ai có quyền nhập (trừ demo) đều lập biên bản
   // được cho MỌI bản. Chỉ mở khi hỏi đúng loại này; hỏi "tất cả loại" vẫn chỉ trả bản của mình.
@@ -2166,9 +2393,18 @@ function handleDelete(body) {
   const sheet = getSpreadsheet().getSheetByName(sheetName);
   if (!sheet) return { ok: false, error: 'Sheet không tồn tại' };
 
+  // v2.3.0 — bắt buộc lý do (≥ 5 ký tự), ghi Audit
+  const reason = String(body.reason || '').trim().slice(0, 300);
+  if (reason.length < 5) return { ok: false, error: 'Nhập lý do xoá (ít nhất 5 ký tự)' };
+
   const found = findRowByStt(sheet, stt);
   if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };
   const { rowIndex, header, values } = found;
+  // v2.3.0 — bản đã Nghiệm thu là hồ sơ thanh toán: không xoá (đổi trạng thái trước nếu thật cần)
+  const idxSt = header.indexOf('Trạng thái xử lý');
+  if (idxSt >= 0 && String(values[idxSt]).trim() === 'Nghiệm thu') {
+    return { ok: false, error: 'Bản ' + stt + ' đã Nghiệm thu — không xoá được. Đổi trạng thái xử lý trước nếu thật cần xoá.' };
+  }
 
   // Xoá ảnh (Drive hoặc Cloudinary tuỳ URL)
   const photoUrls = String(values[header.indexOf('Ảnh (URLs)')] || '').split('|').filter(u => u);
@@ -2191,7 +2427,7 @@ function handleDelete(body) {
   if (idxDeletedBy >= 0) sheet.getRange(rowIndex, idxDeletedBy + 1).setValue(auth.username);
 
   appendAuditLog('delete', auth.username, sheetName, stt,
-    'photos=' + photoUrls.length + ' destroyed=' + photoResults.filter(p => p.ok).length);
+    'lý do: ' + reason + ' · ảnh=' + photoUrls.length + ' đã xoá=' + photoResults.filter(p => p.ok).length);
 
   return { ok: true, photos: photoResults };
 }
@@ -2233,7 +2469,15 @@ function handleUpdate(body) {
                      'ngày khảo sát', 'Ngày khảo sát', 'Deleted At', 'Deleted By',
                      'Trạng thái xử lý', 'Cập nhật trạng thái'];
 
+  // v2.3.0 — chỉ kiểm các trường THỰC SỰ đổi (giá trị chữ cũ "39m" không đổi thì cho qua)
+  const changedLabels = header.filter((label, j) => PROTECTED.indexOf(label) < 0 && dataIn[label] !== undefined &&
+    String((values || [])[j] === undefined ? '' : values[j]) !== String(dataIn[label]));
+  const vErrs = validateRecord_(type, dataIn, changedLabels);
+  if (vErrs.length) return { ok: false, error: 'Dữ liệu chưa đúng: ' + vErrs.join('; '), field_errors: vErrs };
+
   const changes = [];
+  const diffs = [];
+  const cut = v => { const t = String(v === null || v === undefined ? '' : v); return t.length > 100 ? t.slice(0, 100) + '…' : t; };
   header.forEach((label, j) => {
     if (PROTECTED.indexOf(label) >= 0) return;
 
@@ -2255,11 +2499,13 @@ function handleUpdate(body) {
     if (String(oldVal) !== String(newVal)) {
       sheet.getRange(rowIndex, j + 1).setValue(newVal);
       changes.push(label);
+      if (label !== 'User Agent') diffs.push(label + ': ' + cut(oldVal) + ' → ' + cut(newVal));
     }
   });
 
+  // v2.3.0 — Audit ghi giá trị cũ → mới (mỗi giá trị cắt 100 ký tự) để còn khôi phục tay
   appendAuditLog('update', auth.username, sheetName, stt,
-    changes.length > 0 ? 'fields: ' + changes.join(', ') : 'no change');
+    diffs.length > 0 ? diffs.join(' | ') : 'không đổi');
 
   return { ok: true, stt: stt, changes: changes };
 }
@@ -2448,14 +2694,26 @@ function handleRestore(body) {
 
   const found = findRowByStt(sheet, stt);
   if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };
-  const { rowIndex, header } = found;
+  const { rowIndex, header, values } = found;
   const idxDeletedAt = header.indexOf('Deleted At');
   const idxDeletedBy = header.indexOf('Deleted By');
   if (idxDeletedAt >= 0) sheet.getRange(rowIndex, idxDeletedAt + 1).setValue('');
   if (idxDeletedBy >= 0) sheet.getRange(rowIndex, idxDeletedBy + 1).setValue('');
 
-  appendAuditLog('restore', auth.username, sheetName, stt, 'photos NOT restored');
-  return { ok: true, warning: 'Ảnh đính kèm đã bị xoá vĩnh viễn, không khôi phục được.' };
+  // v2.3.0 — lấy ảnh Drive của app ra khỏi thùng rác (Cloudinary đã xoá hẳn, không lấy lại được)
+  const urls = String((values || [])[header.indexOf('Ảnh (URLs)')] || '').split('|').filter(Boolean);
+  let restored = 0;
+  urls.forEach(u => {
+    if (photoUrlKind(u) !== 'drive') return;
+    const m = u.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const f = m ? getAppImageFile(m[1]) : null;
+    if (!f) return;
+    try { f.setTrashed(false); restored++; } catch (e) { Logger.log('untrash ' + m[1] + ': ' + e); }
+  });
+  const lost = urls.length - restored;
+  appendAuditLog('restore', auth.username, sheetName, stt, 'ảnh khôi phục ' + restored + '/' + urls.length);
+  return { ok: true, photos_restored: restored, photos_lost: lost,
+    warning: lost ? lost + ' ảnh không khôi phục được (đã xoá hẳn hoặc không thuộc thư mục app).' : '' };
 }
 
 function handleKpi(body) {
@@ -2653,7 +2911,7 @@ function handleUserCreate(body) {
 
   const newRow = new Array(header.length).fill('');
   newRow[idxU] = username;
-  if (idxName >= 0) newRow[idxName] = full_name;
+  if (idxName >= 0) newRow[idxName] = sanitizeCell(full_name);
   if (idxRole >= 0) newRow[idxRole] = role;
   if (idxA >= 0) newRow[idxA] = active;
   if (idxC >= 0) newRow[idxC] = nowVnString();
@@ -2701,7 +2959,7 @@ function handleUserUpdate(body) {
   const changes = [];
 
   if (body.full_name !== undefined) {
-    const v = String(body.full_name).trim();
+    const v = sanitizeCell(String(body.full_name).trim());
     if (!v) return { ok: false, error: 'full_name không được rỗng' };
     const idx = header.indexOf('full_name');
     if (idx >= 0) {
@@ -2779,8 +3037,8 @@ function handleReport(body) {
   const auth = verifyToken(body.token);
   if (!can(auth.role, 'report')) return { ok: false, error: 'forbidden' };
   const types = (body.types && body.types.length) ? body.types : Object.keys(SHEET_MAP);
-  const from = body.from ? new Date(body.from) : null;
-  const to = body.to ? new Date(body.to) : null;
+  const from = parseDayBound_(body.from, false);
+  const to = parseDayBound_(body.to, true);
   const usernames = (body.usernames && body.usernames.length) ? body.usernames : null;
   const status = body.status || 'active';  // active / deleted / all
   const groupBy = body.groupBy || 'month';  // day / week / month / quarter
@@ -3693,7 +3951,7 @@ function handleBulkImport(body) {
         if (label === 'Deleted By') return '';
         // Tìm giá trị từ record (match tên cột)
         const val = rec[label];
-        return val !== undefined ? val : '';
+        return val !== undefined ? sanitizeCell(val) : '';
       });
       batchData.push(rowArr);
     }
@@ -3742,8 +4000,8 @@ function handleExportRaw(body) {
     ? body.types
     : Object.keys(SHEET_MAP);
 
-  const from      = body.from ? new Date(body.from) : null;
-  const to        = body.to   ? new Date(body.to + 'T23:59:59') : null;
+  const from      = parseDayBound_(body.from, false);
+  const to        = parseDayBound_(body.to, true);
   const usernames = Array.isArray(body.usernames) && body.usernames.length > 0
     ? body.usernames : null;
   const status    = body.status || 'active';  // 'active' | 'deleted' | 'all'

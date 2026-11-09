@@ -205,7 +205,7 @@ test('K3 xoá bản ghi chỉ chuyển vào thùng rác ảnh nằm trong thư m
                    'https://res.cloudinary.com/cloudkhac/image/upload/v1/x/y.jpg'].join('|')
   }]);
   const admin = gs.login('admin').token;
-  const r = gs.post({ action: 'delete', token: admin, type: 'thay_den', stt: 'TD-1' });
+  const r = gs.post({ action: 'delete', token: admin, type: 'thay_den', stt: 'TD-1', reason: 'Nhập nhầm loại' });
   assert.equal(r.ok, true, r.error);
   assert.deepEqual([...gs.drive.trashed], ['ANH_APP']);
   assert.deepEqual(gs.fetched.filter(u => /cloudinary/.test(u)), [], 'không gọi destroy cho cloud khác');

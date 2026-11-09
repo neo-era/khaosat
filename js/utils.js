@@ -31,6 +31,16 @@ export function safeHref(url) {
   return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : '';
 }
 
+/**
+ * Ngày 'yyyy-MM-dd' theo GIỜ MÁY (v2.3.0). Không dùng toISOString().slice(0,10): đó là ngày UTC,
+ * từ 0h đến 7h sáng giờ VN sẽ ra ngày hôm trước.
+ */
+export function localDateStr(d = new Date()) {
+  const x = d instanceof Date ? d : new Date(d);
+  const p = n => String(n).padStart(2, '0');
+  return x.getFullYear() + '-' + p(x.getMonth() + 1) + '-' + p(x.getDate());
+}
+
 /** Escape HTML cho innerHTML an toàn. */
 export function escapeHtml(str) {
   if (str === null || str === undefined) return '';

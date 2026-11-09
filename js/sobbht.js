@@ -3,7 +3,7 @@
 
 import { apiSobbhtList, apiSobbhtSave, apiSobbhtDelete } from './api.js';
 import { PHUONG_XA } from './dia-ban.js';
-import { showToast, escapeHtml } from './utils.js';
+import { showToast, escapeHtml, localDateStr } from './utils.js';
 import { beginBusy } from './sw-update.js';
 import { newWorkbook, addReportSheet, downloadWorkbook, periodLine } from './excel-export.js';
 import { loadXLSX } from './lazy-lib.js';
@@ -19,7 +19,7 @@ const $ = id => document.getElementById(id);
 export function initSobbht() {
   $('btn-load').onclick = load;
   $('f-search').addEventListener('input', render);
-  $('btn-add').onclick = () => openForm({ 'Ngày': new Date().toISOString().slice(0, 10) });
+  $('btn-add').onclick = () => openForm({ 'Ngày': localDateStr() });
   $('btn-cancel').onclick = closeForm;
   $('form').onsubmit = saveForm;
   $('btn-xlsx').onclick = exportXlsx;

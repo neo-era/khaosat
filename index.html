@@ -143,8 +143,9 @@
     import { initSwUpdate } from './js/sw-update.js';
     import { requireAuth, logout, hasPermission } from './js/auth.js';
     import { SCHEMAS, SURVEY_GROUPS } from './js/schemas.js';
-    import { getQueue } from './js/storage.js';
-    import { syncQueue, wakeServer } from './js/api.js';
+    import { saveDraft } from './js/storage.js';
+    import { syncQueue, wakeServer, queueSummary } from './js/api.js';
+    import { queueStore } from './js/offline-queue.js';
     import { escapeHtml, showToast } from './js/utils.js';
     import { initHelp } from './js/help.js';
     import { initInstallPrompt } from './js/install.js';
@@ -269,34 +270,52 @@
     window.addEventListener('offline', updateOnline);
     updateOnline();
 
-    // ===== Queue badge =====
+    // ===== Queue badge (v2.3.0: hàng chờ IndexedDB, kèm bản của tài khoản khác / bản cần sửa) =====
     const queueBadge = document.getElementById('queue-badge');
-    function updateQueueBadge() {
-      const n = getQueue().length;
-      if (n > 0) {
-        queueBadge.textContent = '📥 ' + n;
+    let lastSummary = null;
+    async function updateQueueBadge() {
+      let q;
+      try { q = await queueSummary(); } catch (e) { return; }
+      lastSummary = q;
+      const n = q.mine + q.needFix;
+      if (n > 0 || q.others > 0) {
+        queueBadge.textContent = '📥 ' + n + (q.needFix ? ' ⚠️' + q.needFix : '') + (q.others ? ' · 👤' + q.others : '');
+        queueBadge.title = q.mine + ' bản chờ gửi' + (q.needFix ? ', ' + q.needFix + ' bản cần sửa' : '') +
+          (q.others ? ', ' + q.others + ' bản của ' + q.othersNames.join(', ') + ' (gửi khi người đó đăng nhập)' : '');
         queueBadge.classList.remove('hidden');
       } else {
         queueBadge.classList.add('hidden');
       }
     }
+    // Bấm huy hiệu: xem hàng chờ; bản "cần sửa" mở lại form với dữ liệu cũ để sửa
+    queueBadge.style.cursor = 'pointer';
+    queueBadge.addEventListener('click', async () => {
+      const q = lastSummary || await queueSummary();
+      const fix = q.items.filter(it => it.status === 'need_fix' && (!it.username || it.username === user.username));
+      if (!fix.length) { showToast(queueBadge.title || 'Hàng chờ trống', 'info', 5000); return; }
+      const it = fix[0];
+      const name = (SCHEMAS[it.payload.type] || {}).name || it.payload.type;
+      if (!confirm('Bản "' + name + '" bị máy chủ từ chối:\n' + (it.error || '') + '\n\nMở lại form để sửa?')) return;
+      const urls = (it.payload.photos || []).concat((it.photos || []).filter(p => p.url && !p.field).map(p => p.url));
+      const data = Object.assign({}, it.payload.data, { __photos: urls });
+      (it.photos || []).forEach(p => { if (p.url && p.field) data[p.field] = p.url; });
+      saveDraft(it.payload.type, data);
+      await queueStore().remove(it.id);
+      location.href = 'form.html?type=' + encodeURIComponent(it.payload.type);
+    });
     updateQueueBadge();
     setInterval(updateQueueBadge, 5000);
 
     // ===== Auto-sync queue khi online =====
     async function trySync() {
       if (!navigator.onLine) return;
-      const before = getQueue().length;
-      if (before === 0) return;
       try {
         const res = await syncQueue();
-        updateQueueBadge();
-        if (res.success > 0) {
-          showToast('✅ Đã đồng bộ ' + res.success + ' bản ghi', 'success');
-        }
-        if (res.failed > 0) {
-          showToast('⚠️ ' + res.failed + ' bản ghi còn lỗi, sẽ retry sau', 'warning');
-        }
+        await updateQueueBadge();
+        if (res.success > 0) showToast('✅ Đã đồng bộ ' + res.success + ' bản ghi', 'success');
+        if (res.needFix > 0) showToast('⚠️ ' + res.needFix + ' bản bị máy chủ từ chối — bấm 📥 để sửa', 'warning', 6000);
+        else if (res.failed > 0) showToast('⏳ ' + res.failed + ' bản chưa gửi được, sẽ tự thử lại', 'warning');
+        if (res.others > 0) showToast('👤 ' + res.others + ' bản của ' + res.othersNames.join(', ') + ' đang chờ — người đó đăng nhập trên máy này thì tự gửi', 'info', 6000);
       } catch (e) {
         // silent
       }

@@ -2,7 +2,7 @@
 
 import { apiReport, apiUsers, apiList, apiExportRaw, apiUpdate, apiBulkImport } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES } from './schemas.js';
-import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
+import { showToast, escapeHtml, formatVnDateOnly, localDateStr } from './utils.js';
 import { beginBusy } from './sw-update.js';
 import { newWorkbook, addReportSheet, addRawSheet, downloadWorkbook, periodLine } from './excel-export.js';
 import { loadJsPDF, loadXLSX } from './lazy-lib.js';
@@ -80,8 +80,8 @@ function applyPreset(p) {
   } else if (p === 'this-year') {
     from = new Date(today.getFullYear(), 0, 1);
   } else return;
-  document.getElementById('filter-from').value = from.toISOString().slice(0, 10);
-  document.getElementById('filter-to').value = to.toISOString().slice(0, 10);
+  document.getElementById('filter-from').value = localDateStr(from);
+  document.getElementById('filter-to').value = localDateStr(to);
 }
 
 async function loadReport() {
@@ -469,7 +469,7 @@ function exportCsv() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `bao-cao-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `bao-cao-${localDateStr()}.csv`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -549,7 +549,7 @@ async function exportXlsx() {
       });
     }
 
-    await downloadWorkbook(wb, 'bao-cao-tong-hop-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    await downloadWorkbook(wb, 'bao-cao-tong-hop-' + localDateStr() + '.xlsx');
   } catch (e) {
     showToast('Lỗi xuất Excel: ' + e.message, 'error');
   } finally {
@@ -641,7 +641,7 @@ async function exportPdf() {
     });
   }
 
-  doc.save('bao-cao-' + new Date().toISOString().slice(0, 10) + '.pdf');
+  doc.save('bao-cao-' + localDateStr() + '.pdf');
 }
 
 function drawPdfHeader(doc, title, dateStr) {
