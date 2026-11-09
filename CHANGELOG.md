@@ -45,7 +45,7 @@
 
 ### Triển khai — Apps Script TRƯỚC, frontend sau
 1. Dán `apps-script/Code.gs` (đã gồm v2.2.1) → Triển khai → Quản lý → sửa → **Phiên bản mới**.
-2. Frontend v2.3.0 (`sw.js` → `khaosat-v33`) vẫn chạy được với máy chủ cũ; máy chủ mới chạy được với frontend cũ (trừ nút Xoá ở trang Quản lý bản cũ — cần lý do, sẽ báo lỗi rõ).
+2. Frontend v2.3.0 (`sw.js` → `khaosat-v34`) vẫn chạy được với máy chủ cũ; máy chủ mới chạy được với frontend cũ (trừ nút Xoá ở trang Quản lý bản cũ — cần lý do, sẽ báo lỗi rõ).
 
 ## v2.2.1 — 2026-11-09 — 🔒 Vá bảo mật khẩn (rà soát tổng thể 09/11/2026)
 
