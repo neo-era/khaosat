@@ -1,0 +1,8 @@
+
+# v2.2.1 — dữ liệu thật KHÔNG đưa lên repo công khai (giữ trên máy/Drive nội bộ)
+*.xlsx
+*.xls
+*.pdf
+*.docx
+!BBHT chung.docx
+tools/import_data.json
