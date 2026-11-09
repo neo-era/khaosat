@@ -14,6 +14,7 @@
   - So chữ ký token không phụ thuộc thời gian.
 - **`upload_photo`**: demo bị chặn; chỉ nhận JPEG/PNG ≤ 10 MB; thư mục chỉ `khaosat/<loại>`, `khaosat/banve/<loại>`, `Bangron`; tên file được làm sạch.
 - **Chèn công thức vào Sheets** (submit/update): chuỗi bắt đầu bằng `= + @` (hoặc `-` không phải số) lưu dạng chữ. Các đường ghi khác (bulk import, lịch, sổ BBHT…) làm ở v2.3.0.
+- Vòng duyệt chuyên gia: chống chèn công thức cả cột User Agent và khi có khoảng trắng/BOM đứng trước; bộ đếm sai mật khẩu tăng trong `LockService` (gửi song song không lách được); `change_password` dùng chung giới hạn 5 lượt; ghi Audit `login_locked`; URL Cloudinary chỉ nhận thư mục `khaosat/`, `Bangron/` và nhận cả cloud mặc định của frontend.
 - Lỗi trả về không còn kèm `stack`. `randomPassword` dùng nguồn ngẫu nhiên an toàn.
 
 ### ⚠️ Việc admin phải làm khi triển khai

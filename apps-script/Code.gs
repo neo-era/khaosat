@@ -375,6 +375,29 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
+/**
+ * Giữ 1 lượt thử mật khẩu cho `key` (đọc–tăng–ghi trong LockService).
+ * Trả {ok:false} khi đã dùng hết LOGIN_MAX_FAILS lượt trong LOGIN_LOCK_SEC giây.
+ * Lượt thử ĐÚNG thì người gọi xoá key (cache.remove) → bộ đếm về 0.
+ */
+function takeAttempt(key) {
+  const cache = CacheService.getScriptCache();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const n = parseInt(cache.get(key) || '0', 10);
+    if (n >= LOGIN_MAX_FAILS) {
+      // Lần bị chặn đầu tiên → báo để ghi Audit 1 lần (n tăng thêm 1, không ghi lại nữa)
+      if (n === LOGIN_MAX_FAILS) { cache.put(key, String(n + 1), LOGIN_LOCK_SEC); return { ok: false, justLocked: true }; }
+      return { ok: false, justLocked: false };
+    }
+    cache.put(key, String(n + 1), LOGIN_LOCK_SEC);
+    return { ok: true, justLocked: false, used: n + 1 };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /** Phiên bản token hiện tại của user (0 nếu chưa có bản ghi mật khẩu mới). */
 function getTokenVersion(username) {
   const cred = readCred(username);
@@ -1841,17 +1864,15 @@ function handleLogin(body) {
   if (!username || !password) {
     return { ok: false, error: 'Thiếu username hoặc password' };
   }
-  // v2.2.1: chống dò mật khẩu — đếm lần sai theo username (viết thường), cả username không tồn tại
+  // v2.2.1: chống dò mật khẩu — đếm lần sai theo username (viết thường), cả username không tồn tại.
+  // Giữ chỗ (tăng bộ đếm) TRONG khoá TRƯỚC khi kiểm mật khẩu → gửi song song không lách được giới hạn.
   const failKey = 'loginfail_' + username.toLowerCase();
-  const cache = CacheService.getScriptCache();
-  const fails = parseInt(cache.get(failKey) || '0', 10);
-  if (fails >= LOGIN_MAX_FAILS) {
+  const gate = takeAttempt(failKey);
+  if (!gate.ok) {
+    if (gate.justLocked) appendAuditLog('login_locked', username, 'taikhoan', username, 'sai mật khẩu ' + LOGIN_MAX_FAILS + ' lần');
     return { ok: false, error: 'Sai mật khẩu quá ' + LOGIN_MAX_FAILS + ' lần. Tài khoản tạm khoá, thử lại sau 5 phút.' };
   }
-  const fail = () => {
-    cache.put(failKey, String(fails + 1), LOGIN_LOCK_SEC);
-    return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
-  };
+  const fail = () => ({ ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' });
 
   const user = findUser(username);
   if (!user) return fail();
@@ -1861,7 +1882,7 @@ function handleLogin(body) {
   if (!check.ok) return fail();
 
   // Thành công
-  cache.remove(failKey);
+  CacheService.getScriptCache().remove(failKey);
   const remember = body.remember === true;
   const t = generateToken(user.username, remember);
   return {
@@ -1919,8 +1940,12 @@ function handleChangePassword(body) {
   const user = findUser(auth.username);
   if (!user) return { ok: false, error: 'Không tìm thấy tài khoản' };
 
+  // v2.2.1: dùng chung giới hạn lượt thử với đăng nhập (token lộ cũng không dò được mật khẩu)
+  const failKey = 'loginfail_' + String(auth.username).toLowerCase();
+  if (!takeAttempt(failKey).ok) return { ok: false, error: 'Sai mật khẩu quá ' + LOGIN_MAX_FAILS + ' lần. Thử lại sau 5 phút.' };
   const check = verifyPassword(auth.username, current, user.password_hash);
   if (!check.ok) return { ok: false, error: 'Mật khẩu hiện tại không đúng' };
+  CacheService.getScriptCache().remove(failKey);
 
   setPassword(auth.username, next, false);
   appendAuditLog('change_password', auth.username, 'taikhoan', auth.username, 'user tự đổi');
@@ -1962,7 +1987,7 @@ function handleSubmit(body) {
       if (label === 'Người khảo sát') return auth.full_name;
       if (label === 'Ảnh (URLs)') return photos.join('|');
       if (label === 'Submitted At') return submittedAt;
-      if (label === 'User Agent') return ua;
+      if (label === 'User Agent') return sanitizeCell(ua);
       if (label === 'Username') return auth.username;
       if (label === 'Deleted At') return '';
       if (label === 'Deleted By') return '';
@@ -3324,9 +3349,12 @@ function isUnderFolder(item, rootId) {
 function photoUrlKind(url) {
   const u = String(url || '');
   if (/^https:\/\/drive\.google\.com\/uc\?export=view&id=[A-Za-z0-9_-]+$/.test(u)) return 'drive';
-  const cloud = getProp('CLOUDINARY_CLOUD_NAME') || DEFAULT_CLOUDINARY_CLOUD;
-  const re = new RegExp('^https://res\\.cloudinary\\.com/' + cloud.replace(/[^A-Za-z0-9_-]/g, '') +
-    '/image/upload/(v\\d+/)?[A-Za-z0-9_/.-]+\\.(jpe?g|png|webp)$', 'i');
+  // Nhận cloud trong Script Property VÀ cloud mặc định frontend đang dùng (js/config.js) — tránh
+  // từ chối nhầm khi property đặt khác. Chỉ thư mục của app: khaosat/… hoặc Bangron/…
+  const clouds = [getProp('CLOUDINARY_CLOUD_NAME'), DEFAULT_CLOUDINARY_CLOUD]
+    .filter(Boolean).map(c => String(c).replace(/[^A-Za-z0-9_-]/g, '')).filter(Boolean);
+  const re = new RegExp('^https://res\\.cloudinary\\.com/(' + clouds.join('|') + ')' +
+    '/image/upload/(v\\d+/)?(khaosat|Bangron)/[A-Za-z0-9_/.-]+\\.(jpe?g|png)$', 'i');
   if (re.test(u) && u.indexOf('..') < 0) return 'cloudinary';
   return null;
 }
@@ -3350,8 +3378,11 @@ function findBadPhotoUrl(photos, dataIn) {
  * bởi số, tab, CR) được thêm dấu ' để Sheets lưu dạng chữ. Số và chuỗi số âm giữ nguyên.
  */
 function sanitizeCell(v) {
-  if (typeof v !== 'string') return v;
-  if (/^[=+@\t\r]/.test(v) || /^-(?![\d.,\s]*$)/.test(v)) return "'" + v;
+  if (v === null || v === undefined || typeof v === 'number' || typeof v === 'boolean' || v instanceof Date) return v;
+  if (typeof v !== 'string') v = String(v);
+  // Bỏ qua khoảng trắng/BOM đứng đầu khi xét (Sheets có thể vẫn hiểu là công thức)
+  const t = v.replace(/^[\s\uFEFF]+/, '');
+  if (/^[=+@]/.test(t) || /^-(?![\d.,\s]*$)/.test(t) || /^[\t\r\n]/.test(v)) return "'" + v;
   return v;
 }
 

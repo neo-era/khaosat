@@ -238,3 +238,46 @@ test('K3 sửa bản ghi cũ có URL ảnh định dạng lạ: giữ nguyên đ
     data: {}, photos: [legacy, 'https://drive.google.com/file/d/KHAC/view'] });
   assert.equal(bad.ok, false);
 });
+
+// ---------- Vòng duyệt 1 (chuyên gia bảo mật) ----------
+test('R1 cột User Agent cũng được chống chèn công thức', () => {
+  const gs = loadAuthGs();
+  const sh = addSurveySheet(gs, 'thay_den');
+  const tok = gs.login('ktv01').token;
+  assert.equal(gs.post({ action: 'submit', token: tok, type: 'thay_den', photos: [], data: {}, ua: '=IMPORTXML("https://x","//a")' }).ok, true);
+  assert.match(String(rowObj(sh, 2)['User Agent']), /^'=/);
+});
+
+test('R1 Cloudinary: chỉ nhận thư mục của app (khaosat/, Bangron/)', () => {
+  const gs = loadAuthGs();
+  addSurveySheet(gs, 'thay_den');
+  const tok = gs.login('ktv01').token;
+  const sub = u => gs.post({ action: 'submit', token: tok, type: 'thay_den', data: {}, photos: [u] }).ok;
+  assert.equal(sub('https://res.cloudinary.com/dmlsqbe8c/image/upload/v1/other_app/logo.png'), false);
+  assert.equal(sub('https://res.cloudinary.com/dmlsqbe8c/image/upload/v1/khaosat/../other/x.png'), false);
+  assert.equal(sub('https://res.cloudinary.com/dmlsqbe8c/image/upload/v1/Bangron/abc.jpg'), true);
+  gs.props.CLOUDINARY_CLOUD_NAME = 'lavipco';
+  assert.equal(sub('https://res.cloudinary.com/dmlsqbe8c/image/upload/v1/khaosat/thay_den/a.jpg'), true, 'vẫn nhận cloud mặc định của frontend');
+  assert.equal(sub('https://res.cloudinary.com/lavipco/image/upload/khaosat/thay_den/a.jpg'), true);
+});
+
+test('R1 chống chèn công thức khi có khoảng trắng/BOM/xuống dòng đứng trước', () => {
+  const gs = loadAuthGs();
+  for (const v of [' =1+1', '\n=1', '﻿=1+1', '\t@x']) assert.equal(gs.sanitizeCell(v)[0], "'", JSON.stringify(v));
+  for (const v of ['-5', '-0.5', 'Đường A', '12/3', 5, true]) assert.equal(gs.sanitizeCell(v), v, JSON.stringify(v));
+});
+
+test('R1 đổi mật khẩu cũng bị giới hạn 5 lần thử mật khẩu hiện tại', () => {
+  const gs = loadAuthGs();
+  const tok = gs.login('ktv01').token;
+  for (let i = 0; i < 5; i++) gs.post({ action: 'change_password', token: tok, current_password: 'sai' + i, new_password: 'MoiMoi!2026' });
+  const r = gs.post({ action: 'change_password', token: tok, current_password: PASSWORDS.ktv01, new_password: 'MoiMoi!2026' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /thử lại/i);
+});
+
+test('R1 bị khoá đăng nhập → ghi Audit đúng 1 lần', () => {
+  const gs = loadAuthGs();
+  for (let i = 0; i < 8; i++) gs.post({ action: 'login', username: 'admin', password: 'sai' });
+  assert.equal(gs.audit.filter(a => a[0] === 'login_locked').length, 1);
+});
