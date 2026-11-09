@@ -33,6 +33,17 @@
 const TZ = 'Asia/Ho_Chi_Minh';
 const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;              // phiên thường: 8 tiếng
 const TOKEN_TTL_REMEMBER_MS = 365 * 24 * 60 * 60 * 1000;  // "Ghi nhớ đăng nhập": 1 năm
+// v2.2.1 — hạn TUYỆT ĐỐI tính từ lúc nhập mật khẩu; refresh không kéo dài quá mốc này.
+const TOKEN_ABS_MAX_MS = 12 * 60 * 60 * 1000;            // phiên thường: tối đa 12 tiếng
+const TOKEN_ABS_MAX_REMEMBER_MS = TOKEN_TTL_REMEMBER_MS;  // phiên ghi nhớ: tối đa 1 năm
+// v2.2.1 — chống dò mật khẩu: sai LOGIN_MAX_FAILS lần → khoá LOGIN_LOCK_SEC giây (theo username)
+const LOGIN_MAX_FAILS = 5;
+const LOGIN_LOCK_SEC = 5 * 60;
+// v2.2.1 — upload ảnh
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const UPLOAD_MIMES = ['image/jpeg', 'image/png'];
+const UPLOAD_FOLDER_RE = /^(khaosat\/(banve\/)?[a-z0-9_]{1,40}|Bangron)$/;
+const DEFAULT_CLOUDINARY_CLOUD = 'dmlsqbe8c';
 // Ngưỡng gia hạn trượt nằm ở client (js/auth.js REFRESH_BEFORE_MS): mỗi lần mở
 // trang, nếu token sắp hết hạn thì gọi action=refresh. Người dùng thường xuyên
 // không bao giờ bị đăng xuất, còn token bị lộ vẫn có hạn chết.
@@ -334,20 +345,51 @@ function hashPassword(plain) {
 }
 
 /**
- * Sinh token stateless.
+ * Sinh token stateless (định dạng v2 từ bản 2.2.1).
+ * payload = "v2|username|expiresAt|issuedAt|tokenVersion|remember(0/1)"
+ *   - issuedAt: thời điểm NHẬP MẬT KHẨU (refresh giữ nguyên) → hạn tuyệt đối.
+ *   - tokenVersion: lấy từ CRED_<user>.tv; tăng mỗi lần đổi/đặt lại mật khẩu → mọi token cũ chết.
  * @param {string} username
- * @param {number} [ttlMs] - mặc định TOKEN_TTL_MS (8 tiếng).
+ * @param {boolean} remember
+ * @param {number} [issuedAt] - mặc định now (đăng nhập mới)
+ * @returns {{token: string, expires_at: number}}
  */
-function generateToken(username, ttlMs) {
-  const expiresAt = Date.now() + (ttlMs || TOKEN_TTL_MS);
-  const payload = username + '|' + expiresAt;
+function generateToken(username, remember, issuedAt) {
+  const now = Date.now();
+  const iat = issuedAt || now;
+  const ttl = remember ? TOKEN_TTL_REMEMBER_MS : TOKEN_TTL_MS;
+  const absMax = remember ? TOKEN_ABS_MAX_REMEMBER_MS : TOKEN_ABS_MAX_MS;
+  const expiresAt = Math.min(now + ttl, iat + absMax);
+  const tv = getTokenVersion(username);
+  const payload = ['v2', username, expiresAt, iat, tv, remember ? 1 : 0].join('|');
   const sig = hmacSha256Hex(payload, getSalt());
-  return Utilities.base64EncodeWebSafe(payload + '|' + sig);
+  return { token: Utilities.base64EncodeWebSafe(payload + '|' + sig), expires_at: expiresAt };
+}
+
+/** So 2 chuỗi không phụ thuộc vị trí ký tự sai đầu tiên (chống đo thời gian). */
+function safeEqual(a, b) {
+  a = String(a); b = String(b);
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Phiên bản token hiện tại của user (0 nếu chưa có bản ghi mật khẩu mới). */
+function getTokenVersion(username) {
+  const cred = readCred(username);
+  return cred && cred.tv ? Number(cred.tv) : 0;
 }
 
 /**
+ * Cờ do doPost đặt: action hiện tại có được chạy khi user còn phải đổi mật khẩu không.
+ * Mặc định false → mọi handler gọi verifyToken() đều bị chặn khi must_change.
+ */
+let _allowMustChange = false;
+
+/**
  * Verify token và trả thông tin user fresh từ sheet taikhoan.
- * Throw nếu token sai/hết hạn/user disabled.
+ * Throw nếu token sai/hết hạn/user disabled/đã đổi mật khẩu/còn phải đổi mật khẩu.
  */
 function verifyToken(token) {
   if (!token) throw new Error('missing token');
@@ -358,17 +400,28 @@ function verifyToken(token) {
     throw new Error('invalid token encoding');
   }
   const parts = decoded.split('|');
-  if (parts.length !== 3) throw new Error('invalid token format');
-  const [username, expiresAtStr, sig] = parts;
-  const expiresAt = parseInt(expiresAtStr, 10);
-  if (!expiresAt || Date.now() > expiresAt) throw new Error('token expired');
-  const expectedSig = hmacSha256Hex(username + '|' + expiresAtStr, getSalt());
-  if (sig !== expectedSig) throw new Error('invalid token signature');
+  // Token định dạng cũ (3 phần) bị từ chối → người dùng đăng nhập lại 1 lần sau bản vá.
+  if (parts.length !== 7 || parts[0] !== 'v2') throw new Error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
+  const [ver, username, expStr, iatStr, tvStr, remStr, sig] = parts;
+  const expectedSig = hmacSha256Hex(parts.slice(0, 6).join('|'), getSalt());
+  if (!safeEqual(sig, expectedSig)) throw new Error('invalid token signature');
+  const expiresAt = parseInt(expStr, 10);
+  if (!expiresAt || Date.now() > expiresAt) throw new Error('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại');
 
   const user = findUser(username);
   if (!user) throw new Error('user not found');
   if (user.active === false) throw new Error('user disabled');
-  return { username: user.username, role: user.role, full_name: user.full_name };
+
+  const cred = readCred(username);
+  const tv = cred && cred.tv ? Number(cred.tv) : 0;
+  if (String(tv) !== tvStr) throw new Error('Mật khẩu đã thay đổi, vui lòng đăng nhập lại');
+  const mustChange = !!(cred && cred.must_change === true);
+  if (mustChange && !_allowMustChange) throw new Error('Bạn phải đổi mật khẩu trước khi tiếp tục');
+
+  return {
+    username: user.username, role: user.role, full_name: user.full_name,
+    must_change: mustChange, remember: remStr === '1', issued_at: parseInt(iatStr, 10)
+  };
 }
 
 /** Đọc 1 user từ sheet taikhoan theo username (case-sensitive). */
@@ -532,12 +585,15 @@ function setPassword(username, plain, mustChange) {
   const err = validatePasswordRule(username, plain);
   if (err) throw new Error(err);
   const salt = randomSalt();
+  const old = readCred(username);
   writeCred(username, {
     v: 1,
     salt: salt,
     hash: deriveHash(plain, salt, PWD_ITERS),
     iters: PWD_ITERS,
     must_change: mustChange !== false,
+    // tv tăng mỗi lần đổi/đặt lại mật khẩu → token đã cấp trước đó hết hiệu lực
+    tv: (old && old.tv ? Number(old.tv) : 0) + 1,
     updated_at: nowVnString()
   });
   return true;
@@ -580,7 +636,7 @@ function verifyPassword(username, plain, legacyHashFromSheet) {
     const salt = randomSalt();
     writeCred(username, {
       v: 1, salt: salt, hash: deriveHash(plain, salt, PWD_ITERS), iters: PWD_ITERS,
-      must_change: true, updated_at: nowVnString()
+      must_change: true, tv: 1, updated_at: nowVnString()
     });
     Logger.log('Đã chuyển mật khẩu của ' + username + ' sang Script Properties');
   } catch (e) {
@@ -667,9 +723,14 @@ function resetAllPasswords() {
 /** Sinh mật khẩu ngẫu nhiên, bỏ các ký tự dễ nhìn nhầm (0 O o l 1 I). */
 function randomPassword(len) {
   const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789@#$%';
+  // v2.2.1: lấy ngẫu nhiên từ getUuid (CSPRNG) thay cho Math.random
   let s = '';
-  for (let i = 0; i < (len || 12); i++) {
-    s += chars.charAt(Math.floor(Math.random() * chars.length));
+  while (s.length < (len || 12)) {
+    const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid(), Utilities.Charset.UTF_8);
+    for (let i = 0; i < bytes.length && s.length < (len || 12); i++) {
+      const b = bytes[i] & 0xFF;
+      if (b < 256 - (256 % chars.length)) s += chars.charAt(b % chars.length);
+    }
   }
   return s;
 }
@@ -1721,6 +1782,8 @@ function doPost(e) {
   }
   const action = body.action;
   console.log('doPost action=' + action);
+  // Khi user còn phải đổi mật khẩu, chỉ cho refresh + change_password (chặn ở máy chủ, v2.2.1)
+  _allowMustChange = (action === 'refresh' || action === 'change_password');
   try {
     switch (action) {
       case 'login':   return jsonResponse(handleLogin(body));
@@ -1748,7 +1811,8 @@ function doPost(e) {
       case 'upload_photo':  return jsonResponse(handleUploadPhoto(body));
       case 'photo_base64':  return jsonResponse(handlePhotoBase64(body));
       case 'change_password': return jsonResponse(handleChangePassword(body));
-      case 'reset_own_password': return jsonResponse(handleResetOwnPassword(body));
+      // v2.2.1: TẮT — trước đây ai biết username + họ tên là đặt lại được mật khẩu (kể cả admin).
+      case 'reset_own_password': return jsonResponse({ ok: false, error: 'Chức năng tự đặt lại mật khẩu đã tắt. Liên hệ quản trị viên để được cấp mật khẩu tạm.' });
       case 'check_dup':     return jsonResponse(handleCheckDup(body));
       case 'set_status':    return jsonResponse(handleSetStatus(body));
       case 'sobbht_list':   return jsonResponse(handleSobbhtList(body));
@@ -1758,7 +1822,7 @@ function doPost(e) {
     }
   } catch (err) {
     console.error(err);
-    return jsonResponse({ ok: false, error: err.message || String(err), stack: err.stack });
+    return jsonResponse({ ok: false, error: err.message || String(err) });
   }
 }
 
@@ -1777,25 +1841,38 @@ function handleLogin(body) {
   if (!username || !password) {
     return { ok: false, error: 'Thiếu username hoặc password' };
   }
+  // v2.2.1: chống dò mật khẩu — đếm lần sai theo username (viết thường), cả username không tồn tại
+  const failKey = 'loginfail_' + username.toLowerCase();
+  const cache = CacheService.getScriptCache();
+  const fails = parseInt(cache.get(failKey) || '0', 10);
+  if (fails >= LOGIN_MAX_FAILS) {
+    return { ok: false, error: 'Sai mật khẩu quá ' + LOGIN_MAX_FAILS + ' lần. Tài khoản tạm khoá, thử lại sau 5 phút.' };
+  }
+  const fail = () => {
+    cache.put(failKey, String(fails + 1), LOGIN_LOCK_SEC);
+    return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
+  };
+
   const user = findUser(username);
-  if (!user) return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
+  if (!user) return fail();
   if (user.active === false) return { ok: false, error: 'Tài khoản đã bị khoá' };
 
   const check = verifyPassword(username, password, user.password_hash);
-  if (!check.ok) return { ok: false, error: 'Sai tên đăng nhập hoặc mật khẩu' };
+  if (!check.ok) return fail();
 
   // Thành công
+  cache.remove(failKey);
   const remember = body.remember === true;
-  const ttl = remember ? TOKEN_TTL_REMEMBER_MS : TOKEN_TTL_MS;
+  const t = generateToken(user.username, remember);
   return {
     ok: true,
-    token: generateToken(username, ttl),
+    token: t.token,
     username: user.username,
     full_name: user.full_name,
     role: user.role,
     must_change: check.must_change === true,
     remember: remember,
-    expires_at: Date.now() + ttl
+    expires_at: t.expires_at
   };
 }
 
@@ -1807,16 +1884,21 @@ function handleLogin(body) {
  */
 function handleRefresh(body) {
   const user = verifyToken(body.token);
-  const remember = body.remember === true;
-  const ttl = remember ? TOKEN_TTL_REMEMBER_MS : TOKEN_TTL_MS;
+  // v2.2.1: loại phiên (ghi nhớ hay không) và mốc đăng nhập lấy từ TOKEN, không tin body.remember
+  const remember = user.remember === true;
+  const t = generateToken(user.username, remember, user.issued_at);
+  if (t.expires_at <= Date.now()) {
+    return { ok: false, error: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại' };
+  }
   return {
     ok: true,
-    token: generateToken(user.username, ttl),
+    token: t.token,
     username: user.username,
     full_name: user.full_name,
     role: user.role,
+    must_change: user.must_change === true,
     remember: remember,
-    expires_at: Date.now() + ttl
+    expires_at: t.expires_at
   };
 }
 
@@ -1842,7 +1924,9 @@ function handleChangePassword(body) {
 
   setPassword(auth.username, next, false);
   appendAuditLog('change_password', auth.username, 'taikhoan', auth.username, 'user tự đổi');
-  return { ok: true, message: 'Đã đổi mật khẩu' };
+  // Mọi phiên cũ (máy khác) hết hiệu lực; cấp token mới cho phiên hiện tại, giữ loại phiên.
+  const t = generateToken(auth.username, auth.remember === true);
+  return { ok: true, message: 'Đã đổi mật khẩu', token: t.token, expires_at: t.expires_at, remember: auth.remember === true };
 }
 
 function handleSubmit(body) {
@@ -1859,6 +1943,8 @@ function handleSubmit(body) {
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
   const dataIn = body.data || {};
   const photos = Array.isArray(body.photos) ? body.photos : [];
+  const badUrl = findBadPhotoUrl(photos, dataIn);
+  if (badUrl !== null) return { ok: false, error: 'Đường dẫn ảnh không hợp lệ: ' + String(badUrl).slice(0, 80) };
   const ua = String(body.ua || 'unknown');
   const submittedAt = isoNow();
   const ngayKsString = nowVnString();
@@ -1882,7 +1968,7 @@ function handleSubmit(body) {
       if (label === 'Deleted By') return '';
       if (label === 'Trạng thái xử lý') return XU_LY_SKIP_TYPES.indexOf(type) >= 0 ? '' : XU_LY_STATUSES[0];
       if (label === 'Cập nhật trạng thái') return '';
-      return safe(dataIn[label]);
+      return sanitizeCell(safe(dataIn[label]));
     });
 
     sheet.appendRow(row);
@@ -2046,7 +2132,9 @@ function handleDelete(body) {
   const photoResults = [];
   photoUrls.forEach(url => {
     try {
-      const ok = url.includes('drive.google.com') ? deleteDrivePhoto(url) : destroyCloudinaryImage(url);
+      // v2.2.1: chỉ xoá ảnh của app (Drive trong DRIVE_FOLDER_ID / Cloudinary đúng cloud)
+      const kind = photoUrlKind(url);
+      const ok = kind === 'drive' ? deleteDrivePhoto(url) : kind === 'cloudinary' ? destroyCloudinaryImage(url) : false;
       photoResults.push({ url: url, ok: ok });
     } catch (e) {
       photoResults.push({ url: url, ok: false, error: String(e) });
@@ -2086,10 +2174,16 @@ function handleUpdate(body) {
 
   const found = findRowByStt(sheet, stt);
   if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };
-  const { rowIndex, header } = found;
+  const { rowIndex, header, values } = found;
 
   const dataIn = body.data || {};
   const photos = Array.isArray(body.photos) ? body.photos : null;  // null = không update photos
+  // URL ảnh ĐÃ CÓ trong bản ghi (dữ liệu cũ) được giữ nguyên; chỉ URL mới phải đúng mẫu.
+  const existingUrls = ['Ảnh (URLs)', 'Bản vẽ'].map(h => header.indexOf(h)).filter(i => i >= 0)
+    .reduce((acc, i) => acc.concat(String((values || [])[i] || '').split('|')), []).filter(Boolean);
+  const badUrl = findBadPhotoUrl((photos || []).filter(u => existingUrls.indexOf(u) < 0),
+    existingUrls.indexOf(dataIn['Bản vẽ']) >= 0 ? Object.assign({}, dataIn, { 'Bản vẽ': '' }) : dataIn);
+  if (badUrl !== null) return { ok: false, error: 'Đường dẫn ảnh không hợp lệ: ' + String(badUrl).slice(0, 80) };
 
   // Protected fields (server-managed) — KHÔNG ghi đè dù client gửi
   const PROTECTED = ['STT', 'Submitted At', 'Username', 'Người khảo sát',
@@ -2109,7 +2203,7 @@ function handleUpdate(body) {
       const existing = sheet.getRange(rowIndex, j + 1).getValue();
       newVal = String(existing || '') + ' [edit:' + auth.username + '@' + nowVnString() + ']';
     } else if (dataIn[label] !== undefined) {
-      newVal = dataIn[label];
+      newVal = sanitizeCell(dataIn[label]);
     } else {
       return;
     }
@@ -2466,44 +2560,8 @@ function handleResetPassword(body) {
   return { ok: true, message: 'Đã đặt mật khẩu tạm cho ' + target + '. Người này sẽ phải đổi ở lần đăng nhập kế tiếp.' };
 }
 
-/**
- * action=reset_own_password — Tự đặt lại mật khẩu (không cần token / đang đăng xuất).
- * Body: { username, full_name, new_password }
- * Verify danh tính: username khớp + full_name khớp (case-insensitive, trim).
- * Rate limit: 3 lần sai / 5 phút per username.
- */
-function handleResetOwnPassword(body) {
-  const username = String(body.username || '').trim().toLowerCase();
-  const fullName = String(body.full_name || '').trim();
-  const newPwd  = String(body.new_password || '');
-
-  if (!username || !fullName || !newPwd) {
-    return { ok: false, error: 'Vui lòng điền đầy đủ thông tin' };
-  }
-  if (newPwd.length < 8) {
-    return { ok: false, error: 'Mật khẩu mới phải có ít nhất 8 ký tự' };
-  }
-  if (newPwd.toLowerCase() === username) {
-    return { ok: false, error: 'Mật khẩu không được trùng tên đăng nhập' };
-  }
-
-  const user = findUser(username);
-  if (!user) {
-    return { ok: false, error: 'Thông tin không khớp. Kiểm tra lại tên đăng nhập và họ tên đầy đủ.' };
-  }
-  if (user.active === false) {
-    return { ok: false, error: 'Tài khoản đã bị khoá. Liên hệ quản trị viên.' };
-  }
-  if (fullName.toLowerCase() !== String(user.full_name || '').trim().toLowerCase()) {
-    return { ok: false, error: 'Thông tin không khớp. Kiểm tra lại tên đăng nhập và họ tên đầy đủ.' };
-  }
-
-  // Lưu vào Script Properties (không ghi vào sheet). must_change=false vì user tự đặt.
-  setPassword(username, newPwd, false);
-  appendAuditLog('reset_own_password', username, 'taikhoan', username, 'self-service reset via full_name');
-
-  return { ok: true, message: 'Mật khẩu đã được đặt lại thành công' };
-}
+// v2.2.1: đã xoá handleResetOwnPassword (tự đặt lại mật khẩu không cần đăng nhập — lỗ hổng chiếm tài khoản).
+// Quên mật khẩu → admin đặt mật khẩu tạm ở users.html (action=reset_password).
 
 const VALID_ROLES = ['admin', 'user', 'user1', 'demo'];
 
@@ -3131,13 +3189,19 @@ function testDriveAccess() {
 function handleUploadPhoto(body) {
   const userInfo = verifyToken(body.token);
   if (!userInfo) return { ok: false, error: 'Token không hợp lệ hoặc hết hạn' };
+  if (!can(userInfo.role, 'submit')) return { ok: false, error: 'Tài khoản không có quyền tải ảnh lên' };
 
   const base64 = body.base64;
-  const mime   = body.mimeType || 'image/jpeg';
-  const fname  = body.fileName  || ('photo_' + Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyyMMdd_HHmmss') + '.jpg');
-  const folder = (body.folder   || 'khaosat').replace(/^\/+|\/+$/g, '');
-
+  const mime   = String(body.mimeType || 'image/jpeg').toLowerCase();
+  const folder = String(body.folder || '').replace(/^\/+|\/+$/g, '');
   if (!base64) return { ok: false, error: 'Thiếu base64' };
+  if (UPLOAD_MIMES.indexOf(mime) < 0) return { ok: false, error: 'Chỉ nhận ảnh JPEG/PNG' };
+  if (!UPLOAD_FOLDER_RE.test(folder)) return { ok: false, error: 'Thư mục lưu ảnh không hợp lệ' };
+  // base64 dài 4/3 dữ liệu gốc — chặn sớm trước khi giải mã
+  if (String(base64).length > Math.ceil(UPLOAD_MAX_BYTES * 4 / 3) + 4) return { ok: false, error: 'Ảnh quá 10 MB' };
+  const ext = mime === 'image/png' ? '.png' : '.jpg';
+  const rawName = String(body.fileName || ('photo_' + Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyyMMdd_HHmmss')));
+  const fname = rawName.replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9_\-]/g, '_').slice(0, 80) + ext;
 
   const rootId = getProp('DRIVE_FOLDER_ID');
   if (!rootId) return { ok: false, error: 'DRIVE_FOLDER_ID chưa cấu hình trong Script Properties' };
@@ -3145,6 +3209,7 @@ function handleUploadPhoto(body) {
   try {
     const parent = getOrCreateFolderPath(rootId, folder);
     const bytes = Utilities.base64Decode(base64);
+    if (bytes.length > UPLOAD_MAX_BYTES) return { ok: false, error: 'Ảnh quá 10 MB' };
     const blob  = Utilities.newBlob(bytes, mime, fname);
     const file  = parent.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -3199,45 +3264,95 @@ function getOrCreateFolderPath(rootId, path) {
 function handlePhotoBase64(body) {
   const auth = verifyToken(body.token);
   if (!auth) return { ok: false, error: 'Token không hợp lệ hoặc hết hạn' };
+  if (!(can(auth.role, 'submit') || can(auth.role, 'report') || can(auth.role, 'map'))) {
+    return { ok: false, error: 'forbidden' };
+  }
 
   const url = String(body.url || '');
   const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (!m) return { ok: false, error: 'URL không phải Google Drive' };
 
-  const fileId = m[1];
-
-  // Cách 1: đọc trực tiếp qua DriveApp (nhanh, ổn định nhất)
+  // v2.2.1: chỉ đọc ẢNH nằm trong thư mục gốc của app. Script chạy bằng quyền chủ sở hữu
+  // nên trước đây đọc được MỌI file Drive. Bỏ luôn đường HTTP dự phòng (không kiểm được phạm vi).
+  const file = getAppImageFile(m[1]);
+  if (!file) return { ok: false, error: 'Không tìm thấy ảnh hoặc ảnh không thuộc app' };
   try {
-    const blob = DriveApp.getFileById(fileId).getBlob();
+    const blob = file.getBlob();
     return {
       ok: true,
       mimeType: blob.getContentType() || 'image/jpeg',
       base64: Utilities.base64Encode(blob.getBytes())
     };
   } catch (err) {
-    Logger.log('handlePhotoBase64 DriveApp fail: ' + err);
+    Logger.log('handlePhotoBase64 fail: ' + err);
+    return { ok: false, error: 'Không đọc được ảnh' };
   }
+}
 
-  // Cách 2 (dự phòng): tải qua HTTP. Ảnh đã share ANYONE_WITH_LINK nên đọc được
-  // mà không cần quyền Drive — dùng khi script chưa được cấp lại quyền.
-  try {
-    const res = UrlFetchApp.fetch(
-      'https://drive.google.com/thumbnail?id=' + fileId + '&sz=w1600',
-      { muteHttpExceptions: true, followRedirects: true });
-    if (res.getResponseCode() === 200) {
-      const blob = res.getBlob();
-      return {
-        ok: true,
-        mimeType: blob.getContentType() || 'image/jpeg',
-        base64: Utilities.base64Encode(blob.getBytes()),
-        via: 'http'
-      };
+/**
+ * Trả về File Drive nếu: tồn tại, là ảnh (image/*), và nằm (trực tiếp hoặc lồng nhau)
+ * trong DRIVE_FOLDER_ID. Ngược lại trả null. Dùng cho đọc base64 và xoá ảnh.
+ */
+function getAppImageFile(fileId) {
+  const rootId = getProp('DRIVE_FOLDER_ID');
+  if (!rootId || !fileId) return null;
+  let file;
+  try { file = DriveApp.getFileById(fileId); } catch (e) { return null; }
+  if (!/^image\//.test(String(file.getMimeType() || ''))) return null;
+  return isUnderFolder(file, rootId) ? file : null;
+}
+
+/** Duyệt ngược thư mục cha (tối đa 10 cấp) xem có gặp rootId không. */
+function isUnderFolder(item, rootId) {
+  let frontier = [item];
+  for (let depth = 0; depth < 10 && frontier.length; depth++) {
+    const next = [];
+    for (const it of frontier) {
+      const parents = it.getParents();
+      while (parents.hasNext()) {
+        const p = parents.next();
+        if (p.getId() === rootId) return true;
+        next.push(p);
+      }
     }
-    return { ok: false, error: 'Không tải được ảnh (HTTP ' + res.getResponseCode() + ')' };
-  } catch (err2) {
-    Logger.log('handlePhotoBase64 HTTP fail: ' + err2);
-    return { ok: false, error: String(err2) };
+    frontier = next;
   }
+  return false;
+}
+
+/** Mẫu URL ảnh hợp lệ của app. Trả 'drive' | 'cloudinary' | null. */
+function photoUrlKind(url) {
+  const u = String(url || '');
+  if (/^https:\/\/drive\.google\.com\/uc\?export=view&id=[A-Za-z0-9_-]+$/.test(u)) return 'drive';
+  const cloud = getProp('CLOUDINARY_CLOUD_NAME') || DEFAULT_CLOUDINARY_CLOUD;
+  const re = new RegExp('^https://res\\.cloudinary\\.com/' + cloud.replace(/[^A-Za-z0-9_-]/g, '') +
+    '/image/upload/(v\\d+/)?[A-Za-z0-9_/.-]+\\.(jpe?g|png|webp)$', 'i');
+  if (re.test(u) && u.indexOf('..') < 0) return 'cloudinary';
+  return null;
+}
+
+/**
+ * Kiểm danh sách ảnh + các trường ảnh đơn (Bản vẽ). Trả URL sai đầu tiên, hoặc null nếu đều hợp lệ.
+ * Ô rỗng được phép.
+ */
+function findBadPhotoUrl(photos, dataIn) {
+  const list = (photos || []).slice();
+  ['Bản vẽ'].forEach(k => { if (dataIn && dataIn[k]) list.push(dataIn[k]); });
+  for (const u of list) {
+    if (u === '' || u === null || u === undefined) continue;
+    if (typeof u !== 'string' || !photoUrlKind(u)) return u;
+  }
+  return null;
+}
+
+/**
+ * Chống chèn công thức (formula injection): chuỗi bắt đầu bằng = + @ (hoặc - không theo sau
+ * bởi số, tab, CR) được thêm dấu ' để Sheets lưu dạng chữ. Số và chuỗi số âm giữ nguyên.
+ */
+function sanitizeCell(v) {
+  if (typeof v !== 'string') return v;
+  if (/^[=+@\t\r]/.test(v) || /^-(?![\d.,\s]*$)/.test(v)) return "'" + v;
+  return v;
 }
 
 /** Xoá file Drive (chuyển vào thùng rác). URL format: .../uc?export=view&id=FILE_ID */
@@ -3245,7 +3360,8 @@ function deleteDrivePhoto(url) {
   try {
     const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (!m) return false;
-    const file = DriveApp.getFileById(m[1]);
+    const file = getAppImageFile(m[1]);   // v2.2.1: chỉ ảnh trong thư mục app
+    if (!file) { Logger.log('deleteDrivePhoto: bỏ qua file ngoài phạm vi ' + m[1]); return false; }
     file.setTrashed(true);
     Logger.log('Drive photo trashed: ' + m[1]);
     return true;
@@ -3404,7 +3520,7 @@ function notifyAdmins(type, sheetName, data, stt, user, rowNum, sheetId) {
     if (photoUrls.length > 0) {
       photoHtml = '<p style="margin-top:12px"><strong>Ảnh đính kèm (' + photoUrls.length + '):</strong></p><p>' +
         photoUrls.slice(0, 4).map(u =>
-          '<a href="' + u + '"><img src="' + u + '" style="max-width:120px; max-height:120px; margin:4px; border-radius:4px"></a>'
+          '<a href="' + escapeHtmlGs(u) + '"><img src="' + escapeHtmlGs(u) + '" style="max-width:120px; max-height:120px; margin:4px; border-radius:4px"></a>'
         ).join('') + '</p>';
     }
 

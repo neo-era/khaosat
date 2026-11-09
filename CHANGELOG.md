@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## v2.2.1 — 2026-11-09 — 🔒 Vá bảo mật khẩn (rà soát tổng thể 09/11/2026)
+
+### Lỗ hổng đã vá (đều có test chứng minh trong `tests/security.test.mjs`)
+- **Chiếm tài khoản qua "Quên mật khẩu"**: `reset_own_password` cho đặt mật khẩu mới chỉ bằng username + họ tên, không cần đăng nhập, không giới hạn số lần. → **Tắt hẳn** ở máy chủ, bỏ form trên `login.html`. Quên mật khẩu: admin cấp mật khẩu tạm ở `users.html`.
+- **Đọc file Drive bất kỳ** (`photo_base64`): mọi token, kể cả demo, đọc được mọi file Drive của người deploy. → Chỉ đọc **ảnh** nằm trong `DRIVE_FOLDER_ID`; demo bị chặn; bỏ đường tải HTTP dự phòng.
+- **Xoá file Drive bất kỳ khi xoá bản ghi** + **stored XSS** qua URL ảnh do client tự khai. → Máy chủ chỉ nhận URL ảnh Drive `uc?export=view&id=` hoặc Cloudinary đúng cloud; chỉ chuyển vào thùng rác ảnh trong thư mục app. Frontend chỉ đặt link `https://` (`safeHref`) ở bản đồ, băng rôn, quản lý bản ghi. Email báo admin escape URL.
+- **Dò mật khẩu không giới hạn** → sai 5 lần khoá 5 phút theo tên đăng nhập (đếm cả tên không tồn tại, không phân biệt hoa/thường).
+- **Token**: định dạng mới `v2` có thời điểm đăng nhập + số phiên bản mật khẩu.
+  - Đổi mật khẩu / admin đặt lại mật khẩu → **mọi phiên cũ bị đăng xuất** (người vừa đổi nhận token mới).
+  - Hạn tuyệt đối: phiên thường 12 tiếng, phiên "ghi nhớ" 1 năm kể từ lúc nhập mật khẩu; `refresh` không còn nâng phiên 8 tiếng thành 1 năm.
+  - `must_change` chặn ở **máy chủ** (trước chỉ chặn ở trình duyệt).
+  - So chữ ký token không phụ thuộc thời gian.
+- **`upload_photo`**: demo bị chặn; chỉ nhận JPEG/PNG ≤ 10 MB; thư mục chỉ `khaosat/<loại>`, `khaosat/banve/<loại>`, `Bangron`; tên file được làm sạch.
+- **Chèn công thức vào Sheets** (submit/update): chuỗi bắt đầu bằng `= + @` (hoặc `-` không phải số) lưu dạng chữ. Các đường ghi khác (bulk import, lịch, sổ BBHT…) làm ở v2.3.0.
+- Lỗi trả về không còn kèm `stack`. `randomPassword` dùng nguồn ngẫu nhiên an toàn.
+
+### ⚠️ Việc admin phải làm khi triển khai
+1. Dán `apps-script/Code.gs` mới vào Apps Script → **Triển khai → Quản lý → sửa → Phiên bản mới** (giữ nguyên URL).
+2. Đẩy frontend lên GitHub Pages (`sw.js` lên `khaosat-v32` để máy đã cài nhận bản mới).
+3. **Mọi người phải đăng nhập lại 1 lần** (token định dạng cũ bị từ chối — cố ý, vì phiên cũ có thể đã bị chiếm).
+4. Tab **Audit** của Google Sheets: lọc cột action = `reset_own_password`. Dòng nào không phải do chính chủ làm → đặt lại mật khẩu tạm cho tài khoản đó ở `users.html`.
+5. Khuyến nghị: chạy `benchmarkHash()` rồi nâng `PWD_ITERS` (đang 100).
+
+### Chạy test
+`node --test "tests/*.test.mjs"` (Node ≥ 21, có dấu nháy). Lệnh `node --test tests/` ghi trong `_harness.mjs` không chạy trên Node 22 — đã sửa chú thích.
+
 ## v2.2.0 — 2026-09-09 — Duy trì đăng nhập · sửa chọn ảnh trên điện thoại · ranh hành chính trên bản đồ
 
 ### Duy trì đăng nhập

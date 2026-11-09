@@ -81,11 +81,17 @@ export async function login(username, password, remember = true) {
 /** Trang bắt buộc đổi mật khẩu — dùng chung để tránh gõ sai tên file. */
 export const CHANGE_PWD_PAGE = 'doi-mat-khau.html';
 
-/** Bỏ cờ must_change sau khi user đã đổi mật khẩu xong. */
-export function clearMustChange() {
+/**
+ * Bỏ cờ must_change sau khi user đã đổi mật khẩu xong.
+ * @param {object} [res] - kết quả change_password; từ v2.2.1 máy chủ cấp token MỚI
+ *   (token cũ hết hiệu lực khi đổi mật khẩu) → phải lưu lại, nếu không sẽ bị đăng xuất.
+ */
+export function clearMustChange(res) {
   const t = getToken();
   if (!t) return;
-  saveToken(Object.assign({}, t, { must_change: false }));
+  const patch = { must_change: false };
+  if (res && res.token) { patch.token = res.token; patch.expires_at = res.expires_at; }
+  saveToken(Object.assign({}, t, patch));
 }
 
 /** Clear token + redirect login. */

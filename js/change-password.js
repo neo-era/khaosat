@@ -72,8 +72,8 @@ export function initChangePassword() {
     btn.textContent = '⏳ Đang đổi...';
 
     try {
-      await apiChangePassword(c, n1);
-      clearMustChange();
+      const res = await apiChangePassword(c, n1);
+      clearMustChange(res);
       showOk('Đã đổi mật khẩu. Đang chuyển về trang chủ...');
       form.reset();
       setTimeout(() => location.replace('index.html'), 1200);

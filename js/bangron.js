@@ -2,7 +2,7 @@
 import { apiList } from './api.js';
 import { QUAN_LIST, PHUONG_XA } from './dia-ban.js';
 import { SCHEMAS } from './schemas.js';
-import { escapeHtml, showToast } from './utils.js';
+import { escapeHtml, showToast, safeHref } from './utils.js';
 import { inlineImages, restoreImages } from './photos.js';
 import { driveViewUrl } from './drive-url.js';
 import { loadJsPDF, loadHtml2canvas } from './lazy-lib.js';
@@ -300,7 +300,7 @@ function buildPhotoBlocks(rows) {
       photos = '<div class="br-photo-grid">'
         + r._photos.map((u, k) => `
           <div>
-            <a href="${escapeHtml(u)}" target="_blank" rel="noopener">
+            <a href="${escapeHtml(safeHref(u))}" target="_blank" rel="noopener">
               <img data-src="${escapeHtml(u)}" src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" alt="Ảnh ${k + 1}">
             </a>
             <div class="br-photo-cap">Ảnh ${k + 1}</div>

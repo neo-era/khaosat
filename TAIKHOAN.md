@@ -95,14 +95,16 @@ Cờ `must_change` làm việc chặn đó. `users.html` hiện nhãn ⚠ *phả
 
 | | |
 |---|---|
-| Phiên kéo dài | **8 tiếng** |
-| Lưu ở đâu | `sessionStorage` — **mất khi đóng tab**, đóng rồi mở lại phải đăng nhập lại |
-| Sai mật khẩu 5 lần | Khoá tài khoản đó **5 phút** |
+| Phiên thường (bỏ tick "Ghi nhớ") | 8 tiếng, tự gia hạn, **tối đa 12 tiếng** kể từ lúc nhập mật khẩu; lưu `sessionStorage` (mất khi đóng tab) |
+| Phiên "Ghi nhớ đăng nhập" (mặc định) | Lưu `localStorage`, tự gia hạn, **tối đa 1 năm** kể từ lúc nhập mật khẩu |
+| Sai mật khẩu 5 lần | Khoá tên đăng nhập đó **5 phút** (từ v2.2.1, có kiểm thử) |
 | Tài khoản `active = FALSE` | Từ chối đăng nhập ngay |
+| Quên mật khẩu | **Không còn tự đặt lại.** Admin cấp mật khẩu tạm ở `users.html` (v2.2.1 tắt `reset_own_password` vì lỗ hổng chiếm tài khoản) |
 
 Token là chuỗi ký tự có chữ ký, máy chủ **không lưu** danh sách token. Hệ quả cần biết:
 
-- **Đổi mật khẩu KHÔNG đá văng phiên đang mở.** Token cũ vẫn sống tới khi hết 8 tiếng.
+- **Đổi mật khẩu / admin đặt lại mật khẩu → mọi phiên cũ của người đó bị đăng xuất** (từ v2.2.1: token mang số phiên bản mật khẩu).
+- Người còn phải đổi mật khẩu tạm bị máy chủ chặn mọi thao tác trừ đổi mật khẩu.
 - Muốn đá văng ngay lập tức mọi người: đổi `AUTH_SALT`.
 - Khoá tài khoản (`active=FALSE`) thì chặn được ngay, vì mỗi lần gọi API server đều đọc lại trạng thái từ sheet.
 

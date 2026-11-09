@@ -2,7 +2,7 @@
 
 import { CONFIG } from './config.js';
 import { compressImage } from './camera.js';
-import { getToken, getQueue, removeFromQueue } from './storage.js';
+import { getToken, getQueue, removeFromQueue, clearToken } from './storage.js';
 import { showToast } from './utils.js';
 import { beginBusy } from './sw-update.js';
 
@@ -24,11 +24,25 @@ async function postJson(body) {
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error || 'Server error');
+    if (!json.ok) {
+      // v2.2.1: token cũ/đã đổi mật khẩu/hết hạn tuyệt đối → xoá phiên, về trang đăng nhập
+      if (body && body.action !== 'login' && isSessionEndedError(json.error)) {
+        clearToken();
+        if (typeof location !== 'undefined' && !/login\.html$/.test(location.pathname)) {
+          location.replace('login.html');
+        }
+      }
+      throw new Error(json.error || 'Server error');
+    }
     return json;
   } finally {
     done();
   }
+}
+
+/** Lỗi máy chủ nghĩa là phiên đăng nhập không còn dùng được (phải đăng nhập lại). */
+export function isSessionEndedError(msg) {
+  return /đăng nhập lại|invalid token|missing token|user disabled|user not found/i.test(String(msg || ''));
 }
 
 /**

@@ -1,5 +1,5 @@
 // tests/_harness.mjs — Giả lập môi trường Google Apps Script để chạy apps-script/Code.gs trong Node.
-// Không cần npm: chạy `node --test tests/` (Node ≥ 20). KHÔNG gọi mạng, KHÔNG đụng Google Sheets thật.
+// Không cần npm: chạy `node --test "tests/*.test.mjs"` (Node ≥ 21). KHÔNG gọi mạng, KHÔNG đụng Google Sheets thật.
 
 import fs from 'node:fs';
 import vm from 'node:vm';

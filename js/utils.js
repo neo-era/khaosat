@@ -22,6 +22,15 @@ export function showToast(message, type = 'success', duration = CONFIG.toastDefa
   }, duration);
 }
 
+/**
+ * URL an toàn để đặt vào href/src/window.open: chỉ nhận https://…, còn lại trả ''.
+ * Chặn javascript:, data:, http:// … do dữ liệu bản ghi có thể bị sửa (v2.2.1).
+ */
+export function safeHref(url) {
+  const u = String(url == null ? '' : url).trim();
+  return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : '';
+}
+
 /** Escape HTML cho innerHTML an toàn. */
 export function escapeHtml(str) {
   if (str === null || str === undefined) return '';

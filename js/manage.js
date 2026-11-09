@@ -3,7 +3,7 @@
 import { apiList, apiDelete, apiRestore, apiSetStatus } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES, XU_LY_SKIP_TYPES } from './schemas.js';
 import { hasPermission } from './auth.js';
-import { showToast, escapeHtml, formatVnDate, formatVnDateOnly } from './utils.js';
+import { showToast, escapeHtml, formatVnDate, formatVnDateOnly, safeHref } from './utils.js';
 import { driveViewUrl } from './drive-url.js';
 
 const state = {
@@ -265,7 +265,7 @@ function openLightbox(urls) {
     img.referrerPolicy = 'no-referrer';
     img.src = driveViewUrl(u);
     img.className = 'w-full rounded-lg shadow';
-    img.onclick = () => window.open(u, '_blank');
+    img.onclick = () => { const h = safeHref(u); if (h) window.open(h, '_blank', 'noopener'); };
     grid.appendChild(img);
   }
   lb.classList.remove('hidden');

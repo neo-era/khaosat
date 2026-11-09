@@ -3,7 +3,7 @@
 import { apiList, apiUsers } from './api.js';
 import { SCHEMAS, SCHEMA_KEYS } from './schemas.js';
 import { hasPermission } from './auth.js';
-import { showToast, escapeHtml, formatVnDateOnly } from './utils.js';
+import { showToast, escapeHtml, formatVnDateOnly, safeHref } from './utils.js';
 import { createBoundaryLayer } from './boundaries.js';
 import { driveViewUrl } from './drive-url.js';
 
@@ -225,11 +225,11 @@ function openDetail(r) {
     let valHtml = escapeHtml(String(value));
     // Nếu là URL ảnh Cloudinary → render mini thumbnail
     if (label === 'Ảnh (URLs)' && /https?:/.test(String(value))) {
-      valHtml = String(value).split('|').filter(u => u).map(u =>
+      valHtml = String(value).split('|').map(safeHref).filter(u => u).map(u =>
         `<a href="${escapeHtml(u)}" target="_blank"><img src="${escapeHtml(driveViewUrl(u))}" referrerpolicy="no-referrer" style="max-width:100px; max-height:100px; display:inline-block; margin:2px; border-radius:4px"></a>`
       ).join('');
-    } else if ((label === 'Bản vẽ' || label === 'link' || label === 'Link Google Map') && /^https?:/.test(String(value))) {
-      valHtml = `<a href="${escapeHtml(String(value))}" target="_blank" style="color:#1d4ed8; text-decoration:underline">${escapeHtml(String(value).slice(0, 60))}...</a>`;
+    } else if ((label === 'Bản vẽ' || label === 'link' || label === 'Link Google Map') && safeHref(value)) {
+      valHtml = `<a href="${escapeHtml(safeHref(value))}" rel="noopener" target="_blank" style="color:#1d4ed8; text-decoration:underline">${escapeHtml(String(value).slice(0, 60))}...</a>`;
     }
     row.innerHTML = `
       <dt class="text-xs text-gray-500">${escapeHtml(label)}</dt>
