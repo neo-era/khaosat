@@ -383,7 +383,10 @@ function safeEqual(a, b) {
 function takeAttempt(key) {
   const cache = CacheService.getScriptCache();
   const lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  // Khoá dùng chung toàn script (submit/bulk_import/sổ BBHT có thể giữ tới 30 s). Không lấy được
+  // khoá thì vẫn đếm (không khoá) — KHÔNG để đăng nhập hỏng chỉ vì máy chủ đang bận.
+  let locked = false;
+  try { lock.waitLock(5000); locked = true; } catch (e) { Logger.log('takeAttempt: không lấy được khoá, đếm không khoá'); }
   try {
     const n = parseInt(cache.get(key) || '0', 10);
     if (n >= LOGIN_MAX_FAILS) {
@@ -394,7 +397,7 @@ function takeAttempt(key) {
     cache.put(key, String(n + 1), LOGIN_LOCK_SEC);
     return { ok: true, justLocked: false, used: n + 1 };
   } finally {
-    lock.releaseLock();
+    if (locked) lock.releaseLock();
   }
 }
 
@@ -3382,7 +3385,8 @@ function sanitizeCell(v) {
   if (typeof v !== 'string') v = String(v);
   // Bỏ qua khoảng trắng/BOM đứng đầu khi xét (Sheets có thể vẫn hiểu là công thức)
   const t = v.replace(/^[\s\uFEFF]+/, '');
-  if (/^[=+@]/.test(t) || /^-(?![\d.,\s]*$)/.test(t) || /^[\t\r\n]/.test(v)) return "'" + v;
+  // '-' chỉ nguy hiểm khi dính liền chữ/ngoặc (vd -A1+1); "-5" là số, "- đèn hư" là ghi chú → giữ nguyên
+  if (/^[=+@]/.test(t) || /^-(?![\d.,\s]*$)(?!\s)/.test(t) || /^[\t\r\n]/.test(v)) return "'" + v;
   return v;
 }
 

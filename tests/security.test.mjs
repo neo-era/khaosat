@@ -281,3 +281,17 @@ test('R1 bị khoá đăng nhập → ghi Audit đúng 1 lần', () => {
   for (let i = 0; i < 8; i++) gs.post({ action: 'login', username: 'admin', password: 'sai' });
   assert.equal(gs.audit.filter(a => a[0] === 'login_locked').length, 1);
 });
+
+// ---------- Vòng duyệt QA ----------
+test('QA máy chủ bận (khoá script đang bị giữ) vẫn đăng nhập được', () => {
+  const gs = loadAuthGs();
+  gs.LockService.getScriptLock = () => ({ waitLock() { throw new Error('Lock timeout'); }, releaseLock() { throw new Error('không được gọi'); } });
+  const r = gs.login('admin');
+  assert.equal(r.ok, true, r.error);
+});
+
+test('QA ghi chú bắt đầu bằng "- " không bị thêm dấu nháy', () => {
+  const gs = loadAuthGs();
+  assert.equal(gs.sanitizeCell('- đèn hư'), '- đèn hư');
+  assert.equal(gs.sanitizeCell('-A1+1'), "'-A1+1");
+});

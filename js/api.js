@@ -333,8 +333,8 @@ export async function uploadBlobToDrive(blob, surveyType) {
     });
     return res.url;
   } catch (err) {
-    // Chưa đăng nhập thì Cloudinary cũng vô nghĩa — ném lỗi luôn
-    if (/chưa đăng nhập/i.test(err.message || '')) throw err;
+    // Chưa đăng nhập / hết phiên thì Cloudinary cũng vô nghĩa — ném lỗi luôn (tránh ảnh mồ côi)
+    if (/chưa đăng nhập/i.test(err.message || '') || isSessionEndedError(err.message)) throw err;
 
     console.warn('[upload] Drive lỗi → chuyển sang Cloudinary:', err.message);
     // Báo 1 lần/phiên: fallback im lặng dễ khiến Drive hỏng cả tháng không ai biết

@@ -143,6 +143,10 @@ async function maybeRefreshToken() {
   if (t.expires_at - Date.now() > REFRESH_BEFORE_MS) return;
   try {
     const res = await apiRefresh(t.remember === true);
+    // Trong lúc chờ, token có thể đã đổi (vừa đổi mật khẩu / đăng nhập lại) → đừng ghi đè bằng bản cũ
+    const now = getToken();
+    if (!now || now.token !== t.token) return;
+    if (res.expires_at <= t.expires_at) return;   // đã chạm hạn tuyệt đối — không có gì để gia hạn
     saveToken(Object.assign({}, t, {
       token: res.token,
       expires_at: res.expires_at,

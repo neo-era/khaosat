@@ -17,12 +17,14 @@
 - Vòng duyệt chuyên gia: chống chèn công thức cả cột User Agent và khi có khoảng trắng/BOM đứng trước; bộ đếm sai mật khẩu tăng trong `LockService` (gửi song song không lách được); `change_password` dùng chung giới hạn 5 lượt; ghi Audit `login_locked`; URL Cloudinary chỉ nhận thư mục `khaosat/`, `Bangron/` và nhận cả cloud mặc định của frontend.
 - Lỗi trả về không còn kèm `stack`. `randomPassword` dùng nguồn ngẫu nhiên an toàn.
 
-### ⚠️ Việc admin phải làm khi triển khai
-1. Dán `apps-script/Code.gs` mới vào Apps Script → **Triển khai → Quản lý → sửa → Phiên bản mới** (giữ nguyên URL).
-2. Đẩy frontend lên GitHub Pages (`sw.js` lên `khaosat-v32` để máy đã cài nhận bản mới).
-3. **Mọi người phải đăng nhập lại 1 lần** (token định dạng cũ bị từ chối — cố ý, vì phiên cũ có thể đã bị chiếm).
+### ⚠️ Việc admin phải làm khi triển khai — ĐÚNG THỨ TỰ
+1. **Frontend trước**: đẩy code lên GitHub Pages (`sw.js` lên `khaosat-v32`). Đợi ~1 ngày làm việc để máy đã cài app nhận bản mới (app tự cập nhật khi mở). Frontend mới chạy được với Apps Script cũ.
+2. **Sau đó mới Apps Script**: dán `apps-script/Code.gs` mới → **Triển khai → Quản lý → sửa → Phiên bản mới** (giữ nguyên URL). Nếu làm ngược lại, máy còn bản app cũ sẽ báo "Phiên đăng nhập đã hết hạn" mà không tự về trang đăng nhập.
+3. **Mọi người phải đăng nhập lại 1 lần** (token định dạng cũ bị từ chối — cố ý, vì phiên cũ có thể đã bị chiếm). Hàng chờ offline được giữ, đăng nhập lại là tự gửi.
 4. Tab **Audit** của Google Sheets: lọc cột action = `reset_own_password`. Dòng nào không phải do chính chủ làm → đặt lại mật khẩu tạm cho tài khoản đó ở `users.html`.
-5. Khuyến nghị: chạy `benchmarkHash()` rồi nâng `PWD_ITERS` (đang 100).
+5. Kiểm tra Script Property `CLOUDINARY_CLOUD_NAME` (nếu có) — máy chủ nhận cả giá trị này và `dmlsqbe8c` của frontend.
+6. Khuyến nghị: chạy `benchmarkHash()` rồi nâng `PWD_ITERS` (đang 100).
+7. Ai bị khoá do người khác cố tình nhập sai: tự mở sau 5 phút (chưa có nút mở khoá cho admin).
 
 ### Chạy test
 `node --test "tests/*.test.mjs"` (Node ≥ 21, có dấu nháy). Lệnh `node --test tests/` ghi trong `_harness.mjs` không chạy trên Node 22 — đã sửa chú thích.
