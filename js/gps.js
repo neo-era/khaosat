@@ -74,12 +74,54 @@ export async function reverseGeocode(lat, lng) {
   }
   _lastReverseAt = Date.now();
 
-  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&accept-language=vi`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Nominatim HTTP ' + res.status);
-  const json = await res.json();
+  // Mạng ở VN (5G/cáp) hiện không vào được openstreetmap.org (đo 10/11/2026: "Load failed").
+  // → hỏi Photon (komoot, cùng dữ liệu OSM, có CORS) trước; lỗi thì thử Nominatim; cả hai lỗi → báo rõ để nhập tay.
+  let data;
+  try {
+    data = await photonReverse(lat, lng);
+  } catch (e1) {
+    try {
+      data = await nominatimReverse(lat, lng);
+    } catch (e2) {
+      throw new Error('Không kết nối được máy chủ bản đồ (mạng chặn hoặc chậm) — nhập tay tuyến đường');
+    }
+  }
+  _geocodeCache.set(key, { data, at: Date.now() });
+  return data;
+}
+
+/** fetch có hạn thời gian (AbortController — có dự phòng cho iOS cũ không có AbortSignal.timeout). */
+async function fetchJson(url, ms = 8000) {
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const t = ctl ? setTimeout(() => ctl.abort(), ms) : 0;
+  try {
+    const res = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally { if (t) clearTimeout(t); }
+}
+
+/** Photon (photon.komoot.io): GeoJSON, properties {street, name, osm_key, locality, district, city}. */
+export async function photonReverse(lat, lng) {
+  const json = await fetchJson(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=default&limit=1`);
+  const p = (json.features && json.features[0] && json.features[0].properties) || null;
+  if (!p) throw new Error('Photon: không có kết quả');
+  const road = p.street || (p.osm_key === 'highway' ? p.name : '') || '';
+  return {
+    road,
+    suburb: '',                          // Photon không có "suburb" tương đương — không đoán Hẻm
+    neighbourhood: p.locality || '',
+    city_district: p.district || '',
+    city: p.city || '',
+    display_name: [p.housenumber, road, p.locality, p.district, p.city].filter(Boolean).join(', '),
+    raw: json
+  };
+}
+
+async function nominatimReverse(lat, lng) {
+  const json = await fetchJson(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&accept-language=vi`);
   const addr = json.address || {};
-  const data = {
+  return {
     road: addr.road || addr.pedestrian || addr.path || addr.cycleway || '',
     suburb: addr.suburb || addr.quarter || addr.neighbourhood || '',
     neighbourhood: addr.neighbourhood || addr.hamlet || '',
@@ -88,6 +130,4 @@ export async function reverseGeocode(lat, lng) {
     display_name: json.display_name || '',
     raw: json
   };
-  _geocodeCache.set(key, { data, at: Date.now() });
-  return data;
 }

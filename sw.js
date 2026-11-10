@@ -1,7 +1,7 @@
 // sw.js — Service Worker đơn giản: precache shell + stale-while-revalidate cho assets.
 // Network only cho Apps Script + Cloudinary (đừng cache API response).
 
-const CACHE_NAME = 'khaosat-v35';
+const CACHE_NAME = 'khaosat-v36';
 
 const SHELL = [
   './',
@@ -96,8 +96,10 @@ self.addEventListener('fetch', (event) => {
   // Network only cho Apps Script + Cloudinary + Nominatim + OSM tile + Leaflet CDN
   if (url.includes('script.google.com') || url.includes('cloudinary.com') ||
       url.includes('googleusercontent.com') || url.includes('nominatim.openstreetmap.org') ||
-      url.includes('tile.openstreetmap.org') || url.includes('unpkg.com/leaflet')) {
-    event.respondWith(fetch(event.request));
+      url.includes('tile.openstreetmap.org') || url.includes('unpkg.com/leaflet') ||
+      url.includes('photon.komoot.io')) {
+    // Không chặn: để trình duyệt tự gọi mạng. respondWith(fetch) làm lỗi mạng hiện thành
+    // "FetchEvent.respondWith received an error" khó hiểu trên iPhone (10/11/2026).
     return;
   }
 
