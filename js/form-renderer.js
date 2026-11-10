@@ -24,6 +24,7 @@ import { loadJsQR } from './lazy-lib.js';
 import { registerBusyCheck } from './sw-update.js';
 import { driveViewUrl } from './drive-url.js';
 import { initHdBar, hdLienKet } from './hd-bar.js';
+import { initHdChon } from './hd-chon.js';
 
 // State module-scoped (1 form 1 lúc trên page)
 const state = {
@@ -80,6 +81,15 @@ export async function renderForm(containerEl, schemaKey) {
     initHdBar({ type: state.schemaKey, user: state.user,
       getPhuong: () => (state.container.querySelector('[data-key="phuong"]') || {}).value || '' });
   } catch (e) { console.warn('hd-bar', e); }
+  // GĐ2: người KS chọn gói / mã hạng mục HĐ (không bắt buộc) — lưu cùng bản ghi
+  state.hdChon = null;
+  try {
+    const tenLoai = {};
+    Object.keys(SCHEMAS).forEach(k => { tenLoai[k] = SCHEMAS[k].name; });
+    state.hdChon = initHdChon({ type: state.schemaKey, typeName: state.schema.name, user: state.user, tenLoai,
+      form: document.getElementById('survey-form'),
+      getPhuong: () => (state.container.querySelector('[data-key="phuong"]') || {}).value || '' });
+  } catch (e) { console.warn('hd-chon', e); }
   // Có bản mới giữa lúc đang nhập: không tự tải lại (mất ảnh đang tải, chữ vừa gõ) → hiện thanh Cập nhật
   registerBusyCheck(() => state.editMode || state.photos.length > 0 || hasUserInput(collectFormData()));
   if (state.editMode) {
@@ -125,6 +135,7 @@ async function loadFromQueue(id) {
   const data = Object.assign({}, it.payload.data || {});
   (it.photos || []).forEach(p => { if (p.url && p.field) data[p.field] = p.url; });
   state.queueOrigData = data;
+  if (it.payload.hd && state.hdChon) state.hdChon.set(it.payload.hd);
 
   const banner = document.createElement('div');
   banner.className = 'bg-amber-50 border-l-4 border-amber-500 text-amber-900 p-3 mb-3 rounded text-sm';
@@ -211,7 +222,7 @@ async function showScheduleBadge() {
 /** Edit mode: tải row gốc từ server theo STT và pre-fill form. */
 async function loadEditRow() {
   try {
-    const res = await apiList({ type: state.schemaKey, stt: state.editStt, status: 'all' });
+    const res = await apiList({ type: state.schemaKey, stt: state.editStt, status: 'all', hd: true });
     const row = (res.rows || [])[0];
     if (!row) {
       showToast('Không tìm thấy bản ghi STT #' + state.editStt, 'error');
@@ -219,6 +230,7 @@ async function loadEditRow() {
       return;
     }
     state.editOrigData = row;
+    if (state.hdChon) state.hdChon.set(row._hd || null, { orig: true });
 
     // Banner báo đang sửa
     const banner = document.createElement('div');
@@ -1417,6 +1429,7 @@ async function maybeRestoreDraft() {
   if (draft.data.__client_id) state.clientId = draft.data.__client_id;
   if (draft.data.__client_at) state.origClientAt = Number(draft.data.__client_at);
   if (draft.data.__queue_id) state.fromQueueId = draft.data.__queue_id;
+  if (draft.data.__hd && state.hdChon) state.hdChon.set(draft.data.__hd);
   if (Array.isArray(draft.data.__photos)) {
     draft.data.__photos.forEach(url => state.photos.push({ id: uuid(), file: null, status: 'done', url, thumbnail: driveViewUrl(url), error: null }));
     renderPhotoGrid();
@@ -1431,7 +1444,8 @@ function startAutosave() {
     // v2.3.0 — nháp giữ cả URL ảnh đã tải xong (mở lại form không mất ảnh)
     if (hasAny) saveDraft(state.schemaKey, Object.assign({}, data, {
       __photos: state.photos.filter(p => p.status === 'done').map(p => p.url),
-      __client_id: state.clientId, __client_at: state.origClientAt || undefined, __queue_id: state.fromQueueId || undefined
+      __client_id: state.clientId, __client_at: state.origClientAt || undefined, __queue_id: state.fromQueueId || undefined,
+      __hd: state.hdChon ? state.hdChon.get() : undefined
     }));
   }, CONFIG.autosaveIntervalMs);
 }
@@ -1625,11 +1639,25 @@ async function handleSubmit() {
   }
 
   if (!state.editMode && !(await confirmNotDuplicate())) return;
-  // Bản ghi đã được đưa vào phụ lục hợp đồng → nhắc (không chặn)
+  // Sửa bản: phường đổi làm gói cũ không còn hợp → hỏi bỏ lựa chọn cũ (không để máy chủ giữ gói sai)
+  if (state.editMode && state.hdChon && state.hdChon.canChonLai() && (state.editOrigData || {})._hd) {
+    if (!confirm('Phường đã đổi nên gói / mã hạng mục HĐ đã chọn không còn hợp.\n\nOK = bỏ lựa chọn cũ (app HĐ tự chọn mã)\nHuỷ = quay lại chọn lại')) {
+      return;
+    }
+    state.hdChon.boChon();
+  }
+
+  // Bản ghi đã được đưa vào phụ lục hợp đồng → nhắc (không chặn). Đã xác nhận → máy chủ cho đổi cả hạng mục HĐ.
+  let hdXacNhan = false;
   if (state.editMode) {
     const lk = (await hdLienKet([{ type: state.schemaKey, stt: state.editStt }])).get(state.schemaKey + '#' + state.editStt);
-    if (lk && !/nháp/i.test(lk.trangThai) &&
-        !confirm('Bản ghi này đã "' + lk.trangThai + (lk.phuLuc ? ' · ' + lk.phuLuc : '') + '" bên Quản lý HĐ.\nSửa số lượng sẽ làm lệch với phụ lục — nhớ báo phòng Kế hoạch.\n\nVẫn cập nhật?')) return;
+    if (lk && !/nháp/i.test(lk.trangThai)) {
+      if (!confirm('Bản ghi này đã "' + lk.trangThai + (lk.phuLuc ? ' · ' + lk.phuLuc : '') + '" bên Quản lý HĐ.\nSửa số lượng sẽ làm lệch với phụ lục — nhớ báo phòng Kế hoạch.\n\nVẫn cập nhật?')) return;
+      hdXacNhan = true;
+    } else if (state.hdChon && state.hdChon.getForUpdate() !== undefined && String((state.editOrigData || {})['Trạng thái xử lý'] || '').trim() === 'Nghiệm thu') {
+      if (!confirm('Bản ghi đã Nghiệm thu. Vẫn đổi hạng mục HĐ?')) return;
+      hdXacNhan = true;
+    }
   }
 
   const btn = document.getElementById('btn-submit');
@@ -1643,21 +1671,31 @@ async function handleSubmit() {
 
   const data = collectFormData();
   const photoUrls = state.photos.filter(p => p.status === 'done').map(p => p.url);
+  const hdGui = state.hdChon ? (state.editMode ? state.hdChon.getForUpdate() : state.hdChon.get()) : undefined;
+  const baoHd = (res) => {   // lựa chọn HĐ không lưu được → báo, bản khảo sát vẫn lưu
+    const w = state.hdChon ? state.hdChon.daGui(res, hdGui) : '';
+    if (w) showToast('⚠️ ' + w, 'warning', 7000);
+    return w;
+  };
 
   try {
     let res;
     if (state.editMode) {
       // EDIT MODE
-      res = await apiUpdate(state.schemaKey, state.editStt, data, photoUrls);
+      res = await apiUpdate(state.schemaKey, state.editStt, data, photoUrls, hdGui, hdXacNhan);
       showToast('✅ Đã cập nhật STT #' + state.editStt + ' (' + (res.changes ? res.changes.length : 0) + ' trường thay đổi)', 'success', 3000);
-      setTimeout(() => location.replace('manage.html'), 1500);
+      const canhBao = baoHd(res);
+      setTimeout(() => location.replace('manage.html'), canhBao ? 5000 : 1500);
       return;
     }
     // CREATE MODE — còn ảnh chờ mạng thì đi thẳng vào hàng chờ (gửi kèm ảnh khi có mạng)
     if (hasOfflinePhotos()) throw Object.assign(new Error('Ảnh chưa tải được'), { kind: 'network' });
-    res = await apiSubmit(state.schemaKey, data, photoUrls, state.origClientAt
+    const extra = state.origClientAt
       ? { client_id: state.clientId, from_queue: true, client_at: state.origClientAt }
-      : { client_id: state.clientId });
+      : { client_id: state.clientId };
+    if (hdGui) extra.hd = hdGui;
+    res = await apiSubmit(state.schemaKey, data, photoUrls, extra);
+    baoHd(res);
     if (state.fromQueueId) { try { await queueStore().remove(state.fromQueueId); } catch (e) { /* bỏ qua */ } }
     state.dup = null;   // kết quả cũ chưa tính bản vừa lưu → nhập tiếp cùng tuyến phải hỏi lại
     clearDraft(state.schemaKey);
@@ -1697,7 +1735,7 @@ async function handleSubmit() {
     // Mất mạng / máy chủ bận → đưa vào hàng chờ (IndexedDB, kèm ảnh chờ mạng), giữ nguyên client_id
     if (kind === 'network' || kind === 'temporary') {
       try {
-        await enqueueOffline(await buildQueueRecord(data, photoUrls, clientAt));
+        await enqueueOffline(await buildQueueRecord(data, photoUrls, clientAt, hdGui));
       } catch (qe) {
         showToast('Không lưu được vào máy (máy hết chỗ?). Giữ nguyên form, thử lại khi có mạng.', 'error', 6000);
         btn.disabled = false;
@@ -1724,7 +1762,7 @@ function hasOfflinePhotos() {
 }
 
 /** Bản ghi hàng chờ v2.3.0: dữ liệu + ảnh đã tải (URL) + ảnh chờ mạng (ArrayBuffer). */
-async function buildQueueRecord(data, photoUrls, clientAt) {
+async function buildQueueRecord(data, photoUrls, clientAt, hd) {
   const folder = state.schema.driveFolder || state.schemaKey;
   const photos = [];
   for (const p of state.photos.filter(x => x.status === 'offline' && x.blob)) {
@@ -1740,7 +1778,7 @@ async function buildQueueRecord(data, photoUrls, clientAt) {
     id: state.fromQueueId || uuid(), client_id: state.clientId, client_at: state.origClientAt || clientAt,
     username: state.user.username, full_name: state.user.full_name,
     queued_at: Date.now(),
-    payload: { action: 'submit', type: state.schemaKey, data, photos: photoUrls, ua: navigator.userAgent },
+    payload: Object.assign({ action: 'submit', type: state.schemaKey, data, photos: photoUrls, ua: navigator.userAgent }, hd ? { hd } : {}),
     photos, status: 'pending', attempts: 0, next_try: 0
   };
 }

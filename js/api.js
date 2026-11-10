@@ -124,9 +124,9 @@ export async function apiSobbhtDelete(id) {
  * Thông tin hợp đồng duy tu (app Quản lý HĐ đẩy sang): gói / KL HĐ còn lại theo phường + trạng thái liên kết bản ghi.
  * Máy chủ chưa triển khai bản có hd_info → trả { ok:true, has:false, oldBackend:true } (không ném lỗi).
  */
-export async function apiHdInfo({ phuong, type, nam, pairs } = {}) {
+export async function apiHdInfo({ phuong, type, nam, pairs, goi, tatCa } = {}) {
   try {
-    return await postJson({ action: 'hd_info', token: requireToken(), phuong, type, nam, pairs });
+    return await postJson({ action: 'hd_info', token: requireToken(), phuong, type, nam, pairs, goi, tatCa });
   } catch (e) {
     if (/^unknown action/.test(e.message || '')) return { ok: true, has: false, oldBackend: true };
     throw e;
@@ -137,21 +137,26 @@ export async function apiSetStatus(type, stts, status, note = '') {
   return postJson({ action: 'set_status', token: requireToken(), type, stts, status, note });
 }
 
-export async function apiList({ type, username, stt, from, to, includeDeleted, status } = {}) {
+export async function apiList({ type, username, stt, from, to, includeDeleted, status, hd } = {}) {
   return postJson({
     action: 'list',
     token: requireToken(),
-    type, username, stt, from, to, includeDeleted, status
+    type, username, stt, from, to, includeDeleted, status, hd
   });
 }
 
 /** Sửa bản ghi (admin/user role có quyền edit). photos=undefined → giữ nguyên; photos=[urls] → ghi đè. */
-export async function apiUpdate(type, stt, data, photos) {
+export async function apiUpdate(type, stt, data, photos, hd, xacNhan) {
   return postJson({
     action: 'update',
     token: requireToken(),
-    type, stt, data, photos
+    type, stt, data, photos, hd, xacNhan: xacNhan || undefined
   });
+}
+
+/** GĐ2 liên kết HĐ: đổi riêng lựa chọn hạng mục HĐ của 1 bản (hd=null → bỏ chọn). */
+export async function apiHdChon(type, stt, hd, xacNhan) {
+  return postJson({ action: 'hd_chon', token: requireToken(), type, stt, hd, xacNhan });
 }
 
 /** v2.3.0: máy chủ bắt buộc lý do xoá (≥ 5 ký tự). */

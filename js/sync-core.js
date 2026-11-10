@@ -48,7 +48,7 @@ export function backoffMs(attempts) {
 export const MAX_ATTEMPTS = 8;
 
 export async function runSync({ store, me, post, upload, now = Date.now(), online = true }) {
-  const out = { success: 0, failed: 0, needFix: 0, others: 0, othersNames: [], duplicates: 0, authEnded: false, unknownOwner: 0 };
+  const out = { success: 0, failed: 0, needFix: 0, others: 0, othersNames: [], duplicates: 0, authEnded: false, unknownOwner: 0, hdWarn: 0, hdWarnList: [] };
   const items = await store.list();
   for (const it of items) {
     if (it.owner_unknown) { out.unknownOwner++; continue; }   // chờ người dùng xác nhận là của mình
@@ -83,6 +83,11 @@ export async function runSync({ store, me, post, upload, now = Date.now(), onlin
       });
       const res = await post(payload);
       if (res && res.duplicate) out.duplicates++;
+      // GĐ2: bản có chọn hạng mục HĐ mà máy chủ không lưu phần mã → báo (bản khảo sát vẫn đã lưu)
+      if (payload.hd && !(res && res.hd_saved)) {
+        out.hdWarn++;
+        out.hdWarnList.push({ stt: res && res.stt, error: (res && res.hd_warning) || 'Máy chủ chưa hỗ trợ lưu hạng mục HĐ' });
+      }
       await store.remove(it.id);
       out.success++;
     } catch (e) {

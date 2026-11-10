@@ -149,7 +149,7 @@ test('hd_info: gói theo phường (1 gói / nhiều gói / lạ), mã HM của 
   assert.equal(a.has, true);
   assert.deepEqual(a.goi, { goi: 'G1', goiList: ['G1'], maGoiThau: 'G101TT' });
   assert.deepEqual(a.hm.map(h => [h.ma, h.hd, h.conLai]), [['HM210', 120, 4], ['HM214', 120, 4]]);
-  assert.deepEqual(Object.keys(a.hm[0]).sort(), ['conLai', 'daKH', 'dvt', 'hd', 'ma', 'nam', 'ten'].sort());
+  assert.deepEqual(Object.keys(a.hm[0]).sort(), ['conLai', 'daKH', 'dvt', 'hd', 'ma', 'nam', 'nhom', 'ten'].sort(), 'chỉ trường cho phép (GĐ2 thêm nhóm), không tiền/đơn giá');
   assert.ok(a.updated_at);
   const b = plain(gs.post({ action: 'hd_info', token: t, phuong: 'Phường Xuân Hòa', type: 'thay_tru', nam: 2026 }));
   assert.equal(b.goi.goi, 'nhieu');

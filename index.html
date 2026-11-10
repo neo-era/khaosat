@@ -331,6 +331,8 @@
         if (res.success > 0) showToast('✅ Đã đồng bộ ' + res.success + ' bản ghi', 'success');
         if (res.needFix > 0) showToast('⚠️ ' + res.needFix + ' bản bị máy chủ từ chối — bấm 📥 để sửa', 'warning', 6000);
         else if (res.failed > 0) showToast('⏳ ' + res.failed + ' bản chưa gửi được, sẽ tự thử lại', 'warning');
+        if (res.hdWarn > 0) showToast('⚠️ ' + res.hdWarn + ' bản đã gửi nhưng chưa lưu được hạng mục HĐ (app HĐ sẽ tự chọn mã): ' +
+          res.hdWarnList.slice(0, 3).map(w => (w.stt ? 'STT ' + w.stt + ' — ' : '') + w.error).join('; '), 'warning', 9000);
         if (res.others > 0) showToast('👤 ' + res.others + ' bản của ' + res.othersNames.join(', ') + ' đang chờ — người đó đăng nhập trên máy này thì tự gửi', 'info', 6000);
       } catch (e) {
         // silent

@@ -99,7 +99,7 @@ export function logout() {
   clearToken();
   clearListCaches();
   // Thông tin HĐ lưu tạm theo phường (js/hd-bar.js) — không để lại cho người dùng sau
-  try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && k.indexOf('hd_info:') === 0) localStorage.removeItem(k); } } catch (e) { /* bỏ qua */ }
+  try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && (k.indexOf('hd_info:') === 0 || k.indexOf('hd_hoc_v1:') === 0)) localStorage.removeItem(k); } } catch (e) { /* bỏ qua */ }
   location.replace('login.html');
 }
 

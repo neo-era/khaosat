@@ -97,6 +97,17 @@ export function barModel(res, { now = Date.now(), phuong = '' } = {}) {
  * Gắn thanh HĐ vào form. getPhuong() trả tên phường đang chọn.
  * Gọi lại khi phường đổi: document phát sự kiện 'phuong-change'.
  */
+/** Người KS đã chọn mã (js/hd-chon.js) → thanh hiện gói/mã đã chọn thay cho mã mặc định. */
+export function apChon(m, chon) {
+  if (!m || m.hidden || m.state === 'loading' || m.state === 'error' || !chon || !chon.goi || !(chon.ds || []).length) return m;
+  const h = chon.ds[0];
+  return Object.assign({}, m, {
+    state: 'data',
+    text: String(chon.goi).replace(/^G/, 'Gói ') + ' · KS chọn',
+    sub: h.ma + (h.hd !== undefined ? ' · HĐ ' + fmt(h.hd) + ' · còn ' + fmt(h.conLai) : '') + (chon.ds.length > 1 ? ' (+' + (chon.ds.length - 1) + ')' : '')
+  });
+}
+
 export function initHdBar({ type, user, getPhuong }) {
   if (!user || user.role === 'demo' || SKIP_TYPES.includes(type)) return null;
   ensureCss();
@@ -115,10 +126,10 @@ export function initHdBar({ type, user, getPhuong }) {
   document.body.appendChild(sheet);
   document.body.classList.add('has-hd-bar');
 
-  let cur = null, curPhuong = '', seq = 0, kbOpen = false, timer = 0;
+  let cur = null, curPhuong = '', seq = 0, kbOpen = false, timer = 0, chon = null;
 
   const paint = () => {
-    const m = curPhuong ? barModel(cur, { phuong: curPhuong }) : { hidden: true };
+    const m = apChon(curPhuong ? barModel(cur, { phuong: curPhuong }) : { hidden: true }, chon);
     bar.classList.toggle('hidden', !!m.hidden || kbOpen);
     if (m.hidden) return;
     bar.dataset.state = m.state;
@@ -179,6 +190,7 @@ export function initHdBar({ type, user, getPhuong }) {
   sheet.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.classList.contains('hidden')) closeSheet(); });
   document.addEventListener('phuong-change', schedule);
+  document.addEventListener('hd-chon-change', e => { chon = e.detail || null; paint(); });
 
   // Bàn phím ảo mở (khung nhìn thấp hẳn) → ẩn thanh
   const vv = window.visualViewport;

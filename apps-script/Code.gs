@@ -2034,6 +2034,7 @@ function doPost(e) {
       case 'hd_link':       return jsonResponse(handleHdLink(body));
       case 'hd_push':       return jsonResponse(handleHdPush(body));
       case 'hd_info':       return jsonResponse(handleHdInfo(body));
+      case 'hd_chon':       return jsonResponse(handleHdChon(body));
       default:              return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
   } catch (err) {
@@ -2175,6 +2176,11 @@ function handleSubmit(body) {
   }
   const geoWarn = cleanGeo_(dataIn);
   if (geoWarn) warnings.push(geoWarn);
+  // GĐ2 liên kết HĐ: kiểm lựa chọn hạng mục TRƯỚC khi lấy khoá. Sai → bản khảo sát vẫn lưu, chỉ bỏ phần mã (hd_warning).
+  let hdKq = null;
+  try { hdKq = body.hd && typeof body.hd === 'object' ? hdChonKiem_(body.hd, dataIn['Phường']) : null; }
+  catch (e) { hdKq = { ok: false, error: 'Chưa kiểm được hạng mục HĐ: ' + (e.message || e) }; }   // lỗi đọc dữ liệu HĐ không làm hỏng bản khảo sát
+  let hdSaved = false, hdWarn = hdKq && !hdKq.ok ? hdKq.error : '';
   // Ngày giờ (vd phát hiện sự cố) cũ hơn 30 ngày → cảnh báo, không chặn
   ((FIELD_RULES[type] || {}).dt || []).forEach(k => {
     const d = parseDayBound_(dataIn[k], false);
@@ -2213,7 +2219,15 @@ function handleSubmit(body) {
   try {
     if (clientId) {
       const prev = findClientId_(clientId);
-      if (prev) return { ok: true, stt: prev.stt, sheet: SHEET_MAP[prev.type] || sheetName, duplicate: true, warnings: warnings };
+      if (prev) {
+        // Gửi lại trùng: chỉ ghi lựa chọn khi bản đó CHƯA có (không đè lựa chọn mới hơn đã đổi qua hd_chon)
+        const dupOut = { ok: true, stt: prev.stt, sheet: SHEET_MAP[prev.type] || sheetName, duplicate: true, warnings: warnings };
+        if (hdKq && hdKq.ok && !hdChonCo_(prev.type || type, prev.stt)) {
+          try { hdChonGhi_(prev.type || type, prev.stt, hdKq, auth.username); dupOut.hd_saved = true; } catch (e) { dupOut.hd_warning = 'Chưa lưu được hạng mục HĐ: ' + (e.message || e); }
+        } else if (hdKq && hdKq.ok) dupOut.hd_saved = true;
+        if (hdWarn) dupOut.hd_warning = hdWarn;
+        return dupOut;
+      }
     }
     stt = newSttId(type, sheet, effDate);
 
@@ -2243,6 +2257,11 @@ function handleSubmit(body) {
     }
     if (typeof SpreadsheetApp !== 'undefined' && SpreadsheetApp.flush) SpreadsheetApp.flush();
     if (clientId) pruneClientIds_();   // trong khoá: không chen với lần tra client_id khác
+    // Thứ tự ghi: dòng khảo sát → client_ids → HD_ChonHM (lỗi chỉ là cảnh báo, không mất bản khảo sát)
+    if (hdKq && hdKq.ok) {
+      try { hdChonGhi_(type, stt, hdKq, auth.username); hdSaved = true; }
+      catch (e) { hdWarn = 'Chưa lưu được hạng mục HĐ: ' + (e.message || e); }
+    }
   } finally {
     lock.releaseLock();
   }
@@ -2268,7 +2287,10 @@ function handleSubmit(body) {
     Logger.log('notify fail (silent): ' + e);
   }
 
-  return { ok: true, stt: stt, sheet: sheetName, timestamp: submittedAt, warnings: warnings };
+  const out = { ok: true, stt: stt, sheet: sheetName, timestamp: submittedAt, warnings: warnings };
+  if (hdSaved) out.hd_saved = true;
+  if (hdWarn) out.hd_warning = hdWarn;
+  return out;
 }
 
 // =====================================================================
@@ -2370,6 +2392,8 @@ function handleList(body) {
 
   const types = type ? [type] : Object.keys(SHEET_MAP);
   const results = [];
+  // GĐ2: lựa chọn hạng mục HĐ (trường ảo _hd) — chỉ khi hỏi (form sửa bản) hoặc token app HĐ
+  const chon = (body.hd === true || auth.scope === HD_SCOPE) ? hdChonDoc_() : null;
   types.forEach(t => {
     const rows = readSheetRows(t, true);
     rows.forEach(row => {
@@ -2382,6 +2406,7 @@ function handleList(body) {
       if (onlyDeleted && !isDeleted) return;
       if (onlyActive && isDeleted) return;
       const out = Object.assign({ _type: t, _sheet: SHEET_MAP[t] }, row);
+      if (chon && chon[t + '#' + String(row['STT'])] && !('_hd' in row)) out._hd = chon[t + '#' + String(row['STT'])];
       if (bcscLimited) ['User Agent', 'Deleted At', 'Deleted By', 'Cập nhật trạng thái'].forEach(k => delete out[k]);
       results.push(out);
     });
@@ -2513,7 +2538,19 @@ function handleUpdate(body) {
   appendAuditLog('update', auth.username, sheetName, stt,
     diffs.length > 0 ? diffs.join(' | ') : 'không đổi');
 
-  return { ok: true, stt: stt, changes: changes };
+  const out = { ok: true, stt: stt, changes: changes };
+  // GĐ2: không gửi hd → giữ nguyên; hd:null → bỏ chọn; có hd → ghi (tự lấy khoá)
+  if (body.hd !== undefined) {
+    try {
+      const ip = header.indexOf('Phường');
+      const phuong = dataIn['Phường'] !== undefined ? dataIn['Phường'] : (ip >= 0 ? values[ip] : '');
+      // Cùng chốt với action hd_chon: bản đã xoá / đã vào PL – đã thực hiện – Nghiệm thu (cần xacNhan + quyền edit)
+      const chan = hdChonChot_(auth, type, stt, header, values, body.xacNhan);
+      const r = chan || hdChonDoi_(type, stt, body.hd === null ? null : body.hd, phuong, auth.username);
+      if (r.ok) out.hd_saved = true; else out.hd_warning = r.error;
+    } catch (e) { out.hd_warning = 'Chưa lưu được hạng mục HĐ: ' + (e.message || e); }
+  }
+  return out;
 }
 
 /**
@@ -4092,7 +4129,8 @@ const HD_MAX_CELL = 500;
 const HD_SPEC = {
   tomTat:    { sheet: 'HD_TomTat',    cols: ['Gói', 'Mã gói thầu', 'Năm', 'Mã HM', 'Tên HM', 'ĐVT', 'KL HĐ', 'Đã vào KH', 'Còn lại', 'NT luỹ kế'], num: [2, 6, 7, 8, 9] },
   phuongGoi: { sheet: 'HD_PhuongGoi', cols: ['Phường', 'Gói'], num: [] },
-  loaiHM:    { sheet: 'HD_LoaiHM',    cols: ['Loại', 'Mã HM'], num: [] },
+  // Cột 3 "Nhóm" thêm 10/11/2026 (nhóm hạng mục theo loại khảo sát); app HĐ cũ đẩy 2 cột vẫn nhận (minCols)
+  loaiHM:    { sheet: 'HD_LoaiHM',    cols: ['Loại', 'Mã HM', 'Nhóm'], num: [], minCols: 2 },
   lienKet:   { sheet: 'HD_LienKet',   cols: ['Loại', 'STT', 'Gói', 'Mã HM', 'Phụ lục', 'Trạng thái', 'Tháng'], num: [] }
 };
 
@@ -4127,7 +4165,7 @@ function hdValidate_(data) {
     const spec = HD_SPEC[k];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      if (!Array.isArray(r) || r.length !== spec.cols.length) return k + ' dòng ' + (i + 1) + ': sai số cột (cần ' + spec.cols.length + ')';
+      if (!Array.isArray(r) || r.length > spec.cols.length || r.length < (spec.minCols || spec.cols.length)) return k + ' dòng ' + (i + 1) + ': sai số cột (cần ' + spec.cols.length + ')';
       for (let j = 0; j < r.length; j++) {
         const v = r[j];
         if (v === null || v === '') continue;
@@ -4179,7 +4217,7 @@ function handleHdPush(body) {
       if (old) ss.deleteSheet(old);
       const sh = ss.insertSheet(name);
       created.push(sh);
-      const rows = [spec.cols].concat((body.data[k] || []).map(r => r.map(hdCell_)));
+      const rows = [spec.cols].concat((body.data[k] || []).map(r => { const x = r.map(hdCell_); while (x.length < spec.cols.length) x.push(''); return x; }));
       // Cột chữ định dạng văn bản TRƯỚC khi ghi: "10/2026" không thành ngày, mã "2.10" không thành số 2,1
       spec.cols.forEach((c, j) => { if (spec.num.indexOf(j) < 0) sh.getRange(1, j + 1, rows.length, 1).setNumberFormat('@'); });
       sh.getRange(1, 1, rows.length, spec.cols.length).setValues(rows);
@@ -4196,7 +4234,7 @@ function handleHdPush(body) {
         if (m && +m[1] !== v) ss.deleteSheet(sh);
       });
     } catch (e) { console.warn('hd_push dọn bản cũ: ' + e); }
-    try { CacheService.getScriptCache().remove('hd_data'); } catch (e) { /* bỏ qua */ }
+    try { CacheService.getScriptCache().remove('hd_data'); } catch (e) { /* bỏ qua */ }   // bảng tra hd_idx_v{n} theo phiên bản, tự hết hạn
     appendAuditLog('hd_push', auth.username, 'HD_*', 'v' + v, 'tomTat ' + (body.data.tomTat || []).length + ' · lienKet ' + (body.data.lienKet || []).length);
     return { ok: true, version: v, generated_at: ver.generated_at };
   } catch (e) {
@@ -4221,7 +4259,8 @@ function hdLoad_() {
   for (const k in HD_SPEC) {
     const sh = ss.getSheetByName(HD_SPEC[k].sheet + '_v' + ver.v);
     if (!sh) return null;
-    out[k] = sh.getDataRange().getValues().slice(1).map(r => r.slice(0, HD_SPEC[k].cols.length).map(hdUncell_));
+    // Bản _v cũ (loaiHM 2 cột) → bù ô thiếu bằng chuỗi rỗng
+    out[k] = sh.getDataRange().getValues().slice(1).map(r => { const x = r.slice(0, HD_SPEC[k].cols.length).map(hdUncell_); while (x.length < HD_SPEC[k].cols.length) x.push(''); return x.map(v => v === undefined || v === null ? '' : v); });
   }
   try { const s = JSON.stringify(out); if (s.length < 95000) cache.put('hd_data', s, 21600); } catch (e) { /* bỏ qua */ }
   return out;
@@ -4248,16 +4287,49 @@ function handleHdInfo(body) {
     d.phuongGoi.forEach(r => { if (hdNormPhuong_(r[0]) === p && r[1] && goiList.indexOf(String(r[1])) < 0) goiList.push(String(r[1])); });
     goiList.sort();
     const goi = goiList.length === 1 ? goiList[0] : (goiList.length > 1 ? 'nhieu' : null);
-    const tt = goi && goi !== 'nhieu' ? d.tomTat.filter(r => String(r[0]) === goi) : [];
-    const mgt = (tt.find(r => r[1]) || [])[1] || '';
-    out.goi = { goi: goi, goiList: goiList, maGoiThau: String(mgt) };
+    // GĐ2 (10/11/2026): phường chưa có trong HĐ / nhiều gói → người KS chọn gói (body.goi); phường có đúng 1 gói → luôn gói đó
+    const goiChon = /^G\d{1,2}$/.test(String(body.goi || '')) ? String(body.goi) : null;
+    const goiDung = goi && goi !== 'nhieu' ? goi : (goiChon && (!goi || goiList.indexOf(goiChon) >= 0) ? goiChon : null);
+    const ttGoi = goiDung ? d.tomTat.filter(r => String(r[0]) === goiDung) : [];
+    const mgt = (ttGoi.find(r => r[1]) || [])[1] || '';
+    out.goi = { goi: goi, goiList: goiList, maGoiThau: String(goi && goi !== 'nhieu' ? mgt : '') };
     const nam = +body.nam || +Utilities.formatDate(new Date(), TZ, 'yyyy');
     out.nam = nam;
-    const maLoai = d.loaiHM.filter(r => String(r[0]) === String(body.type || '')).map(r => String(r[1]));
-    out.hm = maLoai.map(ma => tt.find(r => String(r[3]) === ma && +r[2] === nam)).filter(Boolean).map(r => ({
-      ma: String(r[3]), ten: String(r[4] || ''), dvt: String(r[5] || ''), nam: +r[2],
-      hd: r[6] === '' ? null : +r[6], daKH: r[7] === '' ? null : +r[7], conLai: r[8] === '' ? null : +r[8]
-    }));
+    out.chon = true;   // máy chủ có chọn hạng mục (client cũ bỏ qua)
+    out.goiDung = goiDung;
+    const goiAll = [];
+    d.tomTat.forEach(r => { const g = String(r[0]); if (g && !goiAll.some(x => x.goi === g)) goiAll.push({ goi: g, maGoiThau: '' }); });
+    goiAll.forEach(x => { const r = d.tomTat.find(y => String(y[0]) === x.goi && y[1]); x.maGoiThau = r ? String(r[1]) : ''; });
+    goiAll.sort((a, b) => a.goi.localeCompare(b.goi));
+    out.goiAll = goiAll;
+    out.phuongGoi = d.phuongGoi.map(r => [String(r[0]), String(r[1])]);
+    out.namList = ttGoi.map(r => +r[2]).filter((v, i, a) => v && a.indexOf(v) === i).sort();
+    const hmCua = (r, nhom, loai) => {
+      const h = { ma: String(r[3]), ten: String(r[4] || ''), dvt: String(r[5] || ''), nam: +r[2], nhom: String(nhom || ''),
+        hd: r[6] === '' ? null : +r[6], daKH: r[7] === '' ? null : +r[7], conLai: r[8] === '' ? null : +r[8] };
+      if (loai) h.loai = loai;
+      return h;
+    };
+    const laCg = ma => /_cg$/i.test(ma);   // anh chốt 10/11/2026: ẩn mã _cg khỏi danh sách người khảo sát
+    const ttNam = ttGoi.filter(r => +r[2] === nam);
+    const loai = String(body.type || '');
+    const daCo = {};
+    out.hm = [];
+    d.loaiHM.forEach(r => {
+      const ma = String(r[1]);
+      if (String(r[0]) !== loai || laCg(ma) || daCo[ma]) return;
+      const t = ttNam.find(x => String(x[3]) === ma);
+      if (t) { daCo[ma] = 1; out.hm.push(hmCua(t, r[2])); }
+    });
+    if (body.tatCa) {
+      out.hmKhac = [];
+      d.loaiHM.forEach(r => {
+        const ma = String(r[1]);
+        if (String(r[0]) === loai || laCg(ma) || daCo[ma]) return;
+        const t = ttNam.find(x => String(x[3]) === ma);
+        if (t) { daCo[ma] = 1; out.hmKhac.push(hmCua(t, r[2], String(r[0]))); }
+      });
+    }
   }
   if (pairs.length) {
     const idx = {};
@@ -4268,3 +4340,166 @@ function handleHdInfo(body) {
   }
   return out;
 }
+
+// =====================================================================
+// GĐ2 LIÊN KẾT HĐ — CHỌN GÓI + MÃ HẠNG MỤC HĐ NGAY TRONG FORM KHẢO SÁT (anh yêu cầu 10/11/2026)
+// Thiết kế: quanly-hopdong-duytu/docs/04_LienKet-KhaoSat.md mục 6.
+// - Lưu ở sheet riêng HD_ChonHM (không thêm cột vào 17 sheet khảo sát), 1 dòng / mã, tối đa 3 mã / bản ghi.
+// - Kiểm ở máy chủ: mẫu mã/gói, cặp (gói, năm, mã) có trong dữ liệu HĐ đang lưu, phường 1 gói thì gói phải trùng.
+// - Sai → bản khảo sát vẫn lưu, chỉ bỏ phần mã (hd_warning). Mã _cg không nhận (anh chốt ẩn).
+// =====================================================================
+const HD_CHON_SHEET = 'HD_ChonHM';
+const HD_CHON_COLS = ['Loại', 'STT', 'Năm', 'Gói', 'Gói chọn tay', 'Mã HM', 'Hệ số', 'Tên HM', 'Người chọn', 'Lúc'];
+const HD_CHON_MAX = 3;
+const HD_MA_RE = /^HM\d{1,4}[A-Za-z0-9]{0,4}$/;
+const HD_GOI_RE = /^G\d{1,2}$/;
+
+/** Bảng tra gọn {k: {"G1|2026|HM186": 1}, t: {HM186: tên}} theo phiên bản dữ liệu HĐ — cache riêng (nhỏ hơn hd_data). */
+function hdIdx_() {
+  const ver = hdVersion_();
+  if (!ver || !ver.v) return null;
+  const key = 'hd_idx_v' + ver.v;
+  const cache = CacheService.getScriptCache();
+  try { const c = cache.get(key); if (c) return JSON.parse(c); } catch (e) { /* bỏ qua */ }
+  const d = hdLoad_();
+  if (!d) return null;
+  const idx = { k: {}, t: {}, pg: d.phuongGoi.map(r => [String(r[0]), String(r[1])]) };
+  d.tomTat.forEach(r => { const ma = String(r[3]); idx.k[String(r[0]) + '|' + (+r[2]) + '|' + ma] = 1; if (!idx.t[ma]) idx.t[ma] = String(r[4] || '').slice(0, 120); });
+  try { const sj = JSON.stringify(idx); if (sj.length < 95000) cache.put(key, sj, 21600); } catch (e) { /* bỏ qua */ }
+  return idx;
+}
+
+/** Kiểm lựa chọn; trả { ok, nam, goi, goiTay, ds:[{ma, heSo, ten}] } hoặc { ok:false, error }. */
+function hdChonKiem_(hd, phuong) {
+  if (!hd || typeof hd !== 'object' || !Array.isArray(hd.ds) || !hd.ds.length) return { ok: false, error: 'Thiếu danh sách mã hạng mục HĐ' };
+  if (hd.ds.length > HD_CHON_MAX) return { ok: false, error: 'Chọn tối đa ' + HD_CHON_MAX + ' mã hạng mục / bản ghi' };
+  const goi = String(hd.goi || '');
+  if (!HD_GOI_RE.test(goi)) return { ok: false, error: 'Gói không hợp lệ' };
+  const nam = Math.floor(Number(hd.nam));
+  if (!(nam >= 2020 && nam <= 2100)) return { ok: false, error: 'Năm HĐ không hợp lệ' };
+  const ds = [];
+  for (let i = 0; i < hd.ds.length; i++) {
+    const x = hd.ds[i] || {};
+    const ma = String(x.ma || '');
+    if (!HD_MA_RE.test(ma)) return { ok: false, error: 'Mã hạng mục không hợp lệ: ' + ma.slice(0, 20) };
+    if (ds.some(y => y.ma === ma)) return { ok: false, error: 'Mã ' + ma + ' bị trùng' };
+    const heSo = x.heSo === undefined || x.heSo === null || x.heSo === '' ? 1 : Number(x.heSo);
+    if (!(isFinite(heSo) && heSo > 0 && heSo <= 100)) return { ok: false, error: 'Mã ' + ma + ': hệ số phải lớn hơn 0 và không quá 100' };
+    ds.push({ ma: ma, heSo: heSo });
+  }
+  const idx = hdIdx_();
+  if (!idx) return { ok: false, error: 'Máy chủ chưa có dữ liệu HĐ' };
+  const p = hdNormPhuong_(phuong);
+  const list = [];
+  idx.pg.forEach(r => { if (hdNormPhuong_(r[0]) === p && list.indexOf(r[1]) < 0) list.push(r[1]); });
+  if (list.length === 1 && list[0] !== goi) return { ok: false, error: 'Phường ' + String(phuong || '').trim() + ' thuộc gói ' + list[0] + ' — không chọn gói ' + goi };
+  if (list.length > 1 && list.indexOf(goi) < 0) return { ok: false, error: 'Phường thuộc các gói ' + list.join(', ') + ' — gói ' + goi + ' không nằm trong đó' };
+  for (let i = 0; i < ds.length; i++) {
+    if (!idx.k[goi + '|' + nam + '|' + ds[i].ma]) {
+      const coGoi = Object.keys(idx.k).some(k => k.indexOf(goi + '|') === 0);
+      return { ok: false, error: 'Mã ' + ds[i].ma + ' không có trong gói ' + goi + (coGoi ? ' năm ' + nam : '') + ' của dữ liệu HĐ' };
+    }
+    ds[i].ten = idx.t[ds[i].ma] || '';
+  }
+  return { ok: true, nam: nam, goi: goi, goiTay: list.length !== 1, ds: ds };
+}
+
+function hdChonSheet_() {
+  const ss = getSpreadsheet();
+  let sh = ss.getSheetByName(HD_CHON_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(HD_CHON_SHEET);
+    sh.getRange(1, 1, 1000, HD_CHON_COLS.length).setNumberFormat('@');   // STT/mã không bị Sheets đổi thành số/ngày
+    sh.getRange(1, 1, 1, HD_CHON_COLS.length).setValues([HD_CHON_COLS]);
+    if (sh.setFrozenRows) sh.setFrozenRows(1);
+  }
+  return sh;
+}
+/** Bản đã có lựa chọn chưa. */
+function hdChonCo_(type, stt) {
+  const sh = getSpreadsheet().getSheetByName(HD_CHON_SHEET);
+  if (!sh) return false;
+  return sh.getDataRange().getValues().slice(1).some(r => String(r[0]) === String(type) && String(r[1]) === String(stt));
+}
+/** Ghi đè lựa chọn của (loại, STT); kq = null → bỏ chọn. Gọi trong khoá. Trả chuỗi tóm tắt cũ (cho Audit). */
+function hdChonGhi_(type, stt, kq, username) {
+  const sh = hdChonSheet_();
+  const data = sh.getDataRange().getValues();
+  const cu = [];
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === String(type) && String(data[i][1]) === String(stt)) { cu.unshift(data[i][5] + '×' + data[i][6]); sh.deleteRow(i + 1); }
+  }
+  if (kq) {
+    const luc = nowVnString();
+    kq.ds.forEach(x => sh.appendRow([sanitizeCell(type), sanitizeCell(String(stt)), kq.nam, kq.goi, kq.goiTay ? 'Có' : '', x.ma, x.heSo, sanitizeCell(x.ten), sanitizeCell(username), luc]));
+  }
+  return cu.join(', ');
+}
+/** Map "loại#STT" → { nam, goi, goiTay, ds:[{ma, heSo}] } — đọc 1 lần mỗi request. */
+function hdChonDoc_() {
+  const sh = getSpreadsheet().getSheetByName(HD_CHON_SHEET);
+  const out = {};
+  if (!sh) return out;
+  sh.getDataRange().getValues().slice(1).forEach(r => {
+    const k = String(r[0]) + '#' + String(r[1]);
+    if (!r[0] || !r[5]) return;
+    if (!out[k]) out[k] = { nam: +r[2], goi: String(r[3]), goiTay: String(r[4]) === 'Có', ds: [] };
+    if (out[k].ds.length < HD_CHON_MAX) out[k].ds.push({ ma: String(r[5]), heSo: Number(r[6]) || 1 });
+  });
+  return out;
+}
+/** Đổi lựa chọn (update / hd_chon): kiểm trước, rồi ghi trong khoá riêng. hd = null → bỏ chọn. */
+function hdChonDoi_(type, stt, hd, phuong, username) {
+  let kq = null;
+  if (hd !== null) {
+    kq = hdChonKiem_(hd, phuong);
+    if (!kq.ok) return kq;
+  }
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, error: 'Máy chủ đang bận, thử lại sau ít phút' };
+  let cu = '';
+  try { cu = hdChonGhi_(type, stt, kq, username); } finally { lock.releaseLock(); }
+  const moi = kq ? kq.goi + ' ' + kq.nam + ': ' + kq.ds.map(x => x.ma + '×' + x.heSo).join(', ') : 'bỏ chọn';
+  appendAuditLog('hd_chon', username, HD_CHON_SHEET, String(stt), type + ' · ' + (cu || 'chưa chọn') + ' → ' + moi);
+  return { ok: true };
+}
+
+/**
+ * action=hd_chon {type, stt, hd | null, xacNhan?} — đổi lựa chọn hạng mục HĐ của 1 bản ghi.
+ * Chủ bản ghi hoặc người có quyền edit. Bản đã vào phụ lục / đã thực hiện / Nghiệm thu: chủ bản không đổi được,
+ * người có quyền edit phải gửi xacNhan. Không nằm trong HD_SCOPE_ACTIONS (token app HĐ không dùng được).
+ */
+function handleHdChon(body) {
+  const auth = verifyToken(body.token);
+  if (auth.role === 'demo' || !can(auth.role, 'submit')) return { ok: false, error: 'Tài khoản không có quyền chọn hạng mục HĐ' };
+  const type = String(body.type || '');
+  const sheetName = SHEET_MAP[type];
+  if (!sheetName) return { ok: false, error: 'Loại không hợp lệ' };
+  const sheet = getSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return { ok: false, error: 'Sheet không tồn tại' };
+  const found = findRowByStt(sheet, body.stt);
+  if (!found) return { ok: false, error: 'Không tìm thấy STT ' + body.stt };
+  const chan = hdChonChot_(auth, type, String(body.stt), found.header, found.values, body.xacNhan);
+  if (chan) return chan;
+  const v = found.values, ip = found.header.indexOf('Phường');
+  const hd = body.hd === null || body.hd === undefined ? null : body.hd;
+  return hdChonDoi_(type, String(body.stt), hd, ip >= 0 ? v[ip] : '', auth.username);
+}
+
+/** Chốt quyền đổi lựa chọn HĐ của 1 bản (dùng chung cho hd_chon và update). Trả null = được đổi. */
+function hdChonChot_(auth, type, stt, h, v, xacNhan) {
+  const col = n => { const i = h.indexOf(n); return i >= 0 ? v[i] : ''; };
+  if (col('Deleted At')) return { ok: false, error: 'Bản ghi đã xoá — không chọn hạng mục được' };
+  const laChu = String(col('Username')) === String(auth.username);
+  const coEdit = can(auth.role, 'edit');
+  if (!laChu && !coEdit) return { ok: false, error: 'Chỉ người lập bản ghi hoặc người có quyền sửa mới chọn được hạng mục HĐ' };
+  let khoa = String(col('Trạng thái xử lý')).trim() === 'Nghiệm thu';
+  if (!khoa) {
+    const d = hdLoad_();
+    if (d) khoa = d.lienKet.some(r => String(r[0]) === type && String(r[1]) === String(stt) && /vào PL|thực hiện/i.test(String(r[5])));
+  }
+  if (khoa && !coEdit) return { ok: false, error: 'Bản ghi đã vào phụ lục / đã thực hiện — nhờ quản lý đổi hạng mục' };
+  if (khoa && !xacNhan) return { ok: false, canXacNhan: true, error: 'Bản ghi đã vào phụ lục / đã thực hiện — xác nhận để đổi hạng mục' };
+  return null;
+}
+
