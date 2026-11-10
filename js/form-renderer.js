@@ -798,7 +798,7 @@ function renderGpsBlock() {
       </div>
       <div class="flex flex-col gap-1 flex-shrink-0">
         <button id="btn-gps-refresh" type="button" class="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-100" style="min-height:44px">🔄 Lấy lại</button>
-        <button id="btn-gps-geocode" type="button" class="px-3 py-1 text-xs bg-blue-50 border border-blue-300 text-blue-700 rounded hover:bg-blue-100" title="Tự điền Tuyến đường + Hẻm từ tọa độ GPS hiện tại">🗺️ Tự điền địa chỉ</button>
+        <button id="btn-gps-geocode" type="button" class="px-3 py-1 text-xs bg-blue-50 border border-blue-300 text-blue-700 rounded hover:bg-blue-100" title="Tự điền Tuyến đường + Phường từ tọa độ GPS, kèm danh sách đường quanh đây để chọn">🗺️ Tự điền địa chỉ</button>
       </div>
     </div>
     <div id="geocode-result" class="hidden mt-2 text-xs text-blue-700"></div>
@@ -1079,17 +1079,34 @@ async function applyReverseGeocode(force) {
       filled.push('Hẻm = "' + r.suburb + '"');
     }
 
+    // Phường (tên mới sau sáp nhập) — chỉ điền khi khớp đúng 1 phường trong danh mục
+    const phHidden = state.container.querySelector('[data-key="phuong"]');
+    const opt = phuongTuDiaChi(r.district);
+    if (phHidden && opt && (force || !String(phHidden.value || '').trim())) {
+      const q = state.container.querySelector('[data-key="quan"]');
+      if (q) q.value = opt.quan;
+      phHidden.value = opt.ten;
+      phHidden.dispatchEvent(new Event('sync'));
+      filled.push('Phường = "' + opt.ten + '"');
+    }
+
     if (resultEl) {
+      const quanh = (r.quanh || []).filter(x => x.ten);
+      const chips = quanh.length ? '<div class="mt-2 text-gray-600">Đường quanh đây — chạm để chọn (GPS có thể lệch):</div>'
+        + '<div class="flex flex-wrap gap-2 mt-1">' + quanh.map((x, i) =>
+          `<button type="button" data-quanh="${i}" class="px-3 rounded-full border ${x.loai === 'hem' ? 'border-gray-300 bg-white text-gray-800' : 'border-blue-300 bg-blue-50 text-blue-800'} text-sm" style="min-height:44px">${escapeHtml(x.ten)}${x.m !== null && x.m !== undefined ? ' · ~' + x.m + ' m' : ''}</button>`).join('') + '</div>'
+        : '';
       if (filled.length > 0) {
-        resultEl.innerHTML = '🗺️ Đã điền: ' + filled.map(s => '<strong>' + escapeHtml(s) + '</strong>').join(' · ');
+        resultEl.innerHTML = '🗺️ Đã điền: ' + filled.map(s => '<strong>' + escapeHtml(s) + '</strong>').join(' · ') + chips;
         resultEl.className = 'mt-2 text-xs text-blue-700';
-      } else if (force) {
-        resultEl.textContent = 'ℹ️ Không có đề xuất mới từ GPS (' + (r.display_name || 'không rõ địa chỉ') + ')';
+      } else if (force || chips) {
+        resultEl.innerHTML = escapeHtml('ℹ️ Không có đề xuất mới từ GPS (' + (r.display_name || 'không rõ địa chỉ') + ')') + chips;
         resultEl.className = 'mt-2 text-xs text-gray-500';
       } else {
         // Auto mode không có gì điền: ẩn thông báo cho gọn
         resultEl.classList.add('hidden');
       }
+      resultEl.querySelectorAll('[data-quanh]').forEach(b => b.addEventListener('click', () => chonDuongQuanh(quanh[+b.dataset.quanh], b)));
     }
   } catch (e) {
     if (resultEl) {
@@ -1097,6 +1114,31 @@ async function applyReverseGeocode(force) {
       resultEl.className = 'mt-2 text-xs text-red-600';
     }
   }
+}
+
+/** Tên phường từ máy chủ bản đồ ("Chợ Lớn", "Phường Chợ Lớn") → đúng 1 mục trong danh mục; không chắc → null. */
+function phuongTuDiaChi(ten) {
+  const f = foldVi(String(ten || '').replace(/^\s*(phường|phuong|xã|xa|p\.)\s*/i, ''));
+  if (!f) return null;
+  const m = PHUONG_OPTS.filter(o => foldVi(o.ten) === f);
+  return m.length === 1 ? m[0] : null;   // tên trùng 2 địa bàn (vd Đông Thạnh) → không đoán, để người khảo sát chọn
+}
+
+/** Chọn 1 đường trong danh sách "Đường quanh đây": điền Tuyến đường (và Hẻm nếu form có ô Hẻm). */
+function chonDuongQuanh(x, btn) {
+  if (!x) return;
+  const td = state.container.querySelector('[data-key="tuyen_duong"]');
+  const hem = state.container.querySelector('[data-key="hem"]');
+  if (hem && x.loai === 'hem' && x.duong) {
+    if (td) td.value = x.duong;
+    hem.value = x.hem;
+  } else if (td) {
+    td.value = x.loai === 'hem' ? x.ten : x.duong || x.ten;
+    if (hem && x.loai === 'duong') hem.value = '';
+  }
+  if (td) td.dispatchEvent(new Event('input', { bubbles: true }));
+  btn.parentElement.querySelectorAll('[data-quanh]').forEach(b => b.classList.toggle('ring-2', b === btn));
+  prefetchDup();
 }
 
 function updateGpsUI() {

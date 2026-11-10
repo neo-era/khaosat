@@ -101,19 +101,54 @@ async function fetchJson(url, ms = 8000) {
   } finally { if (t) clearTimeout(t); }
 }
 
-/** Photon (photon.komoot.io): GeoJSON, properties {street, name, osm_key, locality, district, city}. */
+// Loại đường OSM coi là "đường chính" (điền Tuyến đường) và "hẻm" (chỉ gợi ý)
+const DUONG = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'pedestrian', 'road'];
+const HEM = ['service', 'footway', 'path', 'track', 'alley'];
+/** Bỏ chữ "Đường " đầu tên (dữ liệu khảo sát ghi "Nguyễn Trãi", OSM ghi "Đường Nguyễn Trãi"). */
+export function boDuong(s) { return String(s || '').trim().replace(/^(đường|duong)\s+/i, '').replace(/\s+(đường|duong)\s+/i, ' '); }
+function metTu(lat, lng, la2, lo2) {
+  const R = 6371000, r = Math.PI / 180;
+  const a = Math.sin((la2 - lat) * r / 2) ** 2 + Math.cos(lat * r) * Math.cos(la2 * r) * Math.sin((lo2 - lng) * r / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)));
+}
+
+/**
+ * Photon (photon.komoot.io): các đường/hẻm trong bán kính ~250 m (osm_tag=highway).
+ * Trả { road = đường chính gần nhất, district = phường (tên mới), quanh = [{ten, loai, duong, hem, m}] }.
+ * Tọa độ GPS có thể lệch → người khảo sát chọn lại trong "quanh".
+ */
 export async function photonReverse(lat, lng) {
-  const json = await fetchJson(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=default&limit=1`);
-  const p = (json.features && json.features[0] && json.features[0].properties) || null;
-  if (!p) throw new Error('Photon: không có kết quả');
-  const road = p.street || (p.osm_key === 'highway' ? p.name : '') || '';
+  const json = await fetchJson(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}&lang=default&limit=20&radius=0.25&osm_tag=highway`);
+  const fs = (json.features || []).filter(f => f && f.properties && f.properties.name);
+  if (!fs.length) throw new Error('Photon: không có đường quanh tọa độ');
+  const quanh = [];
+  const daCo = new Set();
+  for (const f of fs) {
+    const p = f.properties;
+    const c = (f.geometry && f.geometry.coordinates) || [];
+    const ten = boDuong(p.name);
+    const laHem = /^hẻm\b|^hem\b|^ngõ|^kiệt/i.test(ten) || HEM.includes(p.osm_value);
+    if (!laHem && !DUONG.includes(p.osm_value)) continue;          // bỏ trạm xe buýt, đèn tín hiệu…
+    const k = ten.toLowerCase();
+    if (daCo.has(k)) continue;
+    daCo.add(k);
+    const m = c.length === 2 ? metTu(lat, lng, c[1], c[0]) : null;
+    const h = ten.match(/^(hẻm|hem|ngõ|kiệt)\s+(\S+)\s+(.+)$/i);
+    quanh.push({ ten, loai: laHem ? 'hem' : 'duong', duong: h ? h[3] : (laHem ? '' : ten), hem: h ? 'Hẻm ' + h[2] : (laHem ? ten : ''), m });
+  }
+  quanh.sort((a, b) => (a.m ?? 1e9) - (b.m ?? 1e9));
+  const p0 = fs[0].properties;
+  const chinh = quanh.find(q => q.loai === 'duong') || null;
+  const road = chinh ? chinh.ten : (quanh[0] ? quanh[0].duong : '');
   return {
     road,
-    suburb: '',                          // Photon không có "suburb" tương đương — không đoán Hẻm
-    neighbourhood: p.locality || '',
-    city_district: p.district || '',
-    city: p.city || '',
-    display_name: [p.housenumber, road, p.locality, p.district, p.city].filter(Boolean).join(', '),
+    suburb: '',                          // không đoán Hẻm — người khảo sát chọn trong danh sách
+    neighbourhood: p0.locality || '',
+    city_district: p0.district || '',
+    district: p0.district || '',
+    city: p0.city || '',
+    quanh: quanh.slice(0, 10),
+    display_name: [road, p0.district, p0.city].filter(Boolean).join(', '),
     raw: json
   };
 }
@@ -122,7 +157,9 @@ async function nominatimReverse(lat, lng) {
   const json = await fetchJson(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&accept-language=vi`);
   const addr = json.address || {};
   return {
-    road: addr.road || addr.pedestrian || addr.path || addr.cycleway || '',
+    road: boDuong(addr.road || addr.pedestrian || addr.path || addr.cycleway || ''),
+    district: addr.suburb || addr.quarter || '',
+    quanh: [],
     suburb: addr.suburb || addr.quarter || addr.neighbourhood || '',
     neighbourhood: addr.neighbourhood || addr.hamlet || '',
     city_district: addr.city_district || addr.district || '',
