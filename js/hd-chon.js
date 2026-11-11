@@ -276,7 +276,10 @@ export function initHdChon({ type, typeName = '', user, form, getPhuong, tenLoai
   // ---- Vẽ ô trong form ----
   let phatCu = '';
   function paintField() {
-    const det = { goi: st.ds.length ? st.goi : null, ds: st.ds.map((d) => ({ ...(timMa(d.ma) || {}), ...d })) };
+    const gp = goiPhuong();
+    const det = { goi: st.ds.length ? st.goi : null, ds: st.ds.map((d) => ({ ...(timMa(d.ma) || {}), ...d })),
+      // cho ô Trình Sở: gói dự kiến theo phường (hoặc gói đã chọn tay) — 'nhieu' / null = cần gán gói
+      goiDuKien: st.goi || (gp && gp !== 'nhieu' ? gp : (gp === 'nhieu' ? 'nhieu' : null)), coHd: !!(st.info && st.info.has) };
     const k = JSON.stringify(det);
     if (k !== phatCu) { phatCu = k; document.dispatchEvent(new CustomEvent('hd-chon-change', { detail: det })); }
     const show = !!st.info?.chon && !!st.info?.has;

@@ -92,15 +92,15 @@ export function loadGs({ user = { username: 'tester', role: 'admin', full_name: 
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {}, getProperties: () => ({}) }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in ctx.props ? ctx.props[k] : null), setProperty(k, v) { ctx.props[k] = String(v); }, getProperties: () => ({ ...ctx.props }) }) },
     SpreadsheetApp: { flush() {} },
-    sheets: {}, audit: [], user, allow: true
+    sheets: {}, audit: [], user, allow: true, props: {}
   };
   vm.createContext(ctx);
   vm.runInContext(read('apps-script/Code.gs'), ctx, { filename: 'Code.gs' });
   // const/let top-level không tự thành thuộc tính của ctx → xuất ra để test đọc được
   vm.runInContext(`
-    this.HEADERS = HEADERS; this.SHEET_MAP = SHEET_MAP; this.BONUS_COLS = BONUS_COLS;
+    this.HEADERS = HEADERS; this.SHEET_MAP = SHEET_MAP; this.BONUS_COLS = BONUS_COLS; this.TAIL_COLS = TAIL_COLS;
     this.STT_PREFIX = STT_PREFIX; this.XU_LY_STATUSES = XU_LY_STATUSES; this.XU_LY_SKIP_TYPES = XU_LY_SKIP_TYPES;
     this.DIALUX_COLS = DIALUX_COLS; this.GPS_LATLONG_TYPES = GPS_LATLONG_TYPES; this.GPS_LINK_TYPES = GPS_LINK_TYPES;
     this.NO_GPS_TYPES = NO_GPS_TYPES;

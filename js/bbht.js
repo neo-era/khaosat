@@ -23,6 +23,7 @@ const BBHT_MAP = {
   decal_so_tru:   { label: 'Decal số trụ',           dvt: 'Cái', field: 'Số lượng'         },
   nang_mong:      { label: 'Nâng móng trụ',          dvt: 'Cái', field: 'Số lượng'         },
   thao_go_bang_ron: { label: 'Tháo gỡ băng rôn',     dvt: 'Tấm', field: 'Số lượng'         },
+  thay_sua_tu:    { label: 'Thay sửa tủ điều khiển', dvt: 'Tủ',  field: 'Số lượng'         },
 };
 
 const ALL_TYPES = Object.keys(BBHT_MAP);

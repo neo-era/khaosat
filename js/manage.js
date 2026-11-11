@@ -2,6 +2,7 @@
 
 import { apiList, apiDelete, apiRestore, apiSetStatus } from './api.js';
 import { hdLienKet, lienKetBadge } from './hd-bar.js';
+import { kenhCua, nhanKenh } from './trinh-so.js';
 import { SCHEMAS, SCHEMA_KEYS, XU_LY_STATUSES, XU_LY_SKIP_TYPES } from './schemas.js';
 import { hasPermission } from './auth.js';
 import { showToast, escapeHtml, formatVnDate, formatVnDateOnly, safeHref, localDateStr } from './utils.js';
@@ -32,6 +33,8 @@ export async function initManage(taikhoanUsers = []) {
     xlSel.appendChild(opt);
   }
   xlSel.addEventListener('change', () => { state.page = 0; renderTable(); });
+  const ksSel = document.getElementById('filter-kenh');
+  if (ksSel) ksSel.addEventListener('change', () => { state.page = 0; renderTable(); });
 
   const userSel = document.getElementById('filter-user');
   for (const u of taikhoanUsers) {
@@ -108,6 +111,8 @@ function renderTable() {
 
   const xl = document.getElementById('filter-xuly').value;
   if (xl) filtered = filtered.filter(r => !XU_LY_SKIP_TYPES.includes(r._type) && xuLyOf(r) === xl);
+  const kenh = (document.getElementById('filter-kenh') || {}).value;
+  if (kenh) filtered = filtered.filter(r => (kenhCua(r, r._type) || 'CHUA') === kenh);
 
   document.getElementById('result-count').textContent = `${filtered.length} kết quả`;
 
@@ -152,6 +157,7 @@ function renderTable() {
     renderXuLyCell(tr.querySelector('.td-xuly'), r, isDeleted);
     const lk = state.lienKet && state.lienKet.get(r._type + '#' + r['STT']);
     if (lk) tr.querySelector('.td-xuly').insertAdjacentHTML('beforeend', '<div class="mt-1">' + lienKetBadge(lk) + '</div>');
+    if (!isDeleted) tr.querySelector('.td-xuly').insertAdjacentHTML('beforeend', '<div class="mt-1">' + nhanKenh(kenhCua(r, r._type)) + '</div>');
     // Bind events
     tr.querySelector('.btn-view').onclick = () => openDetail(r);
     const photoBtn = tr.querySelector('[data-photos]');

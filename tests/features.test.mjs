@@ -27,7 +27,7 @@ test('capNhatCotSheet: chèn đúng vị trí cột còn thiếu, không lệch 
   const oldRow = oldHeader.map(h => ({ STT: 'NH-1', 'kinh độ': 106.7, 'vĩ độ': 10.77, Username: 'u1' })[h] ?? '');
   const sh = gs.sheets[gs.SHEET_MAP.ngam_hoa] = mkSheet(gs.SHEET_MAP.ngam_hoa, [oldHeader, oldRow]);
   gs.capNhatCotSheet();
-  assert.deepEqual(plain(sh._d[0]), plain([...gs.HEADERS.ngam_hoa, ...gs.BONUS_COLS]));
+  assert.deepEqual(plain(sh._d[0]), plain([...gs.HEADERS.ngam_hoa, ...gs.BONUS_COLS, ...gs.TAIL_COLS]));   // Trình Sở cuối cùng (11/11/2026)
   const row = rowObj(sh, 2);
   assert.equal(row.STT, 'NH-1');
   assert.equal(row.Username, 'u1');
