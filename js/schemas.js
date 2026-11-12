@@ -107,7 +107,10 @@ export const SCHEMAS = {
       { label: 'Bản vẽ',                 key: 'ban_ve',       type: 'image_url',required: false, hint: 'Chụp ảnh bản vẽ thiết kế nếu có' },
       { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
       { label: 'Link Google Map',        key: 'link_gmap',    type: 'link_gmap' },
-      ...dialuxFields(false)
+      ...dialuxFields(false),
+      // Anh chốt 11/11/2026: số liệu cho phụ lục Hạ ngầm trình Sở (cột cuối, sau DIALux)
+      { label: 'Chiều dài cáp ngầm (md)', key: 'cd_cap_ngam', type: 'decimal',  required: false, hint: 'mét — chiều dài cáp ngầm đề xuất' },
+      { label: 'Số trụ',                 key: 'so_tru_ngam',  type: 'number',   required: false, hint: 'số trụ đèn trên tuyến ngầm hóa' }
     ]
   },
 
@@ -339,6 +342,29 @@ export const SCHEMAS = {
     ]
   },
 
+  // ===== 5.18 Thay sửa tủ điều khiển (anh chốt 11/11/2026 — cho phụ lục "Thay thế, sửa chữa tủ điều khiển
+  // hiện hữu để kết nối về bộ phận điều khiển tự động") =====
+  thay_sua_tu: {
+    name: 'Thay sửa tủ điều khiển',
+    sheet: '18. Thay sua tu',
+    icon: '🎛️',
+    fields: [
+      { label: 'STT',                    key: 'stt',          type: 'stt_auto' },
+      { label: 'Tuyến đường',            key: 'tuyen_duong',  type: 'text',     required: true },
+      { label: 'Quận',                   key: 'quan',         type: 'quan',     required: true },
+      { label: 'Phường',                 key: 'phuong',       type: 'phuong',   required: true },
+      { label: 'Tủ điều khiển',          key: 'tdk',          type: 'tdk',      required: true },
+      { label: 'Năm lắp đặt',            key: 'nam_ld',       type: 'number',   required: false },
+      { label: 'Số lượng',               key: 'so_luong',     type: 'number',   required: true },
+      { label: 'Hiện trạng tủ',          key: 'hien_trang_tu',type: 'select',   required: false, allowOther: true,
+        options: ['Hư hỏng thiết bị', 'Xuống cấp, rỉ sét', 'Chưa kết nối trung tâm điều khiển'] },
+      { label: 'Người khảo sát',         key: 'nguoi_ks',     type: 'text',     required: true },
+      { label: 'Ngày khảo sát',          key: 'ngay_ks',      type: 'date_auto' },
+      { label: 'Ghi chú',                key: 'ghi_chu',      type: 'textarea', required: false },
+      { label: 'link',                   key: 'link_gmap',    type: 'link_gmap' }
+    ]
+  },
+
   // ===== 5.13 Tăng cường đèn khoảng cách xa (16 cột) =====
   tc_den_kc_xa: {
     name: 'Tăng cường đèn khoảng cách xa',
@@ -483,7 +509,7 @@ export const SURVEY_GROUPS = [
   { title: 'Đèn & cần đèn', keys: ['tang_cuong_den', 'tc_den_kc_xa', 'thay_den', 'choa_den', 'thay_can'] },
   { title: 'Cáp & hộp nối', keys: ['ngam_hoa', 'tc_noi', 'tc_ngam', 'cap_luon_can', 'hkn'] },
   { title: 'Trụ & móng', keys: ['thay_tru', 'nap_tru', 'nang_mong', 'decal_so_tru'] },
-  { title: 'Tủ điều khiển', keys: ['vo_tu'] },
+  { title: 'Tủ điều khiển', keys: ['vo_tu', 'thay_sua_tu'] },
   { title: 'Sự việc khác', keys: ['thao_go_bang_ron', 'bao_cao_su_co'] }
 ];
 

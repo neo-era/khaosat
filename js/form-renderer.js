@@ -25,6 +25,7 @@ import { registerBusyCheck } from './sw-update.js';
 import { driveViewUrl } from './drive-url.js';
 import { initHdBar, hdLienKet } from './hd-bar.js';
 import { initHdChon } from './hd-chon.js';
+import { initTrinhSo } from './trinh-so.js';
 
 // State module-scoped (1 form 1 lúc trên page)
 const state = {
@@ -90,6 +91,12 @@ export async function renderForm(containerEl, schemaKey) {
       form: document.getElementById('survey-form'),
       getPhuong: () => (state.container.querySelector('[data-key="phuong"]') || {}).value || '' });
   } catch (e) { console.warn('hd-chon', e); }
+  // Trình Sở / Không trình Sở (11/11/2026): bắt buộc, đặt ngay sau Tủ điều khiển (trước ô Hạng mục HĐ)
+  state.trinhSo = null;
+  try {
+    state.trinhSo = initTrinhSo({ type: state.schemaKey, tenLoai: state.schema.name,
+      form: document.getElementById('survey-form'), readOnly: state.user.role === 'demo' });
+  } catch (e) { console.warn('trinh-so', e); }
   // Có bản mới giữa lúc đang nhập: không tự tải lại (mất ảnh đang tải, chữ vừa gõ) → hiện thanh Cập nhật
   registerBusyCheck(() => state.editMode || state.photos.length > 0 || hasUserInput(collectFormData()));
   if (state.editMode) {
@@ -136,6 +143,7 @@ async function loadFromQueue(id) {
   (it.photos || []).forEach(p => { if (p.url && p.field) data[p.field] = p.url; });
   state.queueOrigData = data;
   if (it.payload.hd && state.hdChon) state.hdChon.set(it.payload.hd);
+  if (state.trinhSo) state.trinhSo.set((it.payload.data || {})['Trình Sở']);
 
   const banner = document.createElement('div');
   banner.className = 'bg-amber-50 border-l-4 border-amber-500 text-amber-900 p-3 mb-3 rounded text-sm';
@@ -231,6 +239,7 @@ async function loadEditRow() {
     }
     state.editOrigData = row;
     if (state.hdChon) state.hdChon.set(row._hd || null, { orig: true });
+    if (state.trinhSo) state.trinhSo.set(row['Trình Sở'], { cuChuaPhanLoai: true });
 
     // Banner báo đang sửa
     const banner = document.createElement('div');
@@ -755,6 +764,7 @@ function hasUserInput(data) {
   return Object.entries(data).some(([label, v]) => {
     const t = String(v ?? '').trim();
     if (!t || auto.has(label) || t === state.user.full_name) return false;
+    if (label === 'Trình Sở' && state.trinhSo && state.trinhSo.coDinh) return false;   // Vỏ tủ: giá trị cố định
     return !(state.defaults && state.defaults[label] === v);
   }) || state.photos.length > 0;
 }
@@ -1430,6 +1440,7 @@ async function maybeRestoreDraft() {
   if (draft.data.__client_at) state.origClientAt = Number(draft.data.__client_at);
   if (draft.data.__queue_id) state.fromQueueId = draft.data.__queue_id;
   if (draft.data.__hd && state.hdChon) state.hdChon.set(draft.data.__hd);
+  if (draft.data.__trinhSo && state.trinhSo) state.trinhSo.set(draft.data.__trinhSo);
   if (Array.isArray(draft.data.__photos)) {
     draft.data.__photos.forEach(url => state.photos.push({ id: uuid(), file: null, status: 'done', url, thumbnail: driveViewUrl(url), error: null }));
     renderPhotoGrid();
@@ -1445,7 +1456,8 @@ function startAutosave() {
     if (hasAny) saveDraft(state.schemaKey, Object.assign({}, data, {
       __photos: state.photos.filter(p => p.status === 'done').map(p => p.url),
       __client_id: state.clientId, __client_at: state.origClientAt || undefined, __queue_id: state.fromQueueId || undefined,
-      __hd: state.hdChon ? state.hdChon.get() : undefined
+      __hd: state.hdChon ? state.hdChon.get() : undefined,
+      __trinhSo: state.trinhSo && !state.trinhSo.coDinh ? (state.trinhSo.get() || undefined) : undefined
     }));
   }, CONFIG.autosaveIntervalMs);
 }
@@ -1493,6 +1505,8 @@ function collectFormData() {
     if (el && el.type === 'datetime-local') { data[f.label] = el.value.replace('T', ' '); continue; }
     data[f.label] = el ? (el.value === '' && el.dataset.orig ? el.dataset.orig : el.value) : '';
   }
+  // Cột "Trình Sở" (cuối sheet, sau cột hệ thống) — không nằm trong schema.fields
+  if (state.trinhSo && state.trinhSo.get()) data['Trình Sở'] = state.trinhSo.get();
   return data;
 }
 
@@ -1621,6 +1635,10 @@ async function handleSubmit() {
     return;
   }
   await stopAllVoice();   // đang ghi âm → chữ phải vào ô trước khi kiểm trường bắt buộc
+  if (state.trinhSo && !state.trinhSo.kiem()) {
+    showToast('Chưa chọn được "Trình Sở / Không trình Sở" — xem ô đang báo đỏ', 'error');
+    return;
+  }
   const errors = validateForm();
   if (errors.length > 0) {
     const first = errors[0];

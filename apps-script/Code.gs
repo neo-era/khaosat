@@ -60,7 +60,7 @@ const DEFAULT_CLOUDINARY_CLOUD = 'dmlsqbe8c';
  */
 const FIELD_RULES = {
   tang_cuong_den: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ rộng đường","Số đèn dự kiến","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn dự kiến"],num: ["Số làn xe","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ"],dt: []},
-  ngam_hoa: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ rộng đường","Số đèn dự kiến","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn dự kiến"],num: ["Số làn xe","Đường nhựa","Vỉa hè các loại","Vỉa hè bê tông","Vỉa hè đá","Số đèn thu hồi","CD cáp thu hồi","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ"],dt: []},
+  ngam_hoa: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ rộng đường","Số đèn dự kiến","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn dự kiến"],num: ["Số làn xe","Đường nhựa","Vỉa hè các loại","Vỉa hè bê tông","Vỉa hè đá","Số đèn thu hồi","CD cáp thu hồi","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ","Chiều dài cáp ngầm (md)","Số trụ"],dt: []},
   thay_den: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số đèn hiện hữu","Độ rộng đường","Kiểu bố trí trụ","Khoảng cách trụ","Chiều cao trụ"],pos: ["Độ rộng đường","Khoảng cách trụ","Chiều cao trụ"],cnt: ["Số đèn hiện hữu"],num: ["Năm lắp đặt","Số làn xe","Bề rộng dải phân cách","Bề rộng vỉa hè trái","Bề rộng vỉa hè phải","Chiều dài vươn cần","Góc nghiêng cần","Khoảng cách trụ tới mép đường","Số đèn trên 1 trụ"],dt: []},
   hkn: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng","Loại hộp (6A, 10A)"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []},
   tc_noi: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: ["Số lượng"],cnt: [],num: ["Năm lắp đặt"],dt: []},
@@ -75,7 +75,8 @@ const FIELD_RULES = {
   decal_so_tru: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: [],cnt: ["Số lượng"],num: [],dt: []},
   nang_mong: {req: ["Tuyến đường","Phường","Tủ điều khiển","Độ cao nâng","Số lượng"],pos: ["Độ cao nâng"],cnt: ["Số lượng"],num: ["Năm lắp đặt","Chiều cao nắp cửa trụ (từ mặt bích đến nắp cửa trụ)"],dt: []},
   thao_go_bang_ron: {req: ["Tuyến đường","Phường","Loại quảng cáo","Số lượng"],pos: [],cnt: ["Số lượng"],num: [],dt: []},
-  bao_cao_su_co: {req: ["Đơn vị báo cáo","Tủ điều khiển","Tuyến đường","Phường","Ngày giờ phát hiện","Hiện trạng sự cố","Đề xuất khắc phục"],pos: [],cnt: [],num: ["Năm lắp đặt"],dt: ["Ngày giờ phát hiện"]}
+  bao_cao_su_co: {req: ["Đơn vị báo cáo","Tủ điều khiển","Tuyến đường","Phường","Ngày giờ phát hiện","Hiện trạng sự cố","Đề xuất khắc phục"],pos: [],cnt: [],num: ["Năm lắp đặt"],dt: ["Ngày giờ phát hiện"]},
+  thay_sua_tu: {req: ["Tuyến đường","Phường","Tủ điều khiển","Số lượng"],pos: [],cnt: ["Số lượng"],num: ["Năm lắp đặt"],dt: []}
 };
 
 function getFieldRules_() { return FIELD_RULES; }
@@ -220,7 +221,8 @@ const SHEET_MAP = {
   decal_so_tru:   '14 Decal số trụ',
   nang_mong:      '15. Nâng móng',
   thao_go_bang_ron: '16. Thao go bang ron',
-  bao_cao_su_co:  '17. Bao cao su co'     // thêm 2026-09-29 — sheet mới: chạy initSheets()
+  bao_cao_su_co:  '17. Bao cao su co',    // thêm 2026-09-29 — sheet mới: chạy initSheets()
+  thay_sua_tu:    '18. Thay sua tu'       // thêm 2026-11-11 (phụ lục Thay sửa tủ trình Sở) — sheet mới: chạy initSheets()
 };
 
 /** Mã loại đứng đầu STT (vd TD-260926-A3F9). Đổi mã → bản ghi mới mang mã mới, bản cũ giữ nguyên. */
@@ -229,7 +231,7 @@ const STT_PREFIX = {
   tc_noi: 'TCN',         cap_luon_can: 'CLC', tc_ngam: 'TCG', thay_can: 'TCA',
   thay_tru: 'TT',        choa_den: 'CD',   nap_tru: 'NT',    vo_tu: 'VT',
   tc_den_kc_xa: 'TDX',   decal_so_tru: 'DST', nang_mong: 'NM', thao_go_bang_ron: 'BR',
-  bao_cao_su_co: 'SC'
+  bao_cao_su_co: 'SC',   thay_sua_tu: 'TST'
 };
 
 /**
@@ -238,6 +240,8 @@ const STT_PREFIX = {
  * Sheet đang chạy: chạy capNhatCotSheet() 1 lần để chèn cột.
  */
 const DIALUX_ROAD_BASE = ['Độ rộng đường', 'Số làn xe', 'Dãy phân cách'];
+/** 2 cột Ngầm hóa cho phụ lục Hạ ngầm trình Sở (anh chốt 11/11/2026) — sau DIALUX_COLS. Không tính KPI "Đầy đủ". */
+const NGAM_HOA_HN_COLS = ['Chiều dài cáp ngầm (md)', 'Số trụ'];
 const DIALUX_COLS = [
   'Bề rộng dải phân cách', 'Bề rộng vỉa hè trái', 'Bề rộng vỉa hè phải', 'Loại mặt đường',
   'Kiểu bố trí trụ', 'Khoảng cách trụ', 'Chiều cao trụ', 'Chiều dài vươn cần', 'Góc nghiêng cần',
@@ -258,7 +262,7 @@ const HEADERS = {
     'Đường nhựa','Vỉa hè các loại','Vỉa hè bê tông','Vỉa hè đá',
     'Số đèn thu hồi','CD cáp thu hồi','ngày khảo sát','kinh độ','vĩ độ',
     'Người khảo sát','Bản vẽ','Ghi chú','Link Google Map'  // Link + DIALux thêm 2026-09-27 — sheet cũ chạy capNhatCotSheet()
-  ].concat(DIALUX_COLS),
+  ].concat(DIALUX_COLS, NGAM_HOA_HN_COLS),
   thay_den: [
     'STT','Tuyến đường','Quận','Phường','Tủ điều khiển','Đầu tuyến','Cuối tuyến',
     'Số đèn hiện hữu','Công suất đèn hiện hữu','Dây lên đèn','Năm lắp đặt',
@@ -324,6 +328,10 @@ const HEADERS = {
     'STT','Tuyến đường','Quận','Phường','Vị trí','Loại quảng cáo','Số lượng',
     'Người khảo sát','Ngày khảo sát','kinh độ','vĩ độ','Ghi chú','Link Google Map'
   ],
+  thay_sua_tu: [
+    'STT','Tuyến đường','Quận','Phường','Tủ điều khiển','Năm lắp đặt',
+    'Số lượng','Hiện trạng tủ','Người khảo sát','Ngày khảo sát','Ghi chú','link'
+  ],
   // Theo mẫu "Báo cáo sự cố công tác quản lý, bảo dưỡng hệ thống" (BCSC) — xuất biên bản ở bcsc.html
   bao_cao_su_co: [
     'STT','Số BCSC','Đơn vị báo cáo','Tủ điều khiển','Mã tủ','Tuyến đường','Quận','Phường',
@@ -338,6 +346,14 @@ const HEADERS = {
  */
 const BONUS_COLS = ['Ảnh (URLs)', 'Submitted At', 'User Agent', 'Username', 'Deleted At', 'Deleted By',
                     'Trạng thái xử lý', 'Cập nhật trạng thái'];
+/**
+ * Cột đứng SAU BONUS_COLS (anh chốt 11/11/2026). KHÔNG nằm trong HEADERS[type] (để không lệch thứ tự form,
+ * không tính KPI). Thiếu cột → submit/update tự thêm ở cuối sheet (đã có sao lưu ≤ 7 ngày) hoặc lưu chờ.
+ */
+const TAIL_COLS = ['Trình Sở'];
+const TRINH_SO_VALS = ['Trình Sở', 'Không trình Sở'];
+/** Loại luôn thuộc thẩm quyền Trung tâm (không trình Sở). */
+const LUON_TT_TYPES = ['vo_tu'];
 
 /** Các bước xử lý 1 điểm khảo sát. Bản mới = bước đầu; Băng rôn không áp dụng (tháo xong là xong). */
 const XU_LY_STATUSES = ['Chờ thiết kế', 'Đã thiết kế', 'Đã thi công', 'Nghiệm thu', 'Không xử lý'];
@@ -356,7 +372,7 @@ const GPS_LATLONG_TYPES = ['tang_cuong_den', 'ngam_hoa', 'thao_go_bang_ron', 'ba
 const GPS_LINK_TYPES    = [
   'thay_den', 'tc_noi', 'cap_luon_can', 'tc_ngam', 'thay_can',
   'thay_tru', 'choa_den', 'nap_tru', 'vo_tu',
-  'tc_den_kc_xa', 'decal_so_tru', 'nang_mong'
+  'tc_den_kc_xa', 'decal_so_tru', 'nang_mong', 'thay_sua_tu'
 ];
 
 // Sheet taikhoan chỉ còn danh bạ — mật khẩu nằm ở Script Properties (xem CREDENTIAL STORE)
@@ -1108,7 +1124,7 @@ function initSheets() {
     }
     // Sheet chưa có HOẶC đã có nhưng rỗng (do lần chạy trước fail giữa chừng) → tạo/set header
     if (!sheet) sheet = ss.insertSheet(sheetName);
-    const fullHeader = HEADERS[type].concat(BONUS_COLS);
+    const fullHeader = HEADERS[type].concat(BONUS_COLS, TAIL_COLS);
     // Sheet mới default 26 cột — extend nếu header dài hơn (tang_cuong_den 28, ngam_hoa 29)
     const needCols = fullHeader.length;
     const haveCols = sheet.getMaxColumns();
@@ -1894,6 +1910,8 @@ function weeklyBackup() {
   appendAuditLog('backup', 'system', 'spreadsheet', backupName, summary);
   Logger.log('✅ Backup OK: ' + backupName + ' (id=' + copy.getId() + '). ' +
              'Deleted ' + deletedNames.length + ' file cũ: ' + deletedNames.join(', '));
+  // Mốc sao lưu gần nhất — submit/update chỉ tự thêm cột "Trình Sở" khi đã có bản sao ≤ 7 ngày
+  try { PropertiesService.getScriptProperties().setProperty('BACKUP_AT', String(Date.now())); } catch (e) { /* bỏ qua */ }
   return { ok: true, backup_id: copy.getId(), file_name: backupName, folder_id: folder.getId(), deleted_old: deletedNames.length };
 }
 
@@ -1966,7 +1984,7 @@ function validateSheets() {
       return;
     }
     const actual = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
-    const expected = HEADERS[type].concat(BONUS_COLS);
+    const expected = HEADERS[type].concat(BONUS_COLS, TAIL_COLS);
     for (let i = 0; i < expected.length; i++) {
       if (actual[i] !== expected[i]) {
         issues.push(sheetName + ' cột ' + (i + 1) + ': expected "' + expected[i] + '" got "' + (actual[i] || '(rỗng)') + '"');
@@ -2148,6 +2166,87 @@ function handleChangePassword(body) {
   return { ok: true, message: 'Đã đổi mật khẩu', token: t.token, expires_at: t.expires_at, remember: auth.remember === true };
 }
 
+// =====================================================================
+// TRÌNH SỞ / KHÔNG TRÌNH SỞ (anh chốt 11/11/2026 — repo quanly-hopdong-duytu docs/05_TrinhSo-KLTrungTam.md)
+// =====================================================================
+
+/** Đèn tăng cường có phải HPS (phụ lục tăng cường trình Sở chỉ nhận LED). */
+function laDenHps_(s) {
+  const t = foldViGs_(s);
+  return /\bhps\b|sodium|natri|cao ap|\bson\b/.test(t) && !/\bled\b/.test(t);
+}
+
+/**
+ * Chuẩn hoá ô "Trình Sở". Trả { val } ('' = không gửi), kèm { ep } (cảnh báo khi máy chủ ép giá trị) hoặc { error }.
+ * NFC + trim; chỉ nhận đúng 2 giá trị. Loại luôn TT (Vỏ tủ) → ép "Không trình Sở".
+ */
+function trinhSoChuan_(type, raw, data) {
+  const v = raw === undefined || raw === null ? '' : String(raw).normalize('NFC').trim();
+  if (LUON_TT_TYPES.indexOf(type) >= 0) {
+    return { val: TRINH_SO_VALS[1], ep: v && v !== TRINH_SO_VALS[1] ? 'Loại này luôn thuộc thẩm quyền Trung tâm — đã ghi "Không trình Sở"' : '' };
+  }
+  if (!v) return { val: '' };
+  if (TRINH_SO_VALS.indexOf(v) < 0) return { error: '"Trình Sở" chỉ nhận "Trình Sở" hoặc "Không trình Sở"' };
+  if (v === TRINH_SO_VALS[0] && type === 'tc_den_kc_xa' && laDenHps_((data || {})['Chủng loại đèn'])) {
+    return { error: 'Phụ lục tăng cường trình Sở chỉ nhận đèn LED — đèn HPS chọn "Không trình Sở" hoặc sửa chủng loại đèn' };
+  }
+  return { val: v };
+}
+
+/**
+ * Gọi TRONG khoá. Sheet chưa có cột `label` (thuộc TAIL_COLS) → thêm ở CUỐI sheet (không dịch cột nào),
+ * chỉ khi đã có bản sao lưu ≤ 7 ngày (không gọi weeklyBackup lúc người dùng đang gửi bản). Trả header mới hoặc null.
+ */
+function damBaoCotDuoi_(sheet, header, label) {
+  if (header.indexOf(label) >= 0) return header;
+  if (TAIL_COLS.indexOf(label) < 0) return null;
+  let at = 0;
+  try { at = Number(PropertiesService.getScriptProperties().getProperty('BACKUP_AT') || 0); } catch (e) { at = 0; }
+  if (!(at > 0 && Date.now() - at <= 7 * 86400e3)) return null;
+  const last = Math.max(sheet.getLastColumn(), header.length);
+  if (sheet.getMaxColumns() <= last) sheet.insertColumnsAfter(sheet.getMaxColumns(), 1);
+  sheet.getRange(1, last + 1).setValue(label);
+  const h = header.slice(); while (h.length < last) h.push('');
+  h.push(label);
+  try { appendAuditLog('add_column', 'system', sheet.getName(), '*', 'tự thêm cột "' + label + '" ở cuối sheet'); } catch (e) { /* bỏ qua */ }
+  return h;
+}
+
+const TRINH_SO_CHO_SHEET = 'TrinhSo_ChoCot';
+/** Sheet chưa có cột + chưa có sao lưu gần: lưu tạm giá trị (mỗi loại + STT 1 dòng). capNhatCotSheet() điền bù. */
+function trinhSoChoCot_(type, stt, val, user) {
+  const ss = getSpreadsheet();
+  let sh = ss.getSheetByName(TRINH_SO_CHO_SHEET);
+  if (!sh) { sh = ss.insertSheet(TRINH_SO_CHO_SHEET); sh.getRange(1, 1, 1, 5).setValues([['Loại', 'STT', 'Trình Sở', 'Người', 'Lúc']]); }
+  const n = sh.getLastRow();
+  if (n >= 2) {
+    const v = sh.getRange(2, 1, n - 1, 2).getValues();
+    for (let i = v.length - 1; i >= 0; i--) if (v[i][0] === type && String(v[i][1]) === String(stt)) sh.deleteRow(i + 2);
+  }
+  sh.appendRow([type, String(stt), val, user, isoNow()]);
+}
+
+/** capNhatCotSheet(): điền các giá trị đang chờ vào cột "Trình Sở" (đã có), xoá dòng chờ đã điền. */
+function trinhSoDienBu_() {
+  const ss = getSpreadsheet();
+  const sh = ss.getSheetByName(TRINH_SO_CHO_SHEET);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues();
+  let n = 0;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const [type, stt, val] = rows[i];
+    const sheet = SHEET_MAP[type] ? ss.getSheetByName(SHEET_MAP[type]) : null;
+    if (!sheet) continue;
+    const f = findRowByStt(sheet, stt);
+    if (!f) continue;
+    const c = f.header.indexOf('Trình Sở');
+    if (c < 0) continue;
+    sheet.getRange(f.rowIndex, c + 1).setValue(val);
+    sh.deleteRow(i + 2); n++;
+  }
+  return n;
+}
+
 function handleSubmit(body) {
   const auth = verifyToken(body.token);
   if (!can(auth.role, 'submit')) {
@@ -2159,7 +2258,6 @@ function handleSubmit(body) {
   const sheet = getSpreadsheet().getSheetByName(sheetName);
   if (!sheet) return { ok: false, error: 'Sheet không tồn tại: ' + sheetName };
 
-  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
   const dataIn = Object.assign({}, body.data || {});
   const photos = Array.isArray(body.photos) ? body.photos : [];
   const badUrl = findBadPhotoUrl(photos, dataIn);
@@ -2176,6 +2274,11 @@ function handleSubmit(body) {
   }
   const geoWarn = cleanGeo_(dataIn);
   if (geoWarn) warnings.push(geoWarn);
+  // Trình Sở / Không trình Sở (11/11/2026): chỉ kiểm khi có gửi; client cũ / hàng chờ không gửi vẫn lưu
+  const ts = trinhSoChuan_(type, dataIn['Trình Sở'], dataIn);
+  if (ts.error) return { ok: false, error: ts.error, field_errors: [ts.error] };
+  if (ts.ep) warnings.push(ts.ep);
+  dataIn['Trình Sở'] = ts.val;
   // GĐ2 liên kết HĐ: kiểm lựa chọn hạng mục TRƯỚC khi lấy khoá. Sai → bản khảo sát vẫn lưu, chỉ bỏ phần mã (hd_warning).
   let hdKq = null;
   try { hdKq = body.hd && typeof body.hd === 'object' ? hdChonKiem_(body.hd, dataIn['Phường']) : null; }
@@ -2186,20 +2289,6 @@ function handleSubmit(body) {
     const d = parseDayBound_(dataIn[k], false);
     if (d && Date.now() - d.getTime() > 30 * 24 * 3600e3) warnings.push('"' + k + '" cách đây hơn 30 ngày — kiểm tra lại');
   });
-
-  // Cột có trong HEADERS nhưng sheet thật đang thiếu → giá trị sẽ rơi. Vẫn ghi (không chặn hiện trường).
-  const missingCols = (HEADERS[type] || []).filter(h => header.indexOf(h) < 0);
-  const dropped = missingCols.filter(h => dataIn[h] !== undefined && dataIn[h] !== '')
-    .map(h => h + '=' + String(dataIn[h]).slice(0, 200));
-  if (missingCols.length) {
-    const ck = 'hdrwarn_' + sheetName;
-    const cache = CacheService.getScriptCache();
-    if (!cache.get(ck)) {
-      cache.put(ck, '1', 3600);
-      notifyHeaderMismatch_(sheetName, missingCols);
-    }
-    warnings.push('Sheet "' + sheetName + '" thiếu cột: ' + missingCols.join(', ') + ' — báo admin chạy capNhatCotSheet()');
-  }
 
   const submittedAt = isoNow();
   const nowMs = Date.now();
@@ -2215,7 +2304,7 @@ function handleSubmit(body) {
   // Khoá từ lúc kiểm client_id/cấp STT tới khi ghi xong: 2 lần gửi cùng lúc không được nhận 2 dòng.
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
-  let stt, newRowNum;
+  let stt, newRowNum, dropped = [];
   try {
     if (clientId) {
       const prev = findClientId_(clientId);
@@ -2230,6 +2319,26 @@ function handleSubmit(body) {
       }
     }
     stt = newSttId(type, sheet, effDate);
+    // Đọc tiêu đề TRONG khoá: chèn cột chen giữa lúc đọc và lúc ghi không làm lệch dòng mới
+    let header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    let trinhSoCho = false;
+    if (dataIn['Trình Sở'] && header.indexOf('Trình Sở') < 0) {
+      const h2 = damBaoCotDuoi_(sheet, header, 'Trình Sở');
+      if (h2) header = h2; else trinhSoCho = true;
+    }
+    // Cột có trong HEADERS nhưng sheet thật đang thiếu → giá trị sẽ rơi. Vẫn ghi (không chặn hiện trường).
+    const missingCols = (HEADERS[type] || []).filter(h => header.indexOf(h) < 0);
+    dropped = missingCols.filter(h => dataIn[h] !== undefined && dataIn[h] !== '')
+      .map(h => h + '=' + String(dataIn[h]).slice(0, 200));
+    if (missingCols.length) {
+      const ck = 'hdrwarn_' + sheetName;
+      const cache = CacheService.getScriptCache();
+      if (!cache.get(ck)) {
+        cache.put(ck, '1', 3600);
+        notifyHeaderMismatch_(sheetName, missingCols);
+      }
+      warnings.push('Sheet "' + sheetName + '" thiếu cột: ' + missingCols.join(', ') + ' — báo admin chạy capNhatCotSheet()');
+    }
 
     const row = header.map(label => {
       // Server-managed fields: bỏ qua giá trị từ client
@@ -2249,6 +2358,10 @@ function handleSubmit(body) {
 
     sheet.appendRow(row);
     newRowNum = sheet.getLastRow();
+    if (trinhSoCho) {   // chưa có cột + chưa có sao lưu gần → lưu chờ, capNhatCotSheet() điền bù
+      trinhSoChoCot_(type, stt, dataIn['Trình Sở'], auth.username);
+      warnings.push('Sheet "' + sheetName + '" chưa có cột "Trình Sở" — đã lưu tạm, admin chạy capNhatCotSheet()');
+    }
     if (clientId) {
       const lech = clientAtMs === null ? '' : Math.round((nowMs - clientAtMs) / 60000);
       getClientIdsSheet_().appendRow([clientId, type, stt, auth.username, submittedAt,
@@ -2482,11 +2595,59 @@ function handleUpdate(body) {
   const sheet = getSpreadsheet().getSheetByName(sheetName);
   if (!sheet) return { ok: false, error: 'Sheet không tồn tại' };
 
+  // Ghi theo chỉ số cột → đọc tiêu đề + dòng và ghi TRONG khoá (không lệch khi đang chèn cột)
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let kq;
+  try {
+    kq = updateTrongKhoa_(body, auth, type, stt, sheetName, sheet);
+  } finally {
+    lock.releaseLock();
+  }
+  if (!kq.out) return kq;
+  const out = kq.out, header = kq.header, values = kq.values, dataIn = kq.dataIn;
+  // GĐ2: không gửi hd → giữ nguyên; hd:null → bỏ chọn; có hd → ghi (hdChonDoi_ tự lấy khoá — gọi SAU khi nhả khoá)
+  if (body.hd !== undefined) {
+    try {
+      const ip = header.indexOf('Phường');
+      const phuong = dataIn['Phường'] !== undefined ? dataIn['Phường'] : (ip >= 0 ? values[ip] : '');
+      // Cùng chốt với action hd_chon: bản đã xoá / đã vào PL – đã thực hiện – Nghiệm thu (cần xacNhan + quyền edit)
+      const chan = hdChonChot_(auth, type, stt, header, values, body.xacNhan);
+      const r = chan || hdChonDoi_(type, stt, body.hd === null ? null : body.hd, phuong, auth.username);
+      if (r.ok) out.hd_saved = true; else out.hd_warning = r.error;
+    } catch (e) { out.hd_warning = 'Chưa lưu được hạng mục HĐ: ' + (e.message || e); }
+  }
+  return out;
+}
+
+function updateTrongKhoa_(body, auth, type, stt, sheetName, sheet) {
   const found = findRowByStt(sheet, stt);
   if (!found) return { ok: false, error: 'Không tìm thấy STT ' + stt };
-  const { rowIndex, header, values } = found;
+  let { rowIndex, header, values } = found;
 
-  const dataIn = body.data || {};
+  const dataIn = Object.assign({}, body.data || {});
+  const warnTs = [];
+  // Trình Sở: kiểm theo giá trị sau khi sửa (vd đổi chủng loại đèn sang HPS khi bản đang "Trình Sở")
+  {
+    const col = n => { const i = header.indexOf(n); return i >= 0 ? values[i] : ''; };
+    const merged = Object.assign({ 'Chủng loại đèn': col('Chủng loại đèn') }, dataIn);
+    const raw = dataIn['Trình Sở'] !== undefined ? dataIn['Trình Sở'] : col('Trình Sở');
+    if (dataIn['Trình Sở'] !== undefined || (type === 'tc_den_kc_xa' && dataIn['Chủng loại đèn'] !== undefined && raw)) {
+      const ts = trinhSoChuan_(type, raw, merged);
+      if (ts.error) return { ok: false, error: ts.error, field_errors: [ts.error] };
+      if (ts.ep) warnTs.push(ts.ep);
+      if (dataIn['Trình Sở'] !== undefined) dataIn['Trình Sở'] = ts.val;
+    }
+    if (dataIn['Trình Sở'] && header.indexOf('Trình Sở') < 0) {
+      const h2 = damBaoCotDuoi_(sheet, header, 'Trình Sở');
+      if (h2) { header = h2; values = values.concat(Array(h2.length - values.length).fill('')); }
+      else {   // không bỏ âm thầm: lưu chờ + báo
+        trinhSoChoCot_(type, stt, dataIn['Trình Sở'], auth.username);
+        warnTs.push('Sheet "' + sheetName + '" chưa có cột "Trình Sở" — đã lưu tạm, admin chạy capNhatCotSheet()');
+        delete dataIn['Trình Sở'];
+      }
+    }
+  }
   const photos = Array.isArray(body.photos) ? body.photos : null;  // null = không update photos
   // URL ảnh ĐÃ CÓ trong bản ghi (dữ liệu cũ) được giữ nguyên; chỉ URL mới phải đúng mẫu.
   const existingUrls = ['Ảnh (URLs)', 'Bản vẽ'].map(h => header.indexOf(h)).filter(i => i >= 0)
@@ -2539,18 +2700,8 @@ function handleUpdate(body) {
     diffs.length > 0 ? diffs.join(' | ') : 'không đổi');
 
   const out = { ok: true, stt: stt, changes: changes };
-  // GĐ2: không gửi hd → giữ nguyên; hd:null → bỏ chọn; có hd → ghi (tự lấy khoá)
-  if (body.hd !== undefined) {
-    try {
-      const ip = header.indexOf('Phường');
-      const phuong = dataIn['Phường'] !== undefined ? dataIn['Phường'] : (ip >= 0 ? values[ip] : '');
-      // Cùng chốt với action hd_chon: bản đã xoá / đã vào PL – đã thực hiện – Nghiệm thu (cần xacNhan + quyền edit)
-      const chan = hdChonChot_(auth, type, stt, header, values, body.xacNhan);
-      const r = chan || hdChonDoi_(type, stt, body.hd === null ? null : body.hd, phuong, auth.username);
-      if (r.ok) out.hd_saved = true; else out.hd_warning = r.error;
-    } catch (e) { out.hd_warning = 'Chưa lưu được hạng mục HĐ: ' + (e.message || e); }
-  }
-  return out;
+  if (warnTs.length) out.warnings = warnTs;
+  return { out: out, header: header, values: values, dataIn: dataIn };
 }
 
 /**
@@ -3394,12 +3545,13 @@ function capNhatCotSheet() {
     const sheet = ss.getSheetByName(SHEET_MAP[type]);
     if (!sheet || sheet.getLastColumn() < 1) return;
     const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-    const missing = HEADERS[type].concat(BONUS_COLS).filter(h => header.indexOf(h) < 0);
+    const missing = HEADERS[type].concat(BONUS_COLS, TAIL_COLS).filter(h => header.indexOf(h) < 0);
     if (missing.length) plan.push({ type: type, missing: missing });
   });
   if (plan.length === 0) {
-    Logger.log('✅ Mọi sheet đã đủ cột — không làm gì.');
-    return { ok: true, added: [] };
+    const bu = trinhSoDienBu_();
+    Logger.log('✅ Mọi sheet đã đủ cột — không làm gì.' + (bu ? ' Điền bù Trình Sở: ' + bu + ' bản.' : ''));
+    return { ok: true, added: [], trinh_so_dien_bu: bu };
   }
 
   const lock = LockService.getScriptLock();
@@ -3412,7 +3564,7 @@ function capNhatCotSheet() {
     const added = [];
     plan.forEach(({ type }) => {
       const sheet = ss.getSheetByName(SHEET_MAP[type]);
-      const expected = HEADERS[type].concat(BONUS_COLS);
+      const expected = HEADERS[type].concat(BONUS_COLS, TAIL_COLS);
       let header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
       const inserted = [];
       expected.forEach((label, i) => {
@@ -3450,8 +3602,9 @@ function capNhatCotSheet() {
         (filled ? ` — điền link cho ${filled} dòng` : ''));
       added.push({ sheet: SHEET_MAP[type], columns: inserted, filled_links: filled });
     });
-    Logger.log('✅ Xong. Chạy validateSheets() để đối chiếu lại header.');
-    return { ok: true, added: added, backup_id: backup.backup_id };
+    const bu = trinhSoDienBu_();
+    Logger.log('✅ Xong. Chạy validateSheets() để đối chiếu lại header.' + (bu ? ' Điền bù Trình Sở: ' + bu + ' bản.' : ''));
+    return { ok: true, added: added, backup_id: backup.backup_id, trinh_so_dien_bu: bu };
   } finally {
     lock.releaseLock();
   }
@@ -3785,7 +3938,7 @@ function getOptionalFields(type) {
   // Cột DIALux thêm 2026-09-27: không tính, nếu không bản ghi cũ (chưa có cột này) tụt điểm
   // "Đầy đủ" ngược về quá khứ và KPI các tháng đã báo cáo bị thay đổi.
   // Riêng Thay đèn, 3 cột mặt cắt đường cũng là cột mới nên bỏ luôn.
-  const newCols = DIALUX_COLS.concat(type === 'thay_den' ? DIALUX_ROAD_BASE : []);
+  const newCols = DIALUX_COLS.concat(NGAM_HOA_HN_COLS, type === 'thay_den' ? DIALUX_ROAD_BASE : []);
   return HEADERS[type].filter(h => skip.indexOf(h) < 0 && newCols.indexOf(h) < 0);
 }
 
