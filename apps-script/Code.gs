@@ -2226,25 +2226,39 @@ function trinhSoChoCot_(type, stt, val, user) {
   sh.appendRow([type, String(stt), val, user, isoNow()]);
 }
 
-/** capNhatCotSheet(): điền các giá trị đang chờ vào cột "Trình Sở" (đã có), xoá dòng chờ đã điền. */
+/** Đã ghi thẳng giá trị vào cột "Trình Sở" → bỏ giá trị đang chờ của bản đó (để điền bù không đè giá trị mới hơn). Gọi trong khoá. */
+function trinhSoXoaCho_(type, stt) {
+  const sh = getSpreadsheet().getSheetByName(TRINH_SO_CHO_SHEET);
+  if (!sh || sh.getLastRow() < 2) return;
+  const v = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+  for (let i = v.length - 1; i >= 0; i--) if (v[i][0] === type && String(v[i][1]) === String(stt)) sh.deleteRow(i + 2);
+}
+
+/** capNhatCotSheet(): điền các giá trị đang chờ vào cột "Trình Sở" (đã có) — chỉ khi ô còn trống; xoá dòng chờ. Chạy trong khoá. */
 function trinhSoDienBu_() {
-  const ss = getSpreadsheet();
-  const sh = ss.getSheetByName(TRINH_SO_CHO_SHEET);
-  if (!sh || sh.getLastRow() < 2) return 0;
-  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues();
-  let n = 0;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const [type, stt, val] = rows[i];
-    const sheet = SHEET_MAP[type] ? ss.getSheetByName(SHEET_MAP[type]) : null;
-    if (!sheet) continue;
-    const f = findRowByStt(sheet, stt);
-    if (!f) continue;
-    const c = f.header.indexOf('Trình Sở');
-    if (c < 0) continue;
-    sheet.getRange(f.rowIndex, c + 1).setValue(val);
-    sh.deleteRow(i + 2); n++;
-  }
-  return n;
+  const lock = LockService.getScriptLock();
+  const coSan = lock.hasLock();
+  if (!coSan) lock.waitLock(30000);
+  try {
+    const ss = getSpreadsheet();
+    const sh = ss.getSheetByName(TRINH_SO_CHO_SHEET);
+    if (!sh || sh.getLastRow() < 2) return 0;
+    const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues();
+    let n = 0;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const [type, stt, val] = rows[i];
+      const sheet = SHEET_MAP[type] ? ss.getSheetByName(SHEET_MAP[type]) : null;
+      if (!sheet) continue;
+      const f = findRowByStt(sheet, stt);
+      if (!f) continue;
+      const c = f.header.indexOf('Trình Sở');
+      if (c < 0) continue;
+      const o = sheet.getRange(f.rowIndex, c + 1);
+      if (String(o.getValue() || '').trim() === '') { o.setValue(val); n++; }
+      sh.deleteRow(i + 2);
+    }
+    return n;
+  } finally { if (!coSan) lock.releaseLock(); }
 }
 
 function handleSubmit(body) {
@@ -2638,9 +2652,10 @@ function updateTrongKhoa_(body, auth, type, stt, sheetName, sheet) {
       if (ts.ep) warnTs.push(ts.ep);
       if (dataIn['Trình Sở'] !== undefined) dataIn['Trình Sở'] = ts.val;
     }
+    if (dataIn['Trình Sở'] && header.indexOf('Trình Sở') >= 0) trinhSoXoaCho_(type, stt);
     if (dataIn['Trình Sở'] && header.indexOf('Trình Sở') < 0) {
       const h2 = damBaoCotDuoi_(sheet, header, 'Trình Sở');
-      if (h2) { header = h2; values = values.concat(Array(h2.length - values.length).fill('')); }
+      if (h2) { header = h2; values = values.concat(Array(h2.length - values.length).fill('')); trinhSoXoaCho_(type, stt); }
       else {   // không bỏ âm thầm: lưu chờ + báo
         trinhSoChoCot_(type, stt, dataIn['Trình Sở'], auth.username);
         warnTs.push('Sheet "' + sheetName + '" chưa có cột "Trình Sở" — đã lưu tạm, admin chạy capNhatCotSheet()');

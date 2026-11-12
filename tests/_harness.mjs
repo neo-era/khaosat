@@ -90,7 +90,7 @@ export function loadGs({ user = { username: 'tester', role: 'admin', full_name: 
       getUuid: () => crypto.randomUUID(),
       computeDigest: () => [], computeHmacSha256Signature: () => []
     },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {}, hasLock() { return false; }, tryLock() { return true; } }) },
     CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in ctx.props ? ctx.props[k] : null), setProperty(k, v) { ctx.props[k] = String(v); }, getProperties: () => ({ ...ctx.props }) }) },
     SpreadsheetApp: { flush() {} },

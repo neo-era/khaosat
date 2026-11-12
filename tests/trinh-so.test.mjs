@@ -158,3 +158,20 @@ test('Ngầm hóa: 2 cột mới cuối HEADERS (sau DIALux), không bắt buộ
 test('sao lưu tuần ghi mốc BACKUP_AT', () => {
   assert.match(read('apps-script/Code.gs'), /setProperty\('BACKUP_AT', String\(Date\.now\(\)\)\)/);
 });
+
+test('điền bù không đè giá trị sửa sau (giá trị chờ cũ bị bỏ khi ghi thẳng vào cột)', () => {
+  const gs = loadGs();
+  const okHkn = { 'Tuyến đường': 'Trần Phú', 'Phường': 'Chợ Quán', 'Tủ điều khiển': 'TP-1', 'Số lượng': '2', 'Loại hộp (6A, 10A)': '6A' };
+  const sh = addSurveySheet(gs, 'hkn', [{ STT: 'HKN-1', ...okHkn }]);
+  plain(gs.handleUpdate({ token: 't', type: 'hkn', stt: 'HKN-1', data: { 'Trình Sở': 'Trình Sở' } }));   // chưa có cột → chờ
+  gs.props.BACKUP_AT = String(Date.now());
+  plain(gs.handleUpdate({ token: 't', type: 'hkn', stt: 'HKN-1', data: { 'Trình Sở': 'Không trình Sở' } }));  // thêm cột + ghi thẳng
+  plain(gs.capNhatCotSheet());
+  assert.equal(rowObj(sh, 2)['Trình Sở'], 'Không trình Sở');
+});
+test('"LED 100W thay HPS 150W" không bị coi là đèn HPS (cùng quy tắc app HĐ)', () => {
+  const gs = loadGs();
+  addSurveySheet(gs, 'tc_den_kc_xa'); gs.props.BACKUP_AT = String(Date.now());
+  const r = plain(gs.handleSubmit({ token: 't', type: 'tc_den_kc_xa', client_id: 'c-led', data: { 'Tuyến đường': 'A', 'Phường': 'Bàn Cờ', 'Tủ điều khiển': 'X', 'Chủng loại đèn': 'LED 100W thay HPS 150W', 'Số lượng': '1', 'Trình Sở': 'Trình Sở' } }));
+  assert.equal(r.ok, true, r.error);
+});
